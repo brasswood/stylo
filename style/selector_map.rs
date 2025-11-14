@@ -15,6 +15,7 @@ use crate::AllocErr;
 use crate::{Atom, LocalName, Namespace, ShrinkIfNeeded, WeakAtom};
 use dom::ElementState;
 use precomputed_hash::PrecomputedHash;
+use selectors::Element;
 use selectors::matching::{matches_selector, MatchingContext};
 use selectors::parser::{Combinator, Component, SelectorIter};
 use smallvec::SmallVec;
@@ -114,6 +115,12 @@ pub trait SelectorMapEntry: Sized + Clone {
 /// * https://bugzilla.mozilla.org/show_bug.cgi?id=1363789#c5
 /// * https://bugzilla.mozilla.org/show_bug.cgi?id=681755
 ///
+
+/// A trait providing the necessary functionality for an element type to work
+/// with a SelectorMap.
+pub trait SelectorMapElement: Element {
+
+}
 /// TODO: Tune the initial capacity of the HashMap
 #[derive(Clone, Debug, MallocSizeOf)]
 pub struct SelectorMap<T: 'static> {

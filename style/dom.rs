@@ -14,6 +14,7 @@ use crate::context::UpdateAnimationsTasks;
 use crate::data::ElementData;
 use crate::media_queries::Device;
 use crate::properties::{AnimationDeclarations, ComputedValues, PropertyDeclarationBlock};
+use crate::selector_map::SelectorMapElement;
 use crate::selector_parser::{AttrValue, Lang, PseudoElement, RestyleDamage, SelectorImpl};
 use crate::shared_lock::{Locked, SharedRwLock};
 use crate::stylesheets::scope_rule::ImplicitScopeRoot;
@@ -385,7 +386,7 @@ pub trait TShadowRoot: Sized + Copy + Clone + Debug + PartialEq {
 
 /// The element trait, the main abstraction the style crate acts over.
 pub trait TElement:
-    Eq + PartialEq + Debug + Hash + Sized + Copy + Clone + SelectorsElement<Impl = SelectorImpl>
+    Eq + PartialEq + Debug + Hash + Sized + Copy + Clone + SelectorMapElement + SelectorsElement<Impl = SelectorImpl>
 {
     /// The concrete node type.
     type ConcreteNode: TNode<ConcreteElement = Self>;
