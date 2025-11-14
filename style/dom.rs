@@ -500,22 +500,11 @@ pub trait TElement:
         context: &SharedStyleContext,
     ) -> Option<Arc<Locked<PropertyDeclarationBlock>>>;
 
-    /// Get this element's state, for non-tree-structural pseudos.
-    fn state(&self) -> ElementState;
-
     /// Returns whether this element has a `part` attribute.
     fn has_part_attr(&self) -> bool;
 
     /// Returns whether this element exports any part from its shadow tree.
     fn exports_any_part(&self) -> bool;
-
-    /// The ID for this element.
-    fn id(&self) -> Option<&WeakAtom>;
-
-    /// Internal iterator for the classes of this element.
-    fn each_class<F>(&self, callback: F)
-    where
-        F: FnMut(&AtomIdent);
 
     /// Internal iterator for the classes of this element.
     fn each_custom_state<F>(&self, callback: F)
@@ -528,11 +517,6 @@ pub trait TElement:
         F: FnMut(&AtomIdent),
     {
     }
-
-    /// Internal iterator for the attribute names of this element.
-    fn each_attr_name<F>(&self, callback: F)
-    where
-        F: FnMut(&LocalName);
 
     /// Internal iterator for the part names that this element exports for a
     /// given part name.
@@ -882,13 +866,6 @@ pub trait TElement:
         V: Push<ApplicableDeclarationBlock>,
     {
     }
-
-    /// Returns element's local name.
-    fn local_name(&self) -> &<SelectorImpl as selectors::parser::SelectorImpl>::BorrowedLocalName;
-
-    /// Returns element's namespace.
-    fn namespace(&self)
-        -> &<SelectorImpl as selectors::parser::SelectorImpl>::BorrowedNamespaceUrl;
 
     /// Returns the size of the element to be used in container size queries.
     /// This will usually be the size of the content area of the primary box,

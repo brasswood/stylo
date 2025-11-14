@@ -12,6 +12,7 @@ use crate::rule_tree::CascadeLevel;
 use crate::selector_parser::SelectorImpl;
 use crate::stylist::{CascadeData, ContainerConditionId, Rule, ScopeConditionId, Stylist};
 use crate::AllocErr;
+use crate::values::AtomIdent;
 use crate::{Atom, LocalName, Namespace, ShrinkIfNeeded, WeakAtom};
 use dom::ElementState;
 use precomputed_hash::PrecomputedHash;
@@ -119,7 +120,28 @@ pub trait SelectorMapEntry: Sized + Clone {
 /// A trait providing the necessary functionality for an element type to work
 /// with a SelectorMap.
 pub trait SelectorMapElement: Element {
+    /// The ID for this element.
+    fn id(&self) -> Option<&WeakAtom>;
 
+    /// Internal iterator for the classes of this element.
+    fn each_class<F>(&self, callback: F)
+    where
+        F: FnMut(&AtomIdent);
+
+    /// Internal iterator for the attribute names of this element.
+    fn each_attr_name<F>(&self, callback: F)
+    where
+        F: FnMut(&LocalName);
+
+    /// Returns element's local name.
+    fn local_name(&self) -> &<SelectorImpl as selectors::parser::SelectorImpl>::BorrowedLocalName;
+
+    /// Get this element's state, for non-tree-structural pseudos.
+    fn state(&self) -> ElementState;
+
+    /// Returns element's namespace.
+    fn namespace(&self)
+        -> &<SelectorImpl as selectors::parser::SelectorImpl>::BorrowedNamespaceUrl;
 }
 /// TODO: Tune the initial capacity of the HashMap
 #[derive(Clone, Debug, MallocSizeOf)]
@@ -215,7 +237,7 @@ impl SelectorMap<Rule> {
         cascade_data: &CascadeData,
         stylist: &Stylist,
     ) where
-        E: TElement,
+        E: SelectorMapElement,
     {
         if self.is_empty() {
             return;
