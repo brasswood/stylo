@@ -918,6 +918,76 @@ pub trait TElement:
     }
 }
 
+impl<E: TElement> SelectorMapElement for E {
+    /// The ID for this element.
+    fn id(&self) -> Option<&WeakAtom> {
+        TElement::id(self)
+    }
+
+    /// Internal iterator for the classes of this element.
+    fn each_class<F>(&self, callback: F)
+    where
+        F: FnMut(&AtomIdent)
+    {
+        TElement::each_class(self, callback)
+    }
+
+    /// Internal iterator for the attribute names of this element.
+    fn each_attr_name<F>(&self, callback: F)
+    where
+        F: FnMut(&LocalName)
+    {
+        TElement::each_attr_name(self, callback)
+    }
+
+    /// Returns element's local name.
+    fn local_name(&self) -> &<SelectorImpl as selectors::parser::SelectorImpl>::BorrowedLocalName {
+        TElement::local_name(self)
+    }
+
+    /// Get this element's state, for non-tree-structural pseudos.
+    fn state(&self) -> ElementState {
+        TElement::state(self)
+    }
+
+    /// Returns element's namespace.
+    fn namespace(&self)
+        -> &<SelectorImpl as selectors::parser::SelectorImpl>::BorrowedNamespaceUrl
+    {
+        TElement::namespace(self)
+    }
+
+    /// Returns the implicit scope root for given sheet index and host.
+    fn implicit_scope_for_sheet_in_shadow_root(
+        _opaque_host: OpaqueElement,
+        _sheet_index: usize,
+    ) -> Option<ImplicitScopeRoot> {
+        None
+    }
+
+    /// Get this node's parent element from the perspective of a restyle
+    /// traversal.
+    fn traversal_parent(&self) -> Option<Self> {
+        TElement::traversal_parent(self)
+    }
+
+    /// Immutably borrows the ElementData.
+    fn borrow_data(&self) -> Option<AtomicRef<'_, ElementData>> {
+        TElement::borrow_data(self)
+    }
+
+    /// Returns the size of the element to be used in container size queries.
+    /// This will usually be the size of the content area of the primary box,
+    /// but can be None if there is no box or if some axis lacks size containment.
+    fn query_container_size(
+        &self,
+        display: &Display,
+    ) -> euclid::default::Size2D<Option<app_units::Au>>
+    {
+        TElement::query_container_size(self, display)
+    }
+}
+
 /// TNode and TElement aren't Send because we want to be careful and explicit
 /// about our parallel traversal. However, there are certain situations
 /// (including but not limited to the traversal) where we need to send DOM
