@@ -9,6 +9,7 @@
 use crate::applicable_declarations::ScopeProximity;
 use crate::dom::TElement;
 use crate::parser::ParserContext;
+use crate::selector_map::SelectorMapElement;
 use crate::selector_parser::{SelectorImpl, SelectorParser};
 use crate::shared_lock::{
     DeepCloneWithLock, Locked, SharedRwLock, SharedRwLockReadGuard, ToCssWithGuard,
@@ -215,7 +216,7 @@ pub enum ImplicitScopeTarget {
 
 impl ImplicitScopeTarget {
     /// Check if this element is the implicit scope.
-    fn check<E: TElement>(&self, element: E) -> bool {
+    fn check<E: SelectorMapElement>(&self, element: E) -> bool {
         match self {
             Self::Element(e) => element.opaque() == *e,
             Self::DocumentElement => element.is_root(),
@@ -233,7 +234,7 @@ pub enum ScopeTarget<'a> {
 
 impl<'a> ScopeTarget<'a> {
     /// Check if the given element is the scope.
-    fn check<E: TElement>(
+    fn check<E: SelectorMapElement>(
         &self,
         element: E,
         scope: Option<OpaqueElement>,
@@ -296,7 +297,7 @@ pub fn collect_scope_roots<E>(
     scope_subject_map: &ScopeSubjectMap,
 ) -> Vec<ScopeRootCandidate>
 where
-    E: TElement,
+    E: SelectorMapElement,
 {
     let mut result = vec![];
     let mut parent = Some(element);
@@ -334,7 +335,7 @@ pub fn element_is_outside_of_scope<E>(
     root_may_be_shadow_host: bool,
 ) -> bool
 where
-    E: TElement,
+    E: SelectorMapElement,
 {
     let mut parent = Some(element);
     context.nest_for_scope_condition(Some(root), |context| {
@@ -440,7 +441,7 @@ impl ScopeSubjectMap {
     }
 
     /// Could a given element possibly be a scope root?
-    fn early_reject<E: TElement>(&self, element: E, quirks_mode: QuirksMode) -> bool {
+    fn early_reject<E: SelectorMapElement>(&self, element: E, quirks_mode: QuirksMode) -> bool {
         if self.any {
             return false;
         }
