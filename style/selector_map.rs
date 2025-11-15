@@ -7,16 +7,20 @@
 
 use crate::applicable_declarations::{ApplicableDeclarationList, ScopeProximity};
 use crate::context::QuirksMode;
+use crate::data::ElementData;
 use crate::dom::TElement;
 use crate::rule_tree::CascadeLevel;
 use crate::selector_parser::SelectorImpl;
+use crate::stylesheets::scope_rule::ImplicitScopeRoot;
 use crate::stylist::{CascadeData, ContainerConditionId, Rule, ScopeConditionId, Stylist};
 use crate::AllocErr;
 use crate::values::AtomIdent;
+use crate::values::computed::Display;
 use crate::{Atom, LocalName, Namespace, ShrinkIfNeeded, WeakAtom};
+use atomic_refcell::AtomicRef;
 use dom::ElementState;
 use precomputed_hash::PrecomputedHash;
-use selectors::Element;
+use selectors::{Element, OpaqueElement};
 use selectors::matching::{matches_selector, MatchingContext};
 use selectors::parser::{Combinator, Component, SelectorIter};
 use smallvec::SmallVec;
@@ -119,7 +123,7 @@ pub trait SelectorMapEntry: Sized + Clone {
 
 /// A trait providing the necessary functionality for an element type to work
 /// with a SelectorMap.
-pub trait SelectorMapElement: Element {
+pub trait SelectorMapElement: Element<Impl = SelectorImpl> + Copy {
     /// The ID for this element.
     fn id(&self) -> Option<&WeakAtom>;
 
@@ -142,6 +146,29 @@ pub trait SelectorMapElement: Element {
     /// Returns element's namespace.
     fn namespace(&self)
         -> &<SelectorImpl as selectors::parser::SelectorImpl>::BorrowedNamespaceUrl;
+
+    /// Returns the implicit scope root for given sheet index and host.
+    fn implicit_scope_for_sheet_in_shadow_root(
+        _opaque_host: OpaqueElement,
+        _sheet_index: usize,
+    ) -> Option<ImplicitScopeRoot> {
+        None
+    }
+
+    /// Get this node's parent element from the perspective of a restyle
+    /// traversal.
+    fn traversal_parent(&self) -> Option<Self>;
+
+    /// Immutably borrows the ElementData.
+    fn borrow_data(&self) -> Option<AtomicRef<'_, ElementData>>;
+
+    /// Returns the size of the element to be used in container size queries.
+    /// This will usually be the size of the content area of the primary box,
+    /// but can be None if there is no box or if some axis lacks size containment.
+    fn query_container_size(
+        &self,
+        display: &Display,
+    ) -> euclid::default::Size2D<Option<app_units::Au>>;
 }
 /// TODO: Tune the initial capacity of the HashMap
 #[derive(Clone, Debug, MallocSizeOf)]
@@ -359,7 +386,7 @@ impl SelectorMap<Rule> {
         cascade_data: &CascadeData,
         stylist: &Stylist,
     ) where
-        E: TElement,
+        E: SelectorMapElement,
     {
         use selectors::matching::IncludeStartingStyle;
 

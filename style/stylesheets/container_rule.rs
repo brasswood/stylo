@@ -14,6 +14,7 @@ use crate::properties::ComputedValues;
 use crate::queries::feature::{AllowsRanges, Evaluator, FeatureFlags, QueryFeatureDescription};
 use crate::queries::values::Orientation;
 use crate::queries::{FeatureType, QueryCondition};
+use crate::selector_map::SelectorMapElement;
 use crate::shared_lock::{
     DeepCloneWithLock, Locked, SharedRwLock, SharedRwLockReadGuard, ToCssWithGuard,
 };
@@ -135,7 +136,7 @@ fn traverse_container<E, F, R>(
     evaluator: F,
 ) -> Option<(E, R)>
 where
-    E: TElement,
+    E: SelectorMapElement,
     F: Fn(E, Option<&ComputedValues>) -> TraversalResult<R>,
 {
     if originating_element_style.is_some() {
@@ -182,7 +183,7 @@ impl ContainerCondition {
         originating_element_style: Option<&ComputedValues>,
     ) -> TraversalResult<ContainerLookupResult<E>>
     where
-        E: TElement,
+        E: SelectorMapElement,
     {
         let data;
         let style = match originating_element_style {
@@ -229,7 +230,7 @@ impl ContainerCondition {
         originating_element_style: Option<&ComputedValues>,
     ) -> Option<ContainerLookupResult<E>>
     where
-        E: TElement,
+        E: SelectorMapElement,
     {
         match traverse_container(
             e,
@@ -252,7 +253,7 @@ impl ContainerCondition {
         invalidation_flags: &mut ComputedValueFlags,
     ) -> KleeneValue
     where
-        E: TElement,
+        E: SelectorMapElement,
     {
         let result = self.find_container(element, originating_element_style);
         let (container, info) = match result {
@@ -488,7 +489,7 @@ impl<'a> ContainerSizeQuery<'a> {
         originating_element_style: Option<&ComputedValues>,
     ) -> TraversalResult<ContainerSizeQueryResult>
     where
-        E: TElement,
+        E: SelectorMapElement,
     {
         let data;
         let style = match originating_element_style {
@@ -542,7 +543,7 @@ impl<'a> ContainerSizeQuery<'a> {
         originating_element_style: Option<&ComputedValues>,
     ) -> ContainerSizeQueryResult
     where
-        E: TElement + 'a,
+        E: SelectorMapElement + 'a,
     {
         match traverse_container(
             element,
@@ -570,7 +571,7 @@ impl<'a> ContainerSizeQuery<'a> {
         is_pseudo: bool,
     ) -> Self
     where
-        E: TElement + 'a,
+        E: SelectorMapElement + 'a,
     {
         let parent;
         let data;
@@ -608,7 +609,7 @@ impl<'a> ContainerSizeQuery<'a> {
         is_pseudo: bool,
     ) -> Self
     where
-        E: TElement + 'a,
+        E: SelectorMapElement + 'a,
     {
         if let Some(e) = element {
             Self::for_element(e, known_parent_style, is_pseudo)

@@ -416,12 +416,6 @@ pub trait TElement:
         true
     }
 
-    /// Get this node's parent element from the perspective of a restyle
-    /// traversal.
-    fn traversal_parent(&self) -> Option<Self> {
-        self.as_node().traversal_parent()
-    }
-
     /// Get this node's children from the perspective of a restyle traversal.
     fn traversal_children(&self) -> LayoutIterator<Self::TraversalChildrenIterator>;
 
@@ -867,27 +861,11 @@ pub trait TElement:
     {
     }
 
-    /// Returns the size of the element to be used in container size queries.
-    /// This will usually be the size of the content area of the primary box,
-    /// but can be None if there is no box or if some axis lacks size containment.
-    fn query_container_size(
-        &self,
-        display: &Display,
-    ) -> euclid::default::Size2D<Option<app_units::Au>>;
-
     /// Returns true if the element has all of specified selector flags.
     fn has_selector_flags(&self, flags: ElementSelectorFlags) -> bool;
 
     /// Returns the search direction for relative selector invalidation, if it is on the search path.
     fn relative_selector_search_direction(&self) -> ElementSelectorFlags;
-
-    /// Returns the implicit scope root for given sheet index and host.
-    fn implicit_scope_for_sheet_in_shadow_root(
-        _opaque_host: OpaqueElement,
-        _sheet_index: usize,
-    ) -> Option<ImplicitScopeRoot> {
-        None
-    }
 
     /// Compute the damage incurred by the change from the `_old` to `_new`.
     fn compute_layout_damage(_old: &ComputedValues, _new: &ComputedValues) -> RestyleDamage {

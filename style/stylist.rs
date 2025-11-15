@@ -30,7 +30,7 @@ use crate::properties_and_values::registry::{
 use crate::rule_cache::{RuleCache, RuleCacheConditions};
 use crate::rule_collector::RuleCollector;
 use crate::rule_tree::{CascadeLevel, RuleTree, StrongRuleNode, StyleSource};
-use crate::selector_map::{PrecomputedHashMap, PrecomputedHashSet, SelectorMap, SelectorMapEntry};
+use crate::selector_map::{PrecomputedHashMap, PrecomputedHashSet, SelectorMap, SelectorMapElement, SelectorMapEntry};
 use crate::selector_parser::{
     NonTSPseudoClass, PerPseudoElementMap, PseudoElement, SelectorImpl, SnapshotMap,
 };
@@ -2870,7 +2870,7 @@ pub fn scope_root_candidates<E>(
     context: &mut MatchingContext<SelectorImpl>,
 ) -> ScopeRootCandidates
 where
-    E: TElement,
+    E: SelectorMapElement,
 {
     let condition_ref = &scope_conditions[id.0 as usize];
     let bounds = match condition_ref.condition {
@@ -3407,7 +3407,7 @@ impl CascadeData {
         context: &mut MatchingContext<E::Impl>,
     ) -> bool
     where
-        E: TElement,
+        E: SelectorMapElement,
     {
         loop {
             let condition_ref = &self.container_conditions[id.0 as usize];
@@ -3430,7 +3430,7 @@ impl CascadeData {
         }
     }
 
-    pub(crate) fn find_scope_proximity_if_matching<E: TElement>(
+    pub(crate) fn find_scope_proximity_if_matching<E: SelectorMapElement>(
         &self,
         rule: &Rule,
         element: E,
