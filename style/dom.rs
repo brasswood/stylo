@@ -416,6 +416,12 @@ pub trait TElement:
         true
     }
 
+    /// Get this node's parent element from the perspective of a restyle
+    /// traversal.
+    fn traversal_parent(&self) -> Option<Self> {
+        self.as_node().traversal_parent()
+    }
+
     /// Get this node's children from the perspective of a restyle traversal.
     fn traversal_children(&self) -> LayoutIterator<Self::TraversalChildrenIterator>;
 
@@ -494,11 +500,22 @@ pub trait TElement:
         context: &SharedStyleContext,
     ) -> Option<Arc<Locked<PropertyDeclarationBlock>>>;
 
+    /// Get this element's state, for non-tree-structural pseudos.
+    fn state(&self) -> ElementState;
+
     /// Returns whether this element has a `part` attribute.
     fn has_part_attr(&self) -> bool;
 
     /// Returns whether this element exports any part from its shadow tree.
     fn exports_any_part(&self) -> bool;
+
+    /// The ID for this element.
+    fn id(&self) -> Option<&WeakAtom>;
+
+    /// Internal iterator for the classes of this element.
+    fn each_class<F>(&self, callback: F)
+    where
+        F: FnMut(&AtomIdent);
 
     /// Internal iterator for the classes of this element.
     fn each_custom_state<F>(&self, callback: F)
@@ -511,6 +528,11 @@ pub trait TElement:
         F: FnMut(&AtomIdent),
     {
     }
+
+    /// Internal iterator for the attribute names of this element.
+    fn each_attr_name<F>(&self, callback: F)
+    where
+        F: FnMut(&LocalName);
 
     /// Internal iterator for the part names that this element exports for a
     /// given part name.
@@ -861,11 +883,34 @@ pub trait TElement:
     {
     }
 
+    /// Returns element's local name.
+    fn local_name(&self) -> &<SelectorImpl as selectors::parser::SelectorImpl>::BorrowedLocalName;
+
+    /// Returns element's namespace.
+    fn namespace(&self)
+        -> &<SelectorImpl as selectors::parser::SelectorImpl>::BorrowedNamespaceUrl;
+
+    /// Returns the size of the element to be used in container size queries.
+    /// This will usually be the size of the content area of the primary box,
+    /// but can be None if there is no box or if some axis lacks size containment.
+    fn query_container_size(
+        &self,
+        display: &Display,
+    ) -> euclid::default::Size2D<Option<app_units::Au>>;
+
     /// Returns true if the element has all of specified selector flags.
     fn has_selector_flags(&self, flags: ElementSelectorFlags) -> bool;
 
     /// Returns the search direction for relative selector invalidation, if it is on the search path.
     fn relative_selector_search_direction(&self) -> ElementSelectorFlags;
+
+    /// Returns the implicit scope root for given sheet index and host.
+    fn implicit_scope_for_sheet_in_shadow_root(
+        _opaque_host: OpaqueElement,
+        _sheet_index: usize,
+    ) -> Option<ImplicitScopeRoot> {
+        None
+    }
 
     /// Compute the damage incurred by the change from the `_old` to `_new`.
     fn compute_layout_damage(_old: &ComputedValues, _new: &ComputedValues) -> RestyleDamage {
