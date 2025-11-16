@@ -397,9 +397,6 @@ pub trait TElement:
     /// syntax.
     type TraversalChildrenIterator: Iterator<Item = Self::ConcreteNode>;
 
-    /// Get this element as a node.
-    fn as_node(&self) -> Self::ConcreteNode;
-
     /// A debug-only check that the device's owner doc matches the actual doc
     /// we're the root of.
     ///

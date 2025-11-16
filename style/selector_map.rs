@@ -157,7 +157,12 @@ pub trait SelectorMapElement: Element<Impl = SelectorImpl> + Copy {
 
     /// Get this node's parent element from the perspective of a restyle
     /// traversal.
-    fn traversal_parent(&self) -> Option<Self>;
+    fn traversal_parent(&self) -> Option<Self> {
+        self.as_node().traversal_parent()
+    }
+
+    /// Get this element as a node.
+    fn as_node(&self) -> Self::ConcreteNode;
 
     /// Immutably borrows the ElementData.
     fn borrow_data(&self) -> Option<AtomicRef<'_, ElementData>>;
