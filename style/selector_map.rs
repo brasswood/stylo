@@ -22,7 +22,7 @@ use dom::ElementState;
 use precomputed_hash::PrecomputedHash;
 use selectors::{Element, OpaqueElement};
 use selectors::matching::{matches_selector, MatchingContext};
-use selectors::parser::{Combinator, Component, SelectorIter};
+use selectors::parser::{Combinator, Component, Selector, SelectorIter};
 use smallvec::SmallVec;
 use std::collections::hash_map;
 use std::collections::{HashMap, HashSet};
@@ -259,6 +259,7 @@ impl SelectorMap<Rule> {
         element: E,
         rule_hash_target: E,
         matching_rules_list: &mut ApplicableDeclarationList,
+        matching_selectors: &mut Option<&mut SmallVec<[Selector<SelectorImpl>; 16]>>,
         matching_context: &mut MatchingContext<E::Impl>,
         cascade_level: CascadeLevel,
         cascade_data: &CascadeData,
@@ -277,6 +278,7 @@ impl SelectorMap<Rule> {
                 element,
                 &self.root,
                 matching_rules_list,
+                matching_selectors,
                 matching_context,
                 cascade_level,
                 cascade_data,
@@ -290,6 +292,7 @@ impl SelectorMap<Rule> {
                     element,
                     rules,
                     matching_rules_list,
+                    matching_selectors,
                     matching_context,
                     cascade_level,
                     cascade_data,
@@ -304,6 +307,7 @@ impl SelectorMap<Rule> {
                     element,
                     rules,
                     matching_rules_list,
+                    matching_selectors,
                     matching_context,
                     cascade_level,
                     cascade_data,
@@ -318,6 +322,7 @@ impl SelectorMap<Rule> {
                     element,
                     rules,
                     matching_rules_list,
+                    matching_selectors,
                     matching_context,
                     cascade_level,
                     cascade_data,
@@ -331,6 +336,7 @@ impl SelectorMap<Rule> {
                 element,
                 rules,
                 matching_rules_list,
+                matching_selectors,
                 matching_context,
                 cascade_level,
                 cascade_data,
@@ -346,6 +352,7 @@ impl SelectorMap<Rule> {
                 element,
                 &self.rare_pseudo_classes,
                 matching_rules_list,
+                matching_selectors,
                 matching_context,
                 cascade_level,
                 cascade_data,
@@ -358,6 +365,7 @@ impl SelectorMap<Rule> {
                 element,
                 rules,
                 matching_rules_list,
+                matching_selectors,
                 matching_context,
                 cascade_level,
                 cascade_data,
@@ -369,6 +377,7 @@ impl SelectorMap<Rule> {
             element,
             &self.other,
             matching_rules_list,
+            matching_selectors,
             matching_context,
             cascade_level,
             cascade_data,
@@ -381,6 +390,7 @@ impl SelectorMap<Rule> {
         element: E,
         rules: &[Rule],
         matching_rules: &mut ApplicableDeclarationList,
+        matching_selectors: &mut Option<&mut SmallVec<[Selector<SelectorImpl>; 16]>>,
         matching_context: &mut MatchingContext<E::Impl>,
         cascade_level: CascadeLevel,
         cascade_data: &CascadeData,
@@ -442,6 +452,10 @@ impl SelectorMap<Rule> {
                 cascade_data,
                 scope_proximity,
             ));
+
+            if let Some(matching_selectors) = matching_selectors {
+                matching_selectors.push(rule.selector.clone()); // TODO: Is cloning bad here?
+            }
         }
     }
 }
