@@ -8,13 +8,14 @@
 #![deny(missing_docs)]
 
 use crate::applicable_declarations::ApplicableDeclarationBlock;
+use crate::bloom::BloomFilterElement;
 use crate::context::SharedStyleContext;
 #[cfg(feature = "gecko")]
 use crate::context::UpdateAnimationsTasks;
 use crate::data::ElementData;
 use crate::media_queries::Device;
 use crate::properties::{AnimationDeclarations, ComputedValues, PropertyDeclarationBlock};
-use crate::selector_map::SelectorMapElement;
+use crate::selector_map::SelectorMapElement as _;
 use crate::selector_parser::{AttrValue, Lang, PseudoElement, RestyleDamage, SelectorImpl};
 use crate::shared_lock::{Locked, SharedRwLock};
 use crate::stylesheets::scope_rule::ImplicitScopeRoot;
@@ -386,7 +387,7 @@ pub trait TShadowRoot: Sized + Copy + Clone + Debug + PartialEq {
 
 /// The element trait, the main abstraction the style crate acts over.
 pub trait TElement:
-    Eq + PartialEq + Debug + Hash + Sized + Copy + Clone + SelectorMapElement + SelectorsElement<Impl = SelectorImpl>
+    Eq + PartialEq + Debug + Hash + Sized + Copy + Clone + BloomFilterElement + SelectorsElement<Impl = SelectorImpl>
 {
     /// The concrete node type.
     type ConcreteNode: TNode<ConcreteElement = Self>;
@@ -895,15 +896,15 @@ impl<N: TNode> Deref for SendNode<N> {
 /// Same reason as for the existence of SendNode, SendElement does the proper
 /// things for a given `TElement`.
 #[derive(Debug, Eq, Hash, PartialEq)]
-pub struct SendElement<E: TElement>(E);
-unsafe impl<E: TElement> Send for SendElement<E> {}
-impl<E: TElement> SendElement<E> {
+pub struct SendElement<E: BloomFilterElement>(E);
+unsafe impl<E: BloomFilterElement> Send for SendElement<E> {}
+impl<E: BloomFilterElement> SendElement<E> {
     /// Unsafely construct a SendElement.
     pub unsafe fn new(el: E) -> Self {
         SendElement(el)
     }
 }
-impl<E: TElement> Deref for SendElement<E> {
+impl<E: BloomFilterElement> Deref for SendElement<E> {
     type Target = E;
     fn deref(&self) -> &E {
         &self.0

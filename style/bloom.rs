@@ -7,7 +7,7 @@
 
 #![deny(missing_docs)]
 
-use crate::dom::{SendElement, TElement};
+use crate::{dom::SendElement, selector_map::SelectorMapElement};
 use crate::LocalName;
 use atomic_refcell::{AtomicRefCell, AtomicRefMut};
 use selectors::bloom::BloomFilter;
@@ -28,6 +28,9 @@ thread_local! {
     /// arc and carry an owning reference around or so.
     static BLOOM_KEY: &'static AtomicRefCell<BloomFilter> = Box::leak(Default::default());
 }
+
+/// Trait providing the necessary functionality for an Element type to work with a StyleBloom
+pub trait BloomFilterElement: SelectorMapElement + PartialEq {}
 
 /// A struct that allows us to fast-reject deep descendant selectors avoiding
 /// selector-matching.
@@ -60,7 +63,7 @@ thread_local! {
 ///  * The DOM shape and attributes (and every other thing we access here) are
 ///    immutable during a restyle.
 ///
-pub struct StyleBloom<E: TElement> {
+pub struct StyleBloom<E: BloomFilterElement> {
     /// A handle to the bloom filter from the thread upon which this StyleBloom
     /// was created. We use AtomicRefCell so that this is all |Send|, which allows
     /// StyleBloom to live in ThreadLocalStyleContext, which is dropped from the
@@ -85,7 +88,7 @@ pub struct StyleBloom<E: TElement> {
 /// get 255 collisions on the same hash value, and 25 < 255.
 const MEMSET_CLEAR_THRESHOLD: usize = 25;
 
-struct PushedElement<E: TElement> {
+struct PushedElement<E: BloomFilterElement> {
     /// The element that was pushed.
     element: SendElement<E>,
 
@@ -93,7 +96,7 @@ struct PushedElement<E: TElement> {
     num_hashes: usize,
 }
 
-impl<E: TElement> PushedElement<E> {
+impl<E: BloomFilterElement> PushedElement<E> {
     fn new(el: E, num_hashes: usize) -> Self {
         PushedElement {
             element: unsafe { SendElement::new(el) },
@@ -114,7 +117,7 @@ pub fn is_attr_name_excluded_from_filter(name: &LocalName) -> bool {
 /// Gather all relevant hash for fast-reject filters from an element.
 pub fn each_relevant_element_hash<E, F>(element: E, mut f: F)
 where
-    E: TElement,
+    E: BloomFilterElement,
     F: FnMut(u32),
 {
     f(element.local_name().get_hash());
@@ -133,14 +136,14 @@ where
     });
 }
 
-impl<E: TElement> Drop for StyleBloom<E> {
+impl<E: BloomFilterElement> Drop for StyleBloom<E> {
     fn drop(&mut self) {
         // Leave the reusable bloom filter in a zeroed state.
         self.clear();
     }
 }
 
-impl<E: TElement> StyleBloom<E> {
+impl<E: BloomFilterElement> StyleBloom<E> {
     /// Create an empty `StyleBloom`. Because StyleBloom acquires the thread-
     /// local filter buffer, creating multiple live StyleBloom instances at
     /// the same time on the same thread will panic.
