@@ -16,6 +16,7 @@ use crate::stylist::{CascadeData, ContainerConditionId, Rule, ScopeConditionId, 
 use crate::AllocErr;
 use crate::values::AtomIdent;
 use crate::values::computed::Display;
+use crate::cssparser::ToCss as _;
 use crate::{Atom, LocalName, Namespace, ShrinkIfNeeded, WeakAtom};
 use atomic_refcell::AtomicRef;
 use dom::ElementState;
@@ -316,7 +317,14 @@ impl SelectorMap<Rule> {
                     cascade_level,
                     cascade_data,
                     stylist,
-                )
+                );
+                #[cfg(debug_assertions)]
+                if element.node_id() == 492475605503910885 {
+                    println!("RULES GOTTEN FROM MAP");
+                    println!("{:?}", rules);
+                    println!("RULES MATCHED AFTER BEING GOTTEN");
+                    println!("{:?}", matching_rules_list);
+                }
             }
         });
 
@@ -410,6 +418,10 @@ impl SelectorMap<Rule> {
         );
         for rule in rules {
             let scope_proximity = if rule.scope_condition_id == ScopeConditionId::none() {
+                #[cfg(debug_assertions)]
+                if element.node_id() == 492475605503910885 && rule.selector.to_css_string() == ".react-directory-filename-column .react-directory-filename-cell" {
+                    println!("{}", element.node_id())
+                }
                 if !matches_selector(
                     &rule.selector,
                     0,
