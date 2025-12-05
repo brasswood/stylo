@@ -169,6 +169,10 @@ pub trait SelectorMapElement: Element<Impl = SelectorImpl> + Copy {
         &self,
         display: &Display,
     ) -> euclid::default::Size2D<Option<app_units::Au>>;
+
+    #[cfg(debug_assertions)]
+    /// Returns a unique identifier for the element.
+    fn node_id(&self) -> u64;
 }
 /// TODO: Tune the initial capacity of the HashMap
 #[derive(Clone, Debug, MallocSizeOf)]
