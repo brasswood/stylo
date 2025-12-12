@@ -88,6 +88,7 @@ pub struct StyleBloom<E: BloomFilterElement> {
 /// get 255 collisions on the same hash value, and 25 < 255.
 const MEMSET_CLEAR_THRESHOLD: usize = 25;
 
+#[derive(Debug)]
 struct PushedElement<E: BloomFilterElement> {
     /// The element that was pushed.
     element: SendElement<E>,
