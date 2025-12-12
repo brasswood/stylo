@@ -123,7 +123,7 @@ pub trait SelectorMapEntry: Sized + Clone {
 
 /// A trait providing the necessary functionality for an element type to work
 /// with a SelectorMap.
-pub trait SelectorMapElement: Element<Impl = SelectorImpl> + Copy {
+pub trait SelectorMapElement: Element<Impl = SelectorImpl> + Copy + std::fmt::Debug {
     /// The ID for this element.
     fn id(&self) -> Option<&WeakAtom>;
 
