@@ -65,7 +65,7 @@
 //! elements makes sense.
 
 use crate::applicable_declarations::ApplicableDeclarationBlock;
-use crate::bloom::StyleBloom;
+use crate::bloom::{BloomFilterElement, StyleBloom};
 use crate::computed_value_flags::ComputedValueFlags;
 use crate::context::{SharedStyleContext, StyleContext};
 use crate::dom::{SendElement, TElement};
@@ -198,7 +198,7 @@ impl ValidationData {
     /// this element.
     pub fn pres_hints<E>(&mut self, element: E) -> &[ApplicableDeclarationBlock]
     where
-        E: TElement,
+        E: StyleSharingElement,
     {
         self.pres_hints.get_or_insert_with(|| {
             let mut pres_hints = SmallVec::new();
@@ -213,7 +213,7 @@ impl ValidationData {
     /// Get or compute the part-list associated with this element.
     pub fn part_list<E>(&mut self, element: E) -> &[AtomIdent]
     where
-        E: TElement,
+        E: StyleSharingElement,
     {
         if !element.has_part_attr() {
             return &[];
@@ -232,7 +232,7 @@ impl ValidationData {
     /// Get or compute the class-list associated with this element.
     pub fn class_list<E>(&mut self, element: E) -> &[AtomIdent]
     where
-        E: TElement,
+        E: StyleSharingElement,
     {
         self.class_list.get_or_insert_with(|| {
             let mut list = SmallVec::<[_; 5]>::new();
@@ -251,7 +251,7 @@ impl ValidationData {
     /// Get or compute the parent style identity.
     pub fn parent_style_identity<E>(&mut self, el: E) -> OpaqueComputedValues
     where
-        E: TElement,
+        E: StyleSharingElement,
     {
         self.parent_style_identity
             .get_or_insert_with(|| {
@@ -276,7 +276,7 @@ impl ValidationData {
         needs_selector_flags: NeedsSelectorFlags,
     ) -> &RevalidationResult
     where
-        E: TElement,
+        E: StyleSharingElement,
     {
         self.revalidation_match_results.get_or_insert_with(|| {
             // The bloom filter may already be set up for our element.
@@ -305,6 +305,11 @@ impl ValidationData {
     }
 }
 
+/// Trait providing the necessary functionality for an Element type to work with style sharing
+pub trait StyleSharingElement: BloomFilterElement {
+
+}
+
 /// Information regarding a style sharing candidate, that is, an entry in the
 /// style sharing cache.
 ///
@@ -315,7 +320,7 @@ impl ValidationData {
 /// Important: If you change the members/layout here, You need to do the same for
 /// FakeCandidate below.
 #[derive(Debug)]
-pub struct StyleSharingCandidate<E: TElement> {
+pub struct StyleSharingCandidate<E: StyleSharingElement> {
     /// The element.
     element: E,
     validation_data: ValidationData,
@@ -336,7 +341,7 @@ impl<E: TElement> Deref for StyleSharingCandidate<E> {
     }
 }
 
-impl<E: TElement> StyleSharingCandidate<E> {
+impl<E: StyleSharingElement> StyleSharingCandidate<E> {
     /// Get the classlist of this candidate.
     fn class_list(&mut self) -> &[AtomIdent] {
         self.validation_data.class_list(self.element)
@@ -393,12 +398,12 @@ impl<E: TElement> PartialEq<StyleSharingCandidate<E>> for StyleSharingCandidate<
 }
 
 /// An element we want to test against the style sharing cache.
-pub struct StyleSharingTarget<E: TElement> {
+pub struct StyleSharingTarget<E: StyleSharingElement> {
     element: E,
     validation_data: ValidationData,
 }
 
-impl<E: TElement> Deref for StyleSharingTarget<E> {
+impl<E: StyleSharingElement> Deref for StyleSharingTarget<E> {
     type Target = E;
 
     fn deref(&self) -> &Self::Target {
@@ -406,7 +411,7 @@ impl<E: TElement> Deref for StyleSharingTarget<E> {
     }
 }
 
-impl<E: TElement> StyleSharingTarget<E> {
+impl<E: StyleSharingElement> StyleSharingTarget<E> {
     /// Trivially construct a new StyleSharingTarget to test against the cache.
     pub fn new(element: E) -> Self {
         Self {
@@ -527,7 +532,7 @@ impl<Candidate> SharingCacheBase<Candidate> {
     }
 }
 
-impl<E: TElement> SharingCache<E> {
+impl<E: StyleSharingElement> SharingCache<E> {
     fn insert(
         &mut self,
         element: E,
@@ -572,7 +577,7 @@ thread_local! {
 ///
 /// Note that this cache is flushed every time we steal work from the queue, so
 /// storing nodes here temporarily is safe.
-pub struct StyleSharingCache<E: TElement> {
+pub struct StyleSharingCache<E: StyleSharingElement> {
     /// The LRU cache, with the type cast away to allow persisting the allocation.
     cache_typeless: AtomicRefMut<'static, TypelessSharingCache>,
     /// Bind this structure to the lifetime of E, since that's what we effectively store.
@@ -583,13 +588,13 @@ pub struct StyleSharingCache<E: TElement> {
     dom_depth: usize,
 }
 
-impl<E: TElement> Drop for StyleSharingCache<E> {
+impl<E: StyleSharingElement> Drop for StyleSharingCache<E> {
     fn drop(&mut self) {
         self.clear();
     }
 }
 
-impl<E: TElement> StyleSharingCache<E> {
+impl<E: StyleSharingElement> StyleSharingCache<E> {
     #[allow(dead_code)]
     fn cache(&self) -> &SharingCache<E> {
         let base: &TypelessSharingCache = &*self.cache_typeless;

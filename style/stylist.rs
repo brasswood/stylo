@@ -35,7 +35,7 @@ use crate::selector_parser::{
     NonTSPseudoClass, PerPseudoElementMap, PseudoElement, SelectorImpl, SnapshotMap,
 };
 use crate::shared_lock::{Locked, SharedRwLockReadGuard, StylesheetGuards};
-use crate::sharing::{RevalidationResult, ScopeRevalidationResult};
+use crate::sharing::{RevalidationResult, ScopeRevalidationResult, StyleSharingElement};
 use crate::stylesheet_set::{DataValidity, DocumentStylesheetSet, SheetRebuildKind};
 use crate::stylesheet_set::{DocumentStylesheetFlusher, SheetCollectionFlusher};
 use crate::stylesheets::container_rule::ContainerCondition;
@@ -1088,7 +1088,7 @@ impl Stylist {
     /// condition is true.
     pub fn any_applicable_rule_data<E, F>(&self, element: E, mut f: F) -> bool
     where
-        E: TElement,
+        E: StyleSharingElement,
         F: FnMut(&CascadeData) -> bool,
     {
         if f(&self.cascade_data.user_agent.cascade_data) {
@@ -1653,7 +1653,7 @@ impl Stylist {
     #[inline]
     pub fn may_have_rules_for_id<E>(&self, id: &WeakAtom, element: E) -> bool
     where
-        E: TElement,
+        E: StyleSharingElement,
     {
         // If id needs to be compared case-insensitively, the logic below
         // wouldn't work. Just conservatively assume it may have such rules.
@@ -1750,7 +1750,7 @@ impl Stylist {
         needs_selector_flags: NeedsSelectorFlags,
     ) -> RevalidationResult
     where
-        E: TElement,
+        E: StyleSharingElement,
     {
         // NB: `MatchingMode` doesn't really matter, given we don't share style
         // between pseudos.
@@ -1819,7 +1819,7 @@ impl Stylist {
     }
 
     /// Computes currently active scopes for the given element for revalidation purposes.
-    pub fn revalidate_scopes<E: TElement>(
+    pub fn revalidate_scopes<E: StyleSharingElement>(
         &self,
         element: &E,
         selector_caches: &mut SelectorCaches,

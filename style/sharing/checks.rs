@@ -9,7 +9,7 @@
 use crate::bloom::StyleBloom;
 use crate::context::SharedStyleContext;
 use crate::dom::TElement;
-use crate::sharing::{StyleSharingCandidate, StyleSharingTarget};
+use crate::sharing::{StyleSharingCandidate, StyleSharingElement, StyleSharingTarget};
 use selectors::matching::SelectorCaches;
 
 /// Determines whether a target and a candidate have compatible parents for
@@ -19,7 +19,7 @@ pub fn parents_allow_sharing<E>(
     candidate: &mut StyleSharingCandidate<E>,
 ) -> bool
 where
-    E: TElement,
+    E: StyleSharingElement,
 {
     // If the identity of the parent style isn't equal, we can't share. We check
     // this first, because the result is cached.
@@ -158,7 +158,7 @@ pub fn may_match_different_id_rules<E>(
     candidate: E,
 ) -> bool
 where
-    E: TElement,
+    E: StyleSharingElement,
 {
     let element_id = element.id();
     let candidate_id = candidate.id();

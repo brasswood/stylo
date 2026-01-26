@@ -20,7 +20,7 @@ use crate::rule_cache::RuleCache;
 use crate::rule_tree::StrongRuleNode;
 use crate::selector_parser::{SnapshotMap, EAGER_PSEUDO_COUNT};
 use crate::shared_lock::StylesheetGuards;
-use crate::sharing::StyleSharingCache;
+use crate::sharing::{StyleSharingCache, StyleSharingElement};
 use crate::stylist::Stylist;
 use crate::thread_state::{self, ThreadState};
 use crate::traversal::DomTraversal;
@@ -429,7 +429,7 @@ bitflags! {
 /// A task to be run in sequential mode on the parent (non-worker) thread. This
 /// is used by the style system to queue up work which is not safe to do during
 /// the parallel traversal.
-pub enum SequentialTask<E: TElement> {
+pub enum SequentialTask<E: StyleSharingElement> {
     /// Entry to avoid an unused type parameter error on servo.
     Unused(SendElement<E>),
 
@@ -450,7 +450,7 @@ pub enum SequentialTask<E: TElement> {
     },
 }
 
-impl<E: TElement> SequentialTask<E> {
+impl<E: StyleSharingElement> SequentialTask<E> {
     /// Executes this task.
     pub fn execute(self) {
         use self::SequentialTask::*;
@@ -488,11 +488,11 @@ impl<E: TElement> SequentialTask<E> {
 /// A list of SequentialTasks that get executed on Drop.
 pub struct SequentialTaskList<E>(Vec<SequentialTask<E>>)
 where
-    E: TElement;
+    E: StyleSharingElement;
 
 impl<E> ops::Deref for SequentialTaskList<E>
 where
-    E: TElement,
+    E: StyleSharingElement,
 {
     type Target = Vec<SequentialTask<E>>;
 
@@ -503,7 +503,7 @@ where
 
 impl<E> ops::DerefMut for SequentialTaskList<E>
 where
-    E: TElement,
+    E: StyleSharingElement,
 {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
@@ -512,7 +512,7 @@ where
 
 impl<E> Drop for SequentialTaskList<E>
 where
-    E: TElement,
+    E: StyleSharingElement,
 {
     fn drop(&mut self) {
         debug_assert!(thread_state::get().contains(ThreadState::LAYOUT));
@@ -591,7 +591,7 @@ impl StackLimitChecker {
 /// This context contains data that needs to be used during restyling, but is
 /// not required to be unique among worker threads, so we create one per worker
 /// thread in order to be able to mutate it without locking.
-pub struct ThreadLocalStyleContext<E: TElement> {
+pub struct ThreadLocalStyleContext<E: StyleSharingElement> {
     /// A cache to share style among siblings.
     pub sharing_cache: StyleSharingCache<E>,
     /// A cache from matched properties to elements that match those.
@@ -634,7 +634,7 @@ impl<E: TElement> ThreadLocalStyleContext<E> {
 
 /// A `StyleContext` is just a simple container for a immutable reference to a
 /// shared style context, and a mutable reference to a local one.
-pub struct StyleContext<'a, E: TElement + 'a> {
+pub struct StyleContext<'a, E: StyleSharingElement + 'a> {
     /// The shared style context reference.
     pub shared: &'a SharedStyleContext<'a>,
     /// The thread-local style context (mutable) reference.
