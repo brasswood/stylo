@@ -9,6 +9,7 @@ use crate::applicable_declarations::{ApplicableDeclarationList, ScopeProximity};
 use crate::context::QuirksMode;
 use crate::data::ElementData;
 use crate::dom::TElement;
+use crate::sharing::StyleSharingElement;
 use crate::rule_tree::CascadeLevel;
 use crate::selector_parser::SelectorImpl;
 use crate::stylesheets::scope_rule::ImplicitScopeRoot;
@@ -578,7 +579,7 @@ impl<T: SelectorMapEntry> SelectorMap<T> {
         f: F,
     ) -> bool
     where
-        E: TElement,
+        E: StyleSharingElement,
         F: FnMut(&'a T) -> bool,
     {
         self.lookup_with_state(
@@ -600,7 +601,7 @@ impl<T: SelectorMapEntry> SelectorMap<T> {
         mut f: F,
     ) -> bool
     where
-        E: TElement,
+        E: StyleSharingElement,
         F: FnMut(&'a T) -> bool,
     {
         if element.is_root() {

@@ -4397,7 +4397,7 @@ impl CascadeData {
         &self.custom_property_registrations
     }
 
-    fn revalidate_scopes<E: TElement>(
+    fn revalidate_scopes<E: StyleSharingElement>(
         &self,
         element: &E,
         matching_context: &mut MatchingContext<E::Impl>,

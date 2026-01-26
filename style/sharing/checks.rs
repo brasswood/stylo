@@ -8,7 +8,6 @@
 
 use crate::bloom::StyleBloom;
 use crate::context::SharedStyleContext;
-use crate::dom::TElement;
 use crate::sharing::{StyleSharingCandidate, StyleSharingElement, StyleSharingTarget};
 use selectors::matching::SelectorCaches;
 
@@ -59,7 +58,7 @@ pub fn have_same_style_attribute<E>(
     candidate: &mut StyleSharingCandidate<E>,
 ) -> bool
 where
-    E: TElement,
+    E: StyleSharingElement,
 {
     match (target.style_attribute(), candidate.style_attribute()) {
         (None, None) => true,
@@ -74,7 +73,7 @@ pub fn have_same_presentational_hints<E>(
     candidate: &mut StyleSharingCandidate<E>,
 ) -> bool
 where
-    E: TElement,
+    E: StyleSharingElement,
 {
     target.pres_hints() == candidate.pres_hints()
 }
@@ -87,7 +86,7 @@ pub fn have_same_class<E>(
     candidate: &mut StyleSharingCandidate<E>,
 ) -> bool
 where
-    E: TElement,
+    E: StyleSharingElement,
 {
     target.class_list() == candidate.class_list()
 }
@@ -100,7 +99,7 @@ pub fn have_same_parts<E>(
     candidate: &mut StyleSharingCandidate<E>,
 ) -> bool
 where
-    E: TElement,
+    E: StyleSharingElement,
 {
     target.part_list() == candidate.part_list()
 }
@@ -120,7 +119,7 @@ pub fn revalidate<E>(
     selector_caches: &mut SelectorCaches,
 ) -> bool
 where
-    E: TElement,
+    E: StyleSharingElement,
 {
     let stylist = &shared_context.stylist;
 
@@ -141,7 +140,7 @@ pub fn revalidate_scope<E>(
     selector_caches: &mut SelectorCaches,
 ) -> bool
 where
-    E: TElement,
+    E: StyleSharingElement,
 {
     let stylist = &shared_context.stylist;
     let for_element = target.scope_revalidation_results(stylist, selector_caches);
