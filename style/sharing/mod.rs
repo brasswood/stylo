@@ -481,7 +481,7 @@ impl<E: StyleSharingElement> StyleSharingTarget<E> {
     pub fn share_style_if_possible(
         &mut self,
         context: &mut StyleContext<E>,
-    ) -> Option<ResolvedElementStyles> {
+    ) -> Option<(E, ResolvedElementStyles)> {
         let cache = &mut context.thread_local.sharing_cache;
         let shared_context = &context.shared;
         let bloom_filter = &context.thread_local.bloom_filter;
@@ -722,7 +722,7 @@ impl<E: StyleSharingElement> StyleSharingCache<E> {
         bloom_filter: &StyleBloom<E>,
         selector_caches: &mut SelectorCaches,
         target: &mut StyleSharingTarget<E>,
-    ) -> Option<ResolvedElementStyles> {
+    ) -> Option<(E, ResolvedElementStyles)> {
         if shared_context.options.disable_style_sharing_cache {
             debug!(
                 "{:?} Cannot share style: style sharing cache disabled",
@@ -763,7 +763,7 @@ impl<E: StyleSharingElement> StyleSharingCache<E> {
         bloom: &StyleBloom<E>,
         selector_caches: &mut SelectorCaches,
         shared_context: &SharedStyleContext,
-    ) -> Option<ResolvedElementStyles> {
+    ) -> Option<(E, ResolvedElementStyles)> {
         debug_assert!(target.matches_user_and_content_rules());
 
         // Check that we have the same parent, or at least that the parents
@@ -890,7 +890,7 @@ impl<E: StyleSharingElement> StyleSharingCache<E> {
             "Sharing allowed between {:?} and {:?}",
             target.element, candidate.element
         );
-        Some(candidate.element.borrow_data().unwrap().share_styles())
+        Some((candidate.element, candidate.element.borrow_data().unwrap().share_styles()))
     }
 
     /// Attempts to find an element in the cache with the given primary rule

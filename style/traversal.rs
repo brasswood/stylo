@@ -598,7 +598,7 @@ where
             // Now that our bloom filter is set up, try the style sharing
             // cache.
             match target.share_style_if_possible(context) {
-                Some(shared_styles) => {
+                Some((_, shared_styles)) => {
                     context.thread_local.statistics.styles_shared += 1;
                     shared_styles
                 },
