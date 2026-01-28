@@ -68,15 +68,20 @@ use crate::applicable_declarations::ApplicableDeclarationBlock;
 use crate::bloom::{BloomFilterElement, StyleBloom};
 use crate::computed_value_flags::ComputedValueFlags;
 use crate::context::{SharedStyleContext, StyleContext};
-use crate::dom::{SendElement, TElement};
-use crate::properties::ComputedValues;
+use crate::dom::{SendElement, TElement, TNode};
+use crate::properties::{ComputedValues, PropertyDeclarationBlock};
 use crate::rule_tree::StrongRuleNode;
 use crate::selector_map::RelevantAttributes;
+use crate::selector_parser::PseudoElement;
+use crate::shared_lock::Locked;
 use crate::style_resolver::{PrimaryStyle, ResolvedElementStyles};
-use crate::stylist::Stylist;
+use crate::stylist::{CascadeData, Stylist};
 use crate::values::AtomIdent;
 use atomic_refcell::{AtomicRefCell, AtomicRefMut};
+use dom::ElementState;
 use selectors::matching::{NeedsSelectorFlags, SelectorCaches, VisitedHandlingMode};
+use selectors::sink::Push;
+use servo_arc::ArcBorrow;
 use smallbitvec::SmallBitVec;
 use smallvec::SmallVec;
 use std::marker::PhantomData;
@@ -307,7 +312,43 @@ impl ValidationData {
 
 /// Trait providing the necessary functionality for an Element type to work with style sharing
 pub trait StyleSharingElement: BloomFilterElement {
+    type ConcreteNode: TNode<ConcreteElement = Self>;
 
+    fn inheritance_parent(&self) -> Option<Self>;
+
+    fn style_attribute(&self) -> Option<ArcBorrow<'_, Locked<PropertyDeclarationBlock>>>;
+
+    fn smil_override(&self) -> Option<ArcBorrow<'_, Locked<PropertyDeclarationBlock>>>;
+
+    fn synthesize_presentational_hints_for_legacy_attributes<V>(
+        &self,
+        visited_handling: VisitedHandlingMode,
+        hints: &mut V,
+    ) where
+        V: Push<ApplicableDeclarationBlock>;
+
+    fn has_part_attr(&self) -> bool;
+
+    fn each_part<F>(&self, callback: F)
+    where
+        F: FnMut(&AtomIdent);
+
+    fn matches_user_and_content_rules(&self) -> bool;
+
+    fn shadow_root(&self) -> Option<<Self::ConcreteNode as TNode>::ConcreteShadowRoot>;
+
+    fn containing_shadow(&self) -> Option<<Self::ConcreteNode as TNode>::ConcreteShadowRoot>;
+
+    fn has_animations(&self, context: &SharedStyleContext) -> bool;
+
+    fn implemented_pseudo_element(&self) -> Option<PseudoElement>;
+
+    fn state(&self) -> ElementState;
+
+    fn each_applicable_non_document_style_rule_data<'a, F>(&self, f: F) -> bool
+    where
+        Self: 'a,
+        F: FnMut(&'a CascadeData, Self);
 }
 
 /// Information regarding a style sharing candidate, that is, an entry in the
