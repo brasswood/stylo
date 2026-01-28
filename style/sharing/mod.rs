@@ -314,12 +314,26 @@ impl ValidationData {
 pub trait StyleSharingElement: BloomFilterElement {
     type ConcreteNode: TNode<ConcreteElement = Self>;
 
-    fn inheritance_parent(&self) -> Option<Self>;
+    /// Returns the parent element we should inherit from.
+    ///
+    /// This is pretty much always the parent element itself, except in the case
+    /// of Gecko's Native Anonymous Content, which uses the traversal parent
+    /// (i.e. the flattened tree parent) and which also may need to find the
+    /// closest non-NAC ancestor.
+    fn inheritance_parent(&self) -> Option<Self> {
+        self.parent_element()
+    }
 
+    /// Get this element's style attribute.
     fn style_attribute(&self) -> Option<ArcBorrow<'_, Locked<PropertyDeclarationBlock>>>;
 
-    fn smil_override(&self) -> Option<ArcBorrow<'_, Locked<PropertyDeclarationBlock>>>;
+    /// Get this element's SMIL override declarations.
+    fn smil_override(&self) -> Option<ArcBorrow<'_, Locked<PropertyDeclarationBlock>>> {
+        None
+    }
 
+    /// Generate the proper applicable declarations due to presentational hints,
+    /// and insert them into `hints`.
     fn synthesize_presentational_hints_for_legacy_attributes<V>(
         &self,
         visited_handling: VisitedHandlingMode,
@@ -327,22 +341,50 @@ pub trait StyleSharingElement: BloomFilterElement {
     ) where
         V: Push<ApplicableDeclarationBlock>;
 
+    /// Returns whether this element has a `part` attribute.
     fn has_part_attr(&self) -> bool;
 
-    fn each_part<F>(&self, callback: F)
+    /// Returns whether this element exports any part from its shadow tree.
+    fn exports_any_part(&self) -> bool;
+
+    /// Internal iterator for the part names of this element.
+    fn each_part<F>(&self, _callback: F)
     where
-        F: FnMut(&AtomIdent);
+        F: FnMut(&AtomIdent),
+    {
+    }
 
-    fn matches_user_and_content_rules(&self) -> bool;
+    /// Whether this element should match user and content rules.
+    ///
+    /// We use this for Native Anonymous Content in Gecko.
+    fn matches_user_and_content_rules(&self) -> bool {
+        true
+    }
 
+    /// The shadow root this element is a host of.
     fn shadow_root(&self) -> Option<<Self::ConcreteNode as TNode>::ConcreteShadowRoot>;
 
+    /// The shadow root which roots the subtree this element is contained in.
     fn containing_shadow(&self) -> Option<<Self::ConcreteNode as TNode>::ConcreteShadowRoot>;
 
+    /// Returns true if the element has relevant animations. Relevant
+    /// animations are those animations that are affecting the element's style
+    /// or are scheduled to do so in the future.
     fn has_animations(&self, context: &SharedStyleContext) -> bool;
 
-    fn implemented_pseudo_element(&self) -> Option<PseudoElement>;
+    /// Returns the pseudo-element implemented by this element, if any.
+    ///
+    /// Gecko traverses pseudo-elements during the style traversal, and we need
+    /// to know this so we can properly grab the pseudo-element style from the
+    /// parent element.
+    ///
+    /// Note that we still need to compute the pseudo-elements before-hand,
+    /// given otherwise we don't know if we need to create an element or not.
+    fn implemented_pseudo_element(&self) -> Option<PseudoElement> {
+        None
+    }
 
+    /// Get this element's state, for non-tree-structural pseudos.
     fn state(&self) -> ElementState;
 
     fn each_applicable_non_document_style_rule_data<'a, F>(&self, f: F) -> bool

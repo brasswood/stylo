@@ -26,10 +26,10 @@ use crate::values::AtomIdent;
 use crate::{LocalName, WeakAtom};
 use atomic_refcell::{AtomicRef, AtomicRefMut};
 use dom::ElementState;
-use selectors::matching::{ElementSelectorFlags, QuirksMode, VisitedHandlingMode};
+use selectors::matching::{ElementSelectorFlags, QuirksMode};
 use selectors::sink::Push;
 use selectors::{Element as SelectorsElement, OpaqueElement};
-use servo_arc::{Arc, ArcBorrow};
+use servo_arc::Arc;
 use std::fmt;
 use std::fmt::Debug;
 use std::hash::Hash;
@@ -411,25 +411,8 @@ pub trait TElement:
         true
     }
 
-    /// Whether this element should match user and content rules.
-    ///
-    /// We use this for Native Anonymous Content in Gecko.
-    fn matches_user_and_content_rules(&self) -> bool {
-        true
-    }
-
     /// Get this node's children from the perspective of a restyle traversal.
     fn traversal_children(&self) -> LayoutIterator<Self::TraversalChildrenIterator>;
-
-    /// Returns the parent element we should inherit from.
-    ///
-    /// This is pretty much always the parent element itself, except in the case
-    /// of Gecko's Native Anonymous Content, which uses the traversal parent
-    /// (i.e. the flattened tree parent) and which also may need to find the
-    /// closest non-NAC ancestor.
-    fn inheritance_parent(&self) -> Option<Self> {
-        self.parent_element()
-    }
 
     /// Execute `f` for each anonymous content child (apart from ::before and
     /// ::after) whose originating element is `self`.
@@ -458,17 +441,9 @@ pub trait TElement:
         &[]
     }
 
-    /// Get this element's style attribute.
-    fn style_attribute(&self) -> Option<ArcBorrow<'_, Locked<PropertyDeclarationBlock>>>;
-
     /// Unset the style attribute's dirty bit.
     /// Servo doesn't need to manage ditry bit for style attribute.
     fn unset_dirty_style_attribute(&self) {}
-
-    /// Get this element's SMIL override declarations.
-    fn smil_override(&self) -> Option<ArcBorrow<'_, Locked<PropertyDeclarationBlock>>> {
-        None
-    }
 
     /// Get the combined animation and transition rules.
     ///
@@ -496,23 +471,10 @@ pub trait TElement:
         context: &SharedStyleContext,
     ) -> Option<Arc<Locked<PropertyDeclarationBlock>>>;
 
-    /// Returns whether this element has a `part` attribute.
-    fn has_part_attr(&self) -> bool;
-
-    /// Returns whether this element exports any part from its shadow tree.
-    fn exports_any_part(&self) -> bool;
-
     /// Internal iterator for the classes of this element.
     fn each_custom_state<F>(&self, callback: F)
     where
         F: FnMut(&AtomIdent);
-
-    /// Internal iterator for the part names of this element.
-    fn each_part<F>(&self, _callback: F)
-    where
-        F: FnMut(&AtomIdent),
-    {
-    }
 
     /// Internal iterator for the part names that this element exports for a
     /// given part name.
@@ -627,18 +589,6 @@ pub trait TElement:
         false
     }
 
-    /// Returns the pseudo-element implemented by this element, if any.
-    ///
-    /// Gecko traverses pseudo-elements during the style traversal, and we need
-    /// to know this so we can properly grab the pseudo-element style from the
-    /// parent element.
-    ///
-    /// Note that we still need to compute the pseudo-elements before-hand,
-    /// given otherwise we don't know if we need to create an element or not.
-    fn implemented_pseudo_element(&self) -> Option<PseudoElement> {
-        None
-    }
-
     /// Atomically stores the number of children of this node that we will
     /// need to process during bottom-up traversal.
     fn store_children_to_process(&self, n: isize);
@@ -682,11 +632,6 @@ pub trait TElement:
         tasks: UpdateAnimationsTasks,
     );
 
-    /// Returns true if the element has relevant animations. Relevant
-    /// animations are those animations that are affecting the element's style
-    /// or are scheduled to do so in the future.
-    fn has_animations(&self, context: &SharedStyleContext) -> bool;
-
     /// Returns true if the element has a CSS animation. The `context` and `pseudo_element`
     /// arguments are only used by Servo, since it stores animations globally and pseudo-elements
     /// are not in the DOM.
@@ -713,12 +658,6 @@ pub trait TElement:
         };
         return data.hint.has_animation_hint();
     }
-
-    /// The shadow root this element is a host of.
-    fn shadow_root(&self) -> Option<<Self::ConcreteNode as TNode>::ConcreteShadowRoot>;
-
-    /// The shadow root which roots the subtree this element is contained in.
-    fn containing_shadow(&self) -> Option<<Self::ConcreteNode as TNode>::ConcreteShadowRoot>;
 
     /// Return the element which we can use to look up rules in the selector
     /// maps.
@@ -841,15 +780,6 @@ pub trait TElement:
     /// Returns whether this element is the main body element of the HTML
     /// document it is on.
     fn is_html_document_body_element(&self) -> bool;
-
-    /// Generate the proper applicable declarations due to presentational hints,
-    /// and insert them into `hints`.
-    fn synthesize_presentational_hints_for_legacy_attributes<V>(
-        &self,
-        visited_handling: VisitedHandlingMode,
-        hints: &mut V,
-    ) where
-        V: Push<ApplicableDeclarationBlock>;
 
     /// Generate the proper applicable declarations due to view transition dynamic rules, and
     /// insert them into `rules`.
