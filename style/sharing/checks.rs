@@ -8,6 +8,7 @@
 
 use crate::bloom::StyleBloom;
 use crate::context::SharedStyleContext;
+use crate::dom::TElement;
 use crate::sharing::{StyleSharingCandidate, StyleSharingElement, StyleSharingTarget};
 use selectors::matching::SelectorCaches;
 
@@ -119,7 +120,7 @@ pub fn revalidate<E>(
     selector_caches: &mut SelectorCaches,
 ) -> bool
 where
-    E: StyleSharingElement,
+    E: TElement,
 {
     let stylist = &shared_context.stylist;
 
@@ -140,7 +141,7 @@ pub fn revalidate_scope<E>(
     selector_caches: &mut SelectorCaches,
 ) -> bool
 where
-    E: StyleSharingElement,
+    E: TElement,
 {
     let stylist = &shared_context.stylist;
     let for_element = target.scope_revalidation_results(stylist, selector_caches);

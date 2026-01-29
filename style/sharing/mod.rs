@@ -281,7 +281,7 @@ impl ValidationData {
         needs_selector_flags: NeedsSelectorFlags,
     ) -> &RevalidationResult
     where
-        E: StyleSharingElement,
+        E: TElement,
     {
         self.revalidation_match_results.get_or_insert_with(|| {
             // The bloom filter may already be set up for our element.
@@ -430,6 +430,16 @@ impl<E: StyleSharingElement> StyleSharingCandidate<E> {
     fn parent_style_identity(&mut self) -> OpaqueComputedValues {
         self.validation_data.parent_style_identity(self.element)
     }
+}
+
+impl<E: TElement> StyleSharingCandidate<E> {
+    fn scope_revalidation_results(
+        &mut self,
+        stylist: &Stylist,
+        selector_caches: &mut SelectorCaches,
+    ) -> ScopeRevalidationResult {
+        stylist.revalidate_scopes(&self.element, selector_caches, NeedsSelectorFlags::No)
+    }
 
     /// Compute the bit vector of revalidation selector match results
     /// for this candidate.
@@ -449,14 +459,6 @@ impl<E: StyleSharingElement> StyleSharingCandidate<E> {
             // needed.
             NeedsSelectorFlags::No,
         )
-    }
-
-    fn scope_revalidation_results(
-        &mut self,
-        stylist: &Stylist,
-        selector_caches: &mut SelectorCaches,
-    ) -> ScopeRevalidationResult {
-        stylist.revalidate_scopes(&self.element, selector_caches, NeedsSelectorFlags::No)
     }
 }
 
@@ -507,6 +509,40 @@ impl<E: StyleSharingElement> StyleSharingTarget<E> {
         self.validation_data.parent_style_identity(self.element)
     }
 
+    /// Attempts to share a style with another node.
+    pub fn share_style_if_possible(
+        &mut self,
+        context: &mut StyleContext<E>,
+    ) -> Option<(E, ResolvedElementStyles)> {
+        let cache = &mut context.thread_local.sharing_cache;
+        let shared_context = &context.shared;
+        let bloom_filter = &context.thread_local.bloom_filter;
+        let selector_caches = &mut context.thread_local.selector_caches;
+
+        if cache.dom_depth != bloom_filter.matching_depth() {
+            debug!(
+                "Can't share style, because DOM depth changed from {:?} to {:?}, element: {:?}",
+                cache.dom_depth,
+                bloom_filter.matching_depth(),
+                self.element
+            );
+            return None;
+        }
+        debug_assert_eq!(
+            bloom_filter.current_parent(),
+            self.element.traversal_parent()
+        );
+
+        cache.share_style_if_possible(shared_context, bloom_filter, selector_caches, self)
+    }
+
+    /// Gets the validation data used to match against this target, if any.
+    pub fn take_validation_data(&mut self) -> ValidationData {
+        self.validation_data.take()
+    }
+}
+
+impl<E: TElement> StyleSharingTarget<E> {
     fn revalidation_match_results(
         &mut self,
         stylist: &Stylist,
@@ -544,38 +580,6 @@ impl<E: StyleSharingElement> StyleSharingTarget<E> {
         selector_caches: &mut SelectorCaches,
     ) -> ScopeRevalidationResult {
         stylist.revalidate_scopes(&self.element, selector_caches, NeedsSelectorFlags::Yes)
-    }
-
-    /// Attempts to share a style with another node.
-    pub fn share_style_if_possible(
-        &mut self,
-        context: &mut StyleContext<E>,
-    ) -> Option<(E, ResolvedElementStyles)> {
-        let cache = &mut context.thread_local.sharing_cache;
-        let shared_context = &context.shared;
-        let bloom_filter = &context.thread_local.bloom_filter;
-        let selector_caches = &mut context.thread_local.selector_caches;
-
-        if cache.dom_depth != bloom_filter.matching_depth() {
-            debug!(
-                "Can't share style, because DOM depth changed from {:?} to {:?}, element: {:?}",
-                cache.dom_depth,
-                bloom_filter.matching_depth(),
-                self.element
-            );
-            return None;
-        }
-        debug_assert_eq!(
-            bloom_filter.current_parent(),
-            self.element.traversal_parent()
-        );
-
-        cache.share_style_if_possible(shared_context, bloom_filter, selector_caches, self)
-    }
-
-    /// Gets the validation data used to match against this target, if any.
-    pub fn take_validation_data(&mut self) -> ValidationData {
-        self.validation_data.take()
     }
 }
 
@@ -947,10 +951,12 @@ impl<E: StyleSharingElement> StyleSharingCache<E> {
             return None;
         }
 
+        /* TODO: Shadow DOM
         if !checks::revalidate(target, candidate, shared, bloom, selector_caches) {
             trace!("Miss: Revalidation");
             return None;
         }
+        */
 
         /* TODO: figure out whether/how to handle scoping
         // While the scoped style rules may be different (e.g. `@scope { .foo + .foo { /* .. */} }`),

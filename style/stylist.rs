@@ -1097,16 +1097,18 @@ impl Stylist {
 
         let mut maybe = false;
 
+        /* TODO: shadow DOM
         let doc_author_rules_apply =
             element.each_applicable_non_document_style_rule_data(|data, _| {
                 maybe = maybe || f(&*data);
             });
+        */
 
         if maybe || f(&self.cascade_data.user) {
             return true;
         }
 
-        doc_author_rules_apply && f(&self.cascade_data.author)
+        /* TODO: shadow DOM. doc_author_rules_apply && */ f(&self.cascade_data.author)
     }
 
     /// Execute callback for all applicable style rule data.
@@ -1750,7 +1752,7 @@ impl Stylist {
         needs_selector_flags: NeedsSelectorFlags,
     ) -> RevalidationResult
     where
-        E: StyleSharingElement,
+        E: TElement,
     {
         // NB: `MatchingMode` doesn't really matter, given we don't share style
         // between pseudos.
@@ -1819,7 +1821,7 @@ impl Stylist {
     }
 
     /// Computes currently active scopes for the given element for revalidation purposes.
-    pub fn revalidate_scopes<E: StyleSharingElement>(
+    pub fn revalidate_scopes<E: TElement>(
         &self,
         element: &E,
         selector_caches: &mut SelectorCaches,
