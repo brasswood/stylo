@@ -384,9 +384,6 @@ pub trait StyleSharingElement: BloomFilterElement {
         None
     }
 
-    /// Get this element's state, for non-tree-structural pseudos.
-    fn state(&self) -> ElementState;
-
     /// Executes the callback for each applicable style rule data which isn't
     /// the main document's data (which stores UA / author rules).
     ///
@@ -511,7 +508,7 @@ struct FakeCandidate {
     _may_contain_scoped_style: bool,
 }
 
-impl<E: TElement> Deref for StyleSharingCandidate<E> {
+impl<E: StyleSharingElement> Deref for StyleSharingCandidate<E> {
     type Target = E;
 
     fn deref(&self) -> &Self::Target {
@@ -569,7 +566,7 @@ impl<E: StyleSharingElement> StyleSharingCandidate<E> {
     }
 }
 
-impl<E: TElement> PartialEq<StyleSharingCandidate<E>> for StyleSharingCandidate<E> {
+impl<E: StyleSharingElement> PartialEq<StyleSharingCandidate<E>> for StyleSharingCandidate<E> {
     fn eq(&self, other: &Self) -> bool {
         self.element == other.element
     }
