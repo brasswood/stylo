@@ -312,7 +312,6 @@ impl ValidationData {
 
 /// Trait providing the necessary functionality for an Element type to work with style sharing
 pub trait StyleSharingElement: BloomFilterElement {
-    type ConcreteNode: TNode<ConcreteElement = Self>;
 
     /// Returns the parent element we should inherit from.
     ///
@@ -361,11 +360,13 @@ pub trait StyleSharingElement: BloomFilterElement {
         true
     }
 
+    /* TODO: shadow root stuff
     /// The shadow root this element is a host of.
-    fn shadow_root(&self) -> Option<<Self::ConcreteNode as TNode>::ConcreteShadowRoot>;
+    fn shadow_root(&self) -> Option<Self::ConcreteShadowRoot>;
 
     /// The shadow root which roots the subtree this element is contained in.
-    fn containing_shadow(&self) -> Option<<Self::ConcreteNode as TNode>::ConcreteShadowRoot>;
+    fn containing_shadow(&self) -> Option<Self::ConcreteShadowRoot>;
+    */
 
     /// Returns true if the element has relevant animations. Relevant
     /// animations are those animations that are affecting the element's style
@@ -384,6 +385,7 @@ pub trait StyleSharingElement: BloomFilterElement {
         None
     }
 
+    /* TODO: shadow root stuff
     /// Executes the callback for each applicable style rule data which isn't
     /// the main document's data (which stores UA / author rules).
     ///
@@ -463,6 +465,7 @@ pub trait StyleSharingElement: BloomFilterElement {
 
         doc_rules_apply
     }
+    */
 
     /// Return the element which we can use to look up rules in the selector
     /// maps.
@@ -834,6 +837,7 @@ impl<E: StyleSharingElement> StyleSharingCache<E> {
             return;
         }
 
+        /* TODO: shadow root
         // We can't share style across shadow hosts right now, because they may
         // match different :host rules.
         //
@@ -843,6 +847,7 @@ impl<E: StyleSharingElement> StyleSharingCache<E> {
             debug!("Failing to insert into the cache: Shadow Host");
             return;
         }
+        */
 
         // If the element has running animations, we can't share style.
         //
@@ -972,12 +977,14 @@ impl<E: StyleSharingElement> StyleSharingCache<E> {
             return None;
         }
 
+        /* TODO: Figure out whether/how to handle shadow roots
         // If two elements belong to different shadow trees, different rules may
         // apply to them, from the respective trees.
         if target.element.containing_shadow() != candidate.element.containing_shadow() {
             trace!("Miss: Different containing shadow roots");
             return None;
         }
+        */
 
         // If the elements are not assigned to the same slot they could match
         // different ::slotted() rules in the slot scope.
@@ -997,10 +1004,12 @@ impl<E: StyleSharingElement> StyleSharingCache<E> {
             return None;
         }
 
+        /* TODO: shadow root
         if target.element.shadow_root().is_some() {
             trace!("Miss: Shadow host");
             return None;
         }
+        */
 
         if target.element.has_animations(shared_context)
             || candidate.element.has_animations(shared_context)
@@ -1052,6 +1061,7 @@ impl<E: StyleSharingElement> StyleSharingCache<E> {
             return None;
         }
 
+        /* TODO: figure out whether/how to handle scoping
         // While the scoped style rules may be different (e.g. `@scope { .foo + .foo { /* .. */} }`),
         // we rely on revalidation to handle that.
         if candidate.considered_nontrivial_scoped_style
@@ -1060,6 +1070,7 @@ impl<E: StyleSharingElement> StyleSharingCache<E> {
             trace!("Miss: Active Scopes");
             return None;
         }
+        */
 
         debug!(
             "Sharing allowed between {:?} and {:?}",
