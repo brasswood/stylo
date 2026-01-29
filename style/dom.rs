@@ -659,6 +659,12 @@ pub trait TElement:
         return data.hint.has_animation_hint();
     }
 
+    /// The shadow root this element is a host of.
+    fn shadow_root(&self) -> Option<<Self::ConcreteNode as TNode>::ConcreteShadowRoot>;
+
+    /// The shadow root which roots the subtree this element is contained in.
+    fn containing_shadow(&self) -> Option<<Self::ConcreteNode as TNode>::ConcreteShadowRoot>;
+
     /// Return the element which we can use to look up rules in the selector
     /// maps.
     ///

@@ -360,14 +360,6 @@ pub trait StyleSharingElement: BloomFilterElement {
         true
     }
 
-    /* TODO: shadow root stuff
-    /// The shadow root this element is a host of.
-    fn shadow_root(&self) -> Option<Self::ConcreteShadowRoot>;
-
-    /// The shadow root which roots the subtree this element is contained in.
-    fn containing_shadow(&self) -> Option<Self::ConcreteShadowRoot>;
-    */
-
     /// Returns true if the element has relevant animations. Relevant
     /// animations are those animations that are affecting the element's style
     /// or are scheduled to do so in the future.
