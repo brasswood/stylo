@@ -428,9 +428,6 @@ pub trait TElement:
     /// Return whether this element is an element in the MathML namespace.
     fn is_mathml_element(&self) -> bool;
 
-    /// Return whether this element is an element in the SVG namespace.
-    fn is_svg_element(&self) -> bool;
-
     /// Return whether this element is an element in the XUL namespace.
     fn is_xul_element(&self) -> bool {
         false
@@ -657,102 +654,6 @@ pub trait TElement:
             None => return false,
         };
         return data.hint.has_animation_hint();
-    }
-
-    /// Return the element which we can use to look up rules in the selector
-    /// maps.
-    ///
-    /// This is always the element itself, except in the case where we are an
-    /// element-backed pseudo-element, in which case we return the originating
-    /// element.
-    fn rule_hash_target(&self) -> Self {
-        let mut cur = *self;
-        while cur.is_pseudo_element() {
-            cur = cur
-                .pseudo_element_originating_element()
-                .expect("Trying to collect rules for a detached pseudo-element")
-        }
-        cur
-    }
-
-    /// Executes the callback for each applicable style rule data which isn't
-    /// the main document's data (which stores UA / author rules).
-    ///
-    /// The element passed to the callback is the containing shadow host for the
-    /// data if it comes from Shadow DOM.
-    ///
-    /// Returns whether normal document author rules should apply.
-    ///
-    /// TODO(emilio): We could separate the invalidation data for elements
-    /// matching in other scopes to avoid over-invalidation.
-    fn each_applicable_non_document_style_rule_data<'a, F>(&self, mut f: F) -> bool
-    where
-        Self: 'a,
-        F: FnMut(&'a CascadeData, Self),
-    {
-        use crate::rule_collector::containing_shadow_ignoring_svg_use;
-
-        let target = self.rule_hash_target();
-        let matches_user_and_content_rules = target.matches_user_and_content_rules();
-        let mut doc_rules_apply = matches_user_and_content_rules;
-
-        // Use the same rules to look for the containing host as we do for rule
-        // collection.
-        if let Some(shadow) = containing_shadow_ignoring_svg_use(target) {
-            doc_rules_apply = false;
-            if let Some(data) = shadow.style_data() {
-                f(data, shadow.host());
-            }
-        }
-
-        if let Some(shadow) = target.shadow_root() {
-            if let Some(data) = shadow.style_data() {
-                f(data, shadow.host());
-            }
-        }
-
-        let mut current = target.assigned_slot();
-        while let Some(slot) = current {
-            // Slots can only have assigned nodes when in a shadow tree.
-            let shadow = slot.containing_shadow().unwrap();
-            if let Some(data) = shadow.style_data() {
-                if data.any_slotted_rule() {
-                    f(data, shadow.host());
-                }
-            }
-            current = slot.assigned_slot();
-        }
-
-        if target.has_part_attr() {
-            if let Some(mut inner_shadow) = target.containing_shadow() {
-                loop {
-                    let inner_shadow_host = inner_shadow.host();
-                    match inner_shadow_host.containing_shadow() {
-                        Some(shadow) => {
-                            if let Some(data) = shadow.style_data() {
-                                if data.any_part_rule() {
-                                    f(data, shadow.host())
-                                }
-                            }
-                            // TODO: Could be more granular.
-                            if !inner_shadow_host.exports_any_part() {
-                                break;
-                            }
-                            inner_shadow = shadow;
-                        },
-                        None => {
-                            // TODO(emilio): Should probably distinguish with
-                            // MatchesDocumentRules::{No,Yes,IfPart} or something so that we could
-                            // skip some work.
-                            doc_rules_apply = matches_user_and_content_rules;
-                            break;
-                        },
-                    }
-                }
-            }
-        }
-
-        doc_rules_apply
     }
 
     /// Returns true if one of the transitions needs to be updated on this element. We check all
