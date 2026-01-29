@@ -615,7 +615,7 @@ pub struct ThreadLocalStyleContext<E: StyleSharingElement> {
     pub selector_caches: SelectorCaches,
 }
 
-impl<E: TElement> ThreadLocalStyleContext<E> {
+impl<E: StyleSharingElement> ThreadLocalStyleContext<E> {
     /// Creates a new `ThreadLocalStyleContext`
     pub fn new() -> Self {
         ThreadLocalStyleContext {
