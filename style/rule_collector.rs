@@ -11,7 +11,6 @@ use crate::rule_tree::{CascadeLevel, ShadowCascadeOrder};
 use crate::selector_map::SelectorMap;
 use crate::selector_parser::PseudoElement;
 use crate::shared_lock::Locked;
-use crate::sharing::StyleSharingElement;
 use crate::stylesheets::{layer_rule::LayerOrder, Origin};
 use crate::stylist::{AuthorStylesEnabled, CascadeData, Rule, RuleInclusion, Stylist};
 use selectors::matching::MatchingContext;
@@ -36,7 +35,7 @@ use smallvec::SmallVec;
 /// See https://github.com/w3c/svgwg/issues/504 for the relevant spec
 /// discussion.
 #[inline]
-pub fn containing_shadow_ignoring_svg_use<E: StyleSharingElement>(
+pub fn containing_shadow_ignoring_svg_use<E: TElement>(
     element: E,
 ) -> Option<<E::ConcreteNode as TNode>::ConcreteShadowRoot> {
     let mut shadow = element.containing_shadow()?;
