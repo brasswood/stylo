@@ -397,7 +397,7 @@ pub struct StyleSharingCandidate<E: StyleSharingElement> {
 }
 
 struct FakeCandidate {
-    _element: usize,
+    _element: [usize; 3], // TODO: fucky fucky fucky I hope this doesn't break performance or correctness!
     _validation_data: ValidationData,
     _may_contain_scoped_style: bool,
 }
