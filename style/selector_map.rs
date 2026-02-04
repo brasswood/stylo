@@ -90,7 +90,7 @@ impl Hasher for PrecomputedHasher {
 }
 
 /// A struct for returning statistics
-#[derive(Default, Debug, Clone)]
+#[derive(Default, Debug, Clone, PartialEq, Eq)]
 pub struct Statistics {
     /// Number of sharing instances
     pub sharing_instances: Option<usize>,
