@@ -184,7 +184,7 @@ impl<'a, E: TElement> OptimizationContext<'a, E> {
             None,
             &sibling,
             &mut matching_context,
-        );
+        ).0;
         if sibling_matches {
             // Remember that at this point, we know that the combinator to the right of this
             // compound is a sibling combinator. Effectively, we've found a standin for the
@@ -205,7 +205,7 @@ impl<'a, E: TElement> OptimizationContext<'a, E> {
                     None,
                     &sibling,
                     &mut matching_context,
-                )
+                ).0
             });
         }
         // Ok, there's no standin element - but would this element have matched the upstream
@@ -237,7 +237,7 @@ impl<'a, E: TElement> OptimizationContext<'a, E> {
             None,
             &element,
             &mut matching_context,
-        )
+        ).0
     }
 }
 
@@ -1116,7 +1116,7 @@ where
                     None,
                     &element,
                     self.matching_context(),
-                ) {
+                ).0 {
                     continue;
                 }
 

@@ -126,7 +126,7 @@ where
     // This is pretty much any(..) but manually inlined because the compiler
     // refuses to do so from querySelector / querySelectorAll.
     for selector in selector_list.slice() {
-        let matches = matches_selector(selector, 0, None, element, context);
+        let matches = matches_selector(selector, 0, None, element, context).0;
         if matches {
             return true;
         }
@@ -244,6 +244,7 @@ impl From<SelectorMatchingResult> for KleeneValue {
 }
 
 /// Matches a selector, fast-rejecting against a bloom filter.
+/// Returns whether the selector matched, and whether we fast-rejected.
 ///
 /// We accept an offset to allow consumers to represent and match against
 /// partial selectors (indexed from the right). We use this API design, rather
@@ -258,11 +259,11 @@ pub fn matches_selector<E>(
     hashes: Option<&AncestorHashes>,
     element: &E,
     context: &mut MatchingContext<E::Impl>,
-) -> bool
+) -> (bool, usize)
 where
     E: Element,
 {
-    let result = matches_selector_kleene(selector, offset, hashes, element, context);
+    let (result, fast_rejected) = matches_selector_kleene(selector, offset, hashes, element, context);
     if cfg!(debug_assertions) && result == KleeneValue::Unknown {
         debug_assert!(
             context
@@ -271,10 +272,11 @@ where
             "How did we return unknown?"
         );
     }
-    result.to_bool(true)
+    (result.to_bool(true), fast_rejected)
 }
 
 /// Same as matches_selector, but returns the Kleene value as-is.
+/// Also returns whether we fast-rejected.
 #[inline(always)]
 pub fn matches_selector_kleene<E>(
     selector: &Selector<E::Impl>,
@@ -282,7 +284,7 @@ pub fn matches_selector_kleene<E>(
     hashes: Option<&AncestorHashes>,
     element: &E,
     context: &mut MatchingContext<E::Impl>,
-) -> KleeneValue
+) -> (KleeneValue, usize)
 where
     E: Element,
 {
@@ -290,19 +292,22 @@ where
     if let Some(hashes) = hashes {
         if let Some(filter) = context.bloom_filter {
             if !selector_may_match(hashes, filter) {
-                return KleeneValue::False;
+                return (KleeneValue::False, 1);
             }
         }
     }
-    matches_complex_selector(
-        selector.iter_from(offset),
-        element,
-        context,
-        if selector.is_rightmost(offset) {
-            SubjectOrPseudoElement::Yes
-        } else {
-            SubjectOrPseudoElement::No
-        },
+    (
+        matches_complex_selector(
+            selector.iter_from(offset),
+            element,
+            context,
+            if selector.is_rightmost(offset) {
+                SubjectOrPseudoElement::Yes
+            } else {
+                SubjectOrPseudoElement::No
+            },
+        ),
+        0
     )
 }
 

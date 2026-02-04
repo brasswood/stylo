@@ -1788,7 +1788,7 @@ impl Stylist {
                                 Some(&selector_and_hashes.hashes),
                                 &element,
                                 matching_context,
-                            ));
+                            ).0);
                             true
                         },
                     );
@@ -1811,7 +1811,7 @@ impl Stylist {
                         Some(&selector_and_hashes.hashes),
                         &element,
                         &mut matching_context,
-                    ));
+                    ).0);
                     true
                 },
             );
@@ -3456,7 +3456,7 @@ impl CascadeData {
         );
         for candidate in result.candidates {
             if context.nest_for_scope(Some(candidate.root), |context| {
-                matches_selector(&rule.selector, 0, Some(&rule.hashes), &element, context)
+                matches_selector(&rule.selector, 0, Some(&rule.hashes), &element, context).0
             }) {
                 return candidate.proximity;
             }

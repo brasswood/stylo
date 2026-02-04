@@ -113,7 +113,7 @@ where
                 None,
                 element,
                 context,
-            );
+            ).0;
 
             // If the previous dependency was a scope dependency (i.e. by `scope` is set),
             // possible change in scope element is encapsulated in `:scope`, whose
@@ -129,7 +129,7 @@ where
                 None,
                 wrapper,
                 context,
-            );
+            ).0;
 
             matched_then != matches_now || matches_now == KleeneValue::Unknown
         })
