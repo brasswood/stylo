@@ -22,7 +22,7 @@ use std::ops::{Deref, DerefMut};
 
 bitflags! {
     /// Various flags stored on ElementData.
-    #[derive(Clone, Debug, Default)]
+    #[derive(Debug, Default)]
     pub struct ElementDataFlags: u8 {
         /// Whether the styles changed for this restyle.
         const WAS_RESTYLED = 1 << 0;
@@ -248,7 +248,7 @@ impl fmt::Debug for ElementStyles {
 /// In Gecko, this hangs directly off the Element. Servo, this is embedded
 /// inside of layout data, which itself hangs directly off the Element. In
 /// both cases, it is wrapped inside an AtomicRefCell to ensure thread safety.
-#[derive(Clone, Debug, Default)]
+#[derive(Debug, Default)]
 pub struct ElementData {
     /// The styles for the element and its pseudo-elements.
     pub styles: ElementStyles,
