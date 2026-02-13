@@ -183,5 +183,5 @@ where
         None => false,
     };
 
-    res && element_id != candidate_id // ANDREW HACK to stop stylo from actually checking if there are rules that would cause these differing IDs to matter, because I'm not using the `Stylist` properly. I could do that but it would be non-negligible effort. I will do it later.
+    res || element_id != candidate_id // ANDREW HACK to stop stylo from actually checking if there are rules that would cause these differing IDs to matter, because I'm not using the `Stylist` properly. I could do that but it would be non-negligible effort. I will do it later.
 }
