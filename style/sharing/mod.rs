@@ -68,6 +68,7 @@ use crate::applicable_declarations::ApplicableDeclarationBlock;
 use crate::bloom::{BloomFilterElement, StyleBloom};
 use crate::computed_value_flags::ComputedValueFlags;
 use crate::context::{SharedStyleContext, StyleContext};
+use crate::data::ElementData;
 use crate::dom::{SendElement, TElement, TNode};
 use crate::properties::{ComputedValues, PropertyDeclarationBlock};
 use crate::rule_tree::StrongRuleNode;
@@ -376,6 +377,9 @@ pub trait StyleSharingElement: BloomFilterElement {
     fn implemented_pseudo_element(&self) -> Option<PseudoElement> {
         None
     }
+
+    /// Mutably borrows the ElementData.
+    fn mutate_data(&self) -> Option<AtomicRefMut<'_, ElementData>>;
 
 }
 

@@ -611,9 +611,6 @@ pub trait TElement:
     /// Whether there is an ElementData container.
     fn has_data(&self) -> bool;
 
-    /// Mutably borrows the ElementData.
-    fn mutate_data(&self) -> Option<AtomicRefMut<'_, ElementData>>;
-
     /// Whether we should skip any root- or item-based display property
     /// blockification on this element.  (This function exists so that Gecko
     /// native anonymous content can opt out of this style fixup.)
