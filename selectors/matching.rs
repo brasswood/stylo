@@ -22,6 +22,8 @@ use debug_unreachable::debug_unreachable;
 use log::debug;
 use smallvec::SmallVec;
 use std::borrow::Borrow;
+use std::ops::Add;
+use std::time::{Duration, Instant};
 
 pub use crate::context::*;
 
@@ -84,6 +86,78 @@ bitflags! {
         const RELATIVE_SELECTOR_SEARCH_DIRECTION_ANCESTOR_SIBLING =
             Self::RELATIVE_SELECTOR_SEARCH_DIRECTION_SIBLING.bits() |
             Self::RELATIVE_SELECTOR_SEARCH_DIRECTION_ANCESTOR.bits();
+    }
+}
+
+/// A struct for returning statistics
+#[derive(Default, Debug, Clone, PartialEq, Eq)]
+pub struct Statistics {
+    /// Number of sharing instances
+    pub sharing_instances: Option<usize>,
+    /// Number of selector map hits
+    pub selector_map_hits: Option<usize>,
+    /// Number of fast rejects from the bloom filter
+    pub fast_rejects: Option<usize>,
+    /// Number of slow rejects from the bloom filter
+    pub slow_rejects: Option<usize>,
+    /// Time spent slow rejecting a selector after all of the following happen:
+    /// - Style sharing fails
+    /// - Selector appears in the selector map
+    /// - Bloom filter does not fast reject
+    pub time_spent_slow_rejecting: Option<Duration>,
+}
+
+impl Statistics {
+    pub fn new_for_selector_map() -> Statistics {
+        Statistics {
+            sharing_instances: None,
+            selector_map_hits: Some(0),
+            fast_rejects: Some(0),
+            slow_rejects: Some(0),
+            time_spent_slow_rejecting: Some(Duration::ZERO),
+        }
+    }
+}
+
+impl Add<&Statistics> for &Statistics {
+    type Output = Statistics;
+
+    fn add(self, rhs: &Statistics) -> Statistics {
+        fn add_opts<T>(lhs: &Option<T>, rhs: &Option<T>) -> Option<T>
+        where
+            T: Add<Output = T> + Copy
+        {
+            match (lhs, rhs) {
+                (&None, &None) => None,
+                (&None, &Some(rhs)) => Some(rhs),
+                (&Some(lhs), &None) => Some(lhs),
+                (&Some(lhs), &Some(rhs)) => Some(lhs + rhs),
+            }
+        }
+        let sharing_instances = add_opts(&self.sharing_instances, &rhs.sharing_instances);
+        let selector_map_hits = add_opts(&self.selector_map_hits, &rhs.selector_map_hits);
+        let fast_rejects = add_opts(&self.fast_rejects, &rhs.fast_rejects);
+        let slow_rejects = add_opts(&self.slow_rejects, &rhs.slow_rejects);
+        let time_spent_slow_rejecting = add_opts(&self.time_spent_slow_rejecting, &rhs.time_spent_slow_rejecting);
+        Statistics {
+            sharing_instances,
+            selector_map_hits,
+            fast_rejects,
+            slow_rejects,
+            time_spent_slow_rejecting,
+        }
+    }
+}
+
+impl std::ops::AddAssign<&Statistics> for Statistics {
+    fn add_assign(&mut self, rhs: &Statistics) {
+        *self = &*self + rhs;
+    }
+}
+
+impl std::ops::AddAssign<Statistics> for Statistics {
+    fn add_assign(&mut self, rhs: Statistics) {
+        *self += &rhs;
     }
 }
 
@@ -244,7 +318,8 @@ impl From<SelectorMatchingResult> for KleeneValue {
 }
 
 /// Matches a selector, fast-rejecting against a bloom filter.
-/// Returns whether the selector matched, and whether we fast-rejected.
+/// Returns whether the selector matched, whether we fast-rejected, and the time
+/// spent slow-rejecting.
 ///
 /// We accept an offset to allow consumers to represent and match against
 /// partial selectors (indexed from the right). We use this API design, rather
@@ -259,11 +334,11 @@ pub fn matches_selector<E>(
     hashes: Option<&AncestorHashes>,
     element: &E,
     context: &mut MatchingContext<E::Impl>,
-) -> (bool, usize)
+) -> (bool, Statistics)
 where
     E: Element,
 {
-    let (result, fast_rejected) = matches_selector_kleene(selector, offset, hashes, element, context);
+    let (result, stats) = matches_selector_kleene(selector, offset, hashes, element, context);
     if cfg!(debug_assertions) && result == KleeneValue::Unknown {
         debug_assert!(
             context
@@ -272,7 +347,7 @@ where
             "How did we return unknown?"
         );
     }
-    (result.to_bool(true), fast_rejected)
+    (result.to_bool(true), stats)
 }
 
 /// Same as matches_selector, but returns the Kleene value as-is.
@@ -284,7 +359,7 @@ pub fn matches_selector_kleene<E>(
     hashes: Option<&AncestorHashes>,
     element: &E,
     context: &mut MatchingContext<E::Impl>,
-) -> (KleeneValue, usize)
+) -> (KleeneValue, Statistics)
 where
     E: Element,
 {
@@ -292,22 +367,38 @@ where
     if let Some(hashes) = hashes {
         if let Some(filter) = context.bloom_filter {
             if !selector_may_match(hashes, filter) {
-                return (KleeneValue::False, 1);
+                return (KleeneValue::False, Statistics {
+                    sharing_instances: None,
+                    selector_map_hits: None,
+                    fast_rejects: Some(1),
+                    slow_rejects: Some(0),
+                    time_spent_slow_rejecting: Some(Duration::ZERO),
+                });
             }
         }
     }
+    let start = Instant::now();
+    let does_match = matches_complex_selector(
+        selector.iter_from(offset),
+        element,
+        context,
+        if selector.is_rightmost(offset) {
+            SubjectOrPseudoElement::Yes
+        } else {
+            SubjectOrPseudoElement::No
+        },
+    );
+    let duration = start.elapsed();
+    let slow_reject = if does_match == KleeneValue::True { 0 } else { 1 };
     (
-        matches_complex_selector(
-            selector.iter_from(offset),
-            element,
-            context,
-            if selector.is_rightmost(offset) {
-                SubjectOrPseudoElement::Yes
-            } else {
-                SubjectOrPseudoElement::No
-            },
-        ),
-        0
+        does_match,
+        Statistics {
+            sharing_instances: None,
+            selector_map_hits: None,
+            fast_rejects: Some(0),
+            slow_rejects: Some(slow_reject as usize),
+            time_spent_slow_rejecting: Some(duration * slow_reject),
+        }
     )
 }
 

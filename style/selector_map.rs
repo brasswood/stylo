@@ -22,12 +22,13 @@ use atomic_refcell::AtomicRef;
 use dom::ElementState;
 use precomputed_hash::PrecomputedHash;
 use selectors::{Element, OpaqueElement};
-use selectors::matching::{matches_selector, MatchingContext};
+use selectors::matching::{matches_selector, MatchingContext, Statistics};
 use selectors::parser::{Combinator, Component, Selector, SelectorIter};
 use smallvec::SmallVec;
 use std::collections::hash_map;
 use std::collections::{HashMap, HashSet};
 use std::hash::{BuildHasherDefault, Hash, Hasher};
+use std::time::Duration;
 
 /// A hasher implementation that doesn't hash anything, because it expects its
 /// input to be a suitable u32 hash.
@@ -86,52 +87,6 @@ impl Hasher for PrecomputedHasher {
     #[inline]
     fn finish(&self) -> u64 {
         self.hash.expect("PrecomputedHasher wasn't fed?") as u64
-    }
-}
-
-/// A struct for returning statistics
-#[derive(Default, Debug, Clone, PartialEq, Eq)]
-pub struct Statistics {
-    /// Number of sharing instances
-    pub sharing_instances: Option<usize>,
-    /// Number of selector map hits
-    pub selector_map_hits: Option<usize>,
-    /// Number of fast rejects from the bloom filter
-    pub fast_rejects: Option<usize>,
-}
-
-impl std::ops::Add<&Statistics> for &Statistics {
-    type Output = Statistics;
-
-    fn add(self, rhs: &Statistics) -> Statistics {
-        fn add_opts(lhs: &Option<usize>, rhs: &Option<usize>) -> Option<usize> {
-            match (lhs, rhs) {
-                (&None, &None) => None,
-                (&None, &Some(rhs)) => Some(rhs),
-                (&Some(lhs), &None) => Some(lhs),
-                (&Some(lhs), &Some(rhs)) => Some(lhs + rhs),
-            }
-        }
-        let sharing_instances = add_opts(&self.sharing_instances, &rhs.sharing_instances);
-        let selector_map_hits = add_opts(&self.selector_map_hits, &rhs.selector_map_hits);
-        let fast_rejects = add_opts(&self.fast_rejects, &rhs.fast_rejects);
-        Statistics {
-            sharing_instances,
-            selector_map_hits,
-            fast_rejects,
-        }
-    }
-}
-
-impl std::ops::AddAssign<&Statistics> for Statistics {
-    fn add_assign(&mut self, rhs: &Statistics) {
-        *self = &*self + rhs;
-    }
-}
-
-impl std::ops::AddAssign<Statistics> for Statistics {
-    fn add_assign(&mut self, rhs: Statistics) {
-        *self += &rhs;
     }
 }
 
@@ -317,20 +272,16 @@ impl SelectorMap<Rule> {
         E: SelectorMapElement,
     {
         if self.is_empty() {
-            return Statistics {
-                sharing_instances: None,
-                selector_map_hits: Some(0),
-                fast_rejects: Some(0),
-            };
+            return Statistics::new_for_selector_map();
         }
 
         let quirks_mode = matching_context.quirks_mode();
         let mut hits = 0;
-        let mut fast_rejects = 0;
+        let mut stats = Statistics::new_for_selector_map();
 
         if rule_hash_target.is_root() {
             hits += self.root.len();
-            fast_rejects += SelectorMap::get_matching_rules(
+            stats += SelectorMap::get_matching_rules(
                 element,
                 &self.root,
                 matching_rules_list,
@@ -345,7 +296,7 @@ impl SelectorMap<Rule> {
         if let Some(id) = rule_hash_target.id() {
             if let Some(rules) = self.id_hash.get(id, quirks_mode) {
                 hits += rules.len();
-                fast_rejects += SelectorMap::get_matching_rules(
+                stats += SelectorMap::get_matching_rules(
                     element,
                     rules,
                     matching_rules_list,
@@ -361,7 +312,7 @@ impl SelectorMap<Rule> {
         rule_hash_target.each_class(|class| {
             if let Some(rules) = self.class_hash.get(&class, quirks_mode) {
                 hits += rules.len();
-                fast_rejects += SelectorMap::get_matching_rules(
+                stats += SelectorMap::get_matching_rules(
                     element,
                     rules,
                     matching_rules_list,
@@ -377,7 +328,7 @@ impl SelectorMap<Rule> {
         rule_hash_target.each_attr_name(|name| {
             if let Some(rules) = self.attribute_hash.get(name) {
                 hits += rules.len();
-                fast_rejects += SelectorMap::get_matching_rules(
+                stats += SelectorMap::get_matching_rules(
                     element,
                     rules,
                     matching_rules_list,
@@ -392,7 +343,7 @@ impl SelectorMap<Rule> {
 
         if let Some(rules) = self.local_name_hash.get(rule_hash_target.local_name()) {
             hits += rules.len();
-            fast_rejects += SelectorMap::get_matching_rules(
+            stats += SelectorMap::get_matching_rules(
                 element,
                 rules,
                 matching_rules_list,
@@ -409,7 +360,7 @@ impl SelectorMap<Rule> {
             .intersects(RARE_PSEUDO_CLASS_STATES)
         {
             hits += self.rare_pseudo_classes.len();
-            fast_rejects += SelectorMap::get_matching_rules(
+            stats += SelectorMap::get_matching_rules(
                 element,
                 &self.rare_pseudo_classes,
                 matching_rules_list,
@@ -423,7 +374,7 @@ impl SelectorMap<Rule> {
 
         if let Some(rules) = self.namespace_hash.get(rule_hash_target.namespace()) {
             hits += rules.len();
-            fast_rejects += SelectorMap::get_matching_rules(
+            stats += SelectorMap::get_matching_rules(
                 element,
                 rules,
                 matching_rules_list,
@@ -436,7 +387,7 @@ impl SelectorMap<Rule> {
         }
 
         hits += self.other.len();
-        fast_rejects += SelectorMap::get_matching_rules(
+        stats += SelectorMap::get_matching_rules(
             element,
             &self.other,
             matching_rules_list,
@@ -446,11 +397,8 @@ impl SelectorMap<Rule> {
             cascade_data,
             stylist,
         );
-        Statistics {
-            sharing_instances: None,
-            selector_map_hits: Some(hits),
-            fast_rejects: Some(fast_rejects),
-        }
+        stats.selector_map_hits = Some(hits);
+        stats
     }
 
     /// Adds rules in `rules` that match `element` to the `matching_rules` list.
@@ -464,7 +412,7 @@ impl SelectorMap<Rule> {
         cascade_level: CascadeLevel,
         cascade_data: &CascadeData,
         stylist: &Stylist,
-    ) -> usize
+    ) -> Statistics
     where
         E: SelectorMapElement,
     {
@@ -474,24 +422,25 @@ impl SelectorMap<Rule> {
             matching_context.include_starting_style,
             IncludeStartingStyle::Yes
         );
-        let mut fast_rejects = 0;
+        let mut statistics = Statistics::new_for_selector_map();
         for rule in rules {
             let scope_proximity = if rule.scope_condition_id == ScopeConditionId::none() {
-                let (res, fast_reject) = matches_selector(
+                let (res, stats) = matches_selector(
                     &rule.selector,
                     0,
                     Some(&rule.hashes),
                     &element,
                     matching_context,
                 );
+                statistics += stats;
                 if !res {
-                    fast_rejects += fast_reject;
                     continue;
                 }
                 ScopeProximity::infinity()
             } else {
-                let result =
+                let (result, stats) =
                     cascade_data.find_scope_proximity_if_matching(rule, element, matching_context);
+                statistics += stats;
                 if result == ScopeProximity::infinity() {
                     continue;
                 }
@@ -530,7 +479,7 @@ impl SelectorMap<Rule> {
                 matching_selectors.push(rule.selector.clone()); // TODO: Is cloning bad here?
             }
         }
-        return fast_rejects;
+        statistics
     }
 }
 

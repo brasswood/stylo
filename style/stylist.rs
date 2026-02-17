@@ -71,7 +71,7 @@ use selectors::attr::{CaseSensitivity, NamespaceConstraint};
 use selectors::bloom::BloomFilter;
 use selectors::matching::{
     matches_selector, selector_may_match, MatchingContext, MatchingMode, NeedsSelectorFlags,
-    SelectorCaches,
+    SelectorCaches, Statistics,
 };
 use selectors::matching::{MatchingForInvalidation, VisitedHandlingMode};
 use selectors::parser::{
@@ -3437,7 +3437,7 @@ impl CascadeData {
         rule: &Rule,
         element: E,
         context: &mut MatchingContext<E::Impl>,
-    ) -> ScopeProximity {
+    ) -> (ScopeProximity, Statistics) {
         context
             .extra_data
             .cascade_input_flags
@@ -3454,14 +3454,17 @@ impl CascadeData {
             &self.scope_subject_map,
             context,
         );
+        let mut statistics = Statistics::new_for_selector_map();
         for candidate in result.candidates {
-            if context.nest_for_scope(Some(candidate.root), |context| {
-                matches_selector(&rule.selector, 0, Some(&rule.hashes), &element, context).0
-            }) {
-                return candidate.proximity;
+            let (res, stats) = context.nest_for_scope(Some(candidate.root), |context| {
+                matches_selector(&rule.selector, 0, Some(&rule.hashes), &element, context)
+            });
+            statistics += stats;
+            if res {
+                return (candidate.proximity, statistics);
             }
         }
-        ScopeProximity::infinity()
+        (ScopeProximity::infinity(), statistics)
     }
 
     fn did_finish_rebuild(&mut self) {
