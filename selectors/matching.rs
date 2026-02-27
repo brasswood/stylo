@@ -105,6 +105,8 @@ pub struct Statistics {
     /// - Selector appears in the selector map
     /// - Bloom filter does not fast reject
     pub time_spent_slow_rejecting: Option<Duration>,
+    /// Time spent checking if we can share styles
+    pub time_spent_checking_style_sharing: Option<Duration>,
 }
 
 impl Statistics {
@@ -115,6 +117,7 @@ impl Statistics {
             fast_rejects: Some(0),
             slow_rejects: Some(0),
             time_spent_slow_rejecting: Some(Duration::ZERO),
+            time_spent_checking_style_sharing: None,
         }
     }
 }
@@ -139,12 +142,14 @@ impl Add<&Statistics> for &Statistics {
         let fast_rejects = add_opts(&self.fast_rejects, &rhs.fast_rejects);
         let slow_rejects = add_opts(&self.slow_rejects, &rhs.slow_rejects);
         let time_spent_slow_rejecting = add_opts(&self.time_spent_slow_rejecting, &rhs.time_spent_slow_rejecting);
+        let time_spent_checking_style_sharing = add_opts(&self.time_spent_checking_style_sharing, &rhs.time_spent_checking_style_sharing);
         Statistics {
             sharing_instances,
             selector_map_hits,
             fast_rejects,
             slow_rejects,
             time_spent_slow_rejecting,
+            time_spent_checking_style_sharing,
         }
     }
 }
@@ -373,6 +378,7 @@ where
                     fast_rejects: Some(1),
                     slow_rejects: Some(0),
                     time_spent_slow_rejecting: Some(Duration::ZERO),
+                    time_spent_checking_style_sharing: None,
                 });
             }
         }
@@ -398,6 +404,7 @@ where
             fast_rejects: Some(0),
             slow_rejects: Some(slow_reject as usize),
             time_spent_slow_rejecting: Some(duration * slow_reject),
+            time_spent_checking_style_sharing: None,
         }
     )
 }
