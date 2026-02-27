@@ -107,6 +107,8 @@ pub struct Statistics {
     pub time_spent_slow_rejecting: Option<Duration>,
     /// Time spent checking if we can share styles
     pub time_spent_checking_style_sharing: Option<Duration>,
+    /// Time spent inserting into the style sharing cache
+    pub time_spent_inserting_into_sharing_cache: Option<Duration>,
 }
 
 impl Statistics {
@@ -118,6 +120,7 @@ impl Statistics {
             slow_rejects: Some(0),
             time_spent_slow_rejecting: Some(Duration::ZERO),
             time_spent_checking_style_sharing: None,
+            time_spent_inserting_into_sharing_cache: None,
         }
     }
 }
@@ -143,6 +146,11 @@ impl Add<&Statistics> for &Statistics {
         let slow_rejects = add_opts(&self.slow_rejects, &rhs.slow_rejects);
         let time_spent_slow_rejecting = add_opts(&self.time_spent_slow_rejecting, &rhs.time_spent_slow_rejecting);
         let time_spent_checking_style_sharing = add_opts(&self.time_spent_checking_style_sharing, &rhs.time_spent_checking_style_sharing);
+        let time_spent_inserting_into_sharing_cache =
+            add_opts(
+                &self.time_spent_inserting_into_sharing_cache,
+                &rhs.time_spent_inserting_into_sharing_cache,
+            );
         Statistics {
             sharing_instances,
             selector_map_hits,
@@ -150,6 +158,7 @@ impl Add<&Statistics> for &Statistics {
             slow_rejects,
             time_spent_slow_rejecting,
             time_spent_checking_style_sharing,
+            time_spent_inserting_into_sharing_cache,
         }
     }
 }
@@ -379,6 +388,7 @@ where
                     slow_rejects: Some(0),
                     time_spent_slow_rejecting: Some(Duration::ZERO),
                     time_spent_checking_style_sharing: None,
+                    time_spent_inserting_into_sharing_cache: None,
                 });
             }
         }
@@ -405,6 +415,7 @@ where
             slow_rejects: Some(slow_reject as usize),
             time_spent_slow_rejecting: Some(duration * slow_reject),
             time_spent_checking_style_sharing: None,
+            time_spent_inserting_into_sharing_cache: None,
         }
     )
 }
