@@ -121,6 +121,7 @@ impl Statistics {
             fast_rejects: Some(0),
             slow_rejects: Some(0),
             time_spent_slow_rejecting: Some(Duration::ZERO),
+            time_spent_fast_rejecting: Some(Duration::ZERO),
             time_spent_checking_style_sharing: None,
             time_spent_inserting_into_sharing_cache: None,
         }
@@ -147,6 +148,7 @@ impl Add<&Statistics> for &Statistics {
         let fast_rejects = add_opts(&self.fast_rejects, &rhs.fast_rejects);
         let slow_rejects = add_opts(&self.slow_rejects, &rhs.slow_rejects);
         let time_spent_slow_rejecting = add_opts(&self.time_spent_slow_rejecting, &rhs.time_spent_slow_rejecting);
+        let time_spent_fast_rejecting = add_opts(&self.time_spent_fast_rejecting, &rhs.time_spent_fast_rejecting);
         let time_spent_checking_style_sharing = add_opts(&self.time_spent_checking_style_sharing, &rhs.time_spent_checking_style_sharing);
         let time_spent_inserting_into_sharing_cache =
             add_opts(
@@ -159,6 +161,7 @@ impl Add<&Statistics> for &Statistics {
             fast_rejects,
             slow_rejects,
             time_spent_slow_rejecting,
+            time_spent_fast_rejecting,
             time_spent_checking_style_sharing,
             time_spent_inserting_into_sharing_cache,
         }
@@ -392,6 +395,7 @@ where
                     fast_rejects: Some(1),
                     slow_rejects: Some(0),
                     time_spent_slow_rejecting: Some(Duration::ZERO),
+                    time_spent_fast_rejecting: Some(fast_reject_duration),
                     time_spent_checking_style_sharing: None,
                     time_spent_inserting_into_sharing_cache: None,
                 });
@@ -419,6 +423,7 @@ where
             fast_rejects: Some(0),
             slow_rejects: Some(slow_reject as usize),
             time_spent_slow_rejecting: Some(slow_reject_duration * slow_reject),
+            time_spent_fast_rejecting: Some(Duration::ZERO),
             time_spent_checking_style_sharing: None,
             time_spent_inserting_into_sharing_cache: None,
         }
