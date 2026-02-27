@@ -100,26 +100,35 @@ pub struct Statistics {
     pub fast_rejects: Option<usize>,
     /// Number of slow rejects from the bloom filter
     pub slow_rejects: Option<usize>,
+    /// Times
+    pub times: TimingStats,
+}
+
+/// A sub-struct for timing statistics
+#[derive(Default, Debug, Clone, PartialEq, Eq)]
+pub struct TimingStats {
     /// Time spent updating the bloom filter
-    pub time_spent_updating_bloom_filter: Option<Duration>,
+    pub updating_bloom_filter: Option<Duration>,
+    /// Time spent checking if a style can be shared
+    pub checking_style_sharing: Option<Duration>,
+    /// Time spent querying the selector map
+    pub querying_selector_map: Option<Duration>,
+    /// Time spent fast rejecting a selector
+    pub fast_rejecting: Option<Duration>,
     /// Time spent slow rejecting a selector after all of the following happen:
     /// - Style sharing fails
     /// - Selector appears in the selector map
     /// - Bloom filter does not fast reject
-    pub time_spent_slow_rejecting: Option<Duration>,
-    /// Time spent fast rejecting a selector
-    pub time_spent_fast_rejecting: Option<Duration>,
-    /// Time spent checking if a style can be shared
-    pub time_spent_checking_style_sharing: Option<Duration>,
+    pub slow_rejecting: Duration,
+    /// Time spent slow accepting
+    pub slow_accepting: Duration,
     /// Time spent inserting elements into the style sharing cache
-    pub time_spent_inserting_into_sharing_cache: Option<Duration>,
-    /// Time spent querying the selector map
-    pub time_spent_querying_selector_map: Option<Duration>,
+    pub inserting_into_sharing_cache: Option<Duration>,
 
     /// Time spent by each call to `get_matching_rules`. This will get subtracted
     /// from the overall time in `get_all_matching_rules`, leaving the total time
     /// spent querying the selector map
-    pub time_spent_inside_buckets: Option<Duration>,
+    pub _time_inside_buckets: Option<Duration>,
 }
 
 impl Statistics {
@@ -129,67 +138,87 @@ impl Statistics {
             selector_map_hits: Some(0),
             fast_rejects: Some(0),
             slow_rejects: Some(0),
-            time_spent_updating_bloom_filter: Some(Duration::ZERO),
-            time_spent_slow_rejecting: Some(Duration::ZERO),
-            time_spent_fast_rejecting: Some(Duration::ZERO),
-            time_spent_checking_style_sharing: None,
-            time_spent_inserting_into_sharing_cache: None,
-            time_spent_querying_selector_map: Some(Duration::ZERO),
-            time_spent_inside_buckets: Some(Duration::ZERO),
+            times: TimingStats::new_for_selector_map(),
         }
+    }
+}
+
+impl TimingStats {
+    pub fn new_for_selector_map() -> TimingStats {
+        TimingStats {
+            updating_bloom_filter: Some(Duration::ZERO),
+            checking_style_sharing: None,
+            querying_selector_map: Some(Duration::ZERO),
+            fast_rejecting: Some(Duration::ZERO),
+            slow_rejecting: Duration::ZERO,
+            slow_accepting: Duration::ZERO,
+            inserting_into_sharing_cache: None,
+            _time_inside_buckets: Some(Duration::ZERO),
+        }
+    }
+}
+
+fn add_opts<T>(lhs: &Option<T>, rhs: &Option<T>) -> Option<T>
+where
+    T: Add<Output = T> + Copy
+{
+    match (lhs, rhs) {
+        (&None, &None) => None,
+        (&None, &Some(rhs)) => Some(rhs),
+        (&Some(lhs), &None) => Some(lhs),
+        (&Some(lhs), &Some(rhs)) => Some(lhs + rhs),
     }
 }
 
 impl Add<&Statistics> for &Statistics {
     type Output = Statistics;
-
     fn add(self, rhs: &Statistics) -> Statistics {
-        fn add_opts<T>(lhs: &Option<T>, rhs: &Option<T>) -> Option<T>
-        where
-            T: Add<Output = T> + Copy
-        {
-            match (lhs, rhs) {
-                (&None, &None) => None,
-                (&None, &Some(rhs)) => Some(rhs),
-                (&Some(lhs), &None) => Some(lhs),
-                (&Some(lhs), &Some(rhs)) => Some(lhs + rhs),
-            }
-        }
         let sharing_instances = add_opts(&self.sharing_instances, &rhs.sharing_instances);
         let selector_map_hits = add_opts(&self.selector_map_hits, &rhs.selector_map_hits);
         let fast_rejects = add_opts(&self.fast_rejects, &rhs.fast_rejects);
         let slow_rejects = add_opts(&self.slow_rejects, &rhs.slow_rejects);
-        let time_spent_updating_bloom_filter = add_opts(&self.time_spent_updating_bloom_filter, &rhs.time_spent_updating_bloom_filter);
-        let time_spent_slow_rejecting = add_opts(&self.time_spent_slow_rejecting, &rhs.time_spent_slow_rejecting);
-        let time_spent_fast_rejecting = add_opts(&self.time_spent_fast_rejecting, &rhs.time_spent_fast_rejecting);
-        let time_spent_checking_style_sharing = add_opts(&self.time_spent_checking_style_sharing, &rhs.time_spent_checking_style_sharing);
-        let time_spent_inserting_into_sharing_cache =
-            add_opts(
-                &self.time_spent_inserting_into_sharing_cache,
-                &rhs.time_spent_inserting_into_sharing_cache,
-            );
-        let time_spent_querying_selector_map =
-            add_opts(
-                &self.time_spent_querying_selector_map,
-                &rhs.time_spent_querying_selector_map,
-            );
-        let time_spent_inside_buckets =
-            add_opts(
-                &self.time_spent_inside_buckets,
-                &rhs.time_spent_inside_buckets
-            );
         Statistics {
             sharing_instances,
             selector_map_hits,
             fast_rejects,
             slow_rejects,
-            time_spent_updating_bloom_filter,
-            time_spent_slow_rejecting,
-            time_spent_fast_rejecting,
-            time_spent_checking_style_sharing,
-            time_spent_inserting_into_sharing_cache,
-            time_spent_querying_selector_map,
-            time_spent_inside_buckets,
+            times: &self.times + &rhs.times,
+        }
+    }
+}
+
+impl Add<&TimingStats> for &TimingStats {
+    type Output = TimingStats;
+    fn add(self, rhs: &TimingStats) -> TimingStats {
+        let updating_bloom_filter = add_opts(&self.updating_bloom_filter, &rhs.updating_bloom_filter);
+        let slow_rejecting = self.slow_rejecting + rhs.slow_rejecting;
+        let fast_rejecting = add_opts(&self.fast_rejecting, &rhs.fast_rejecting);
+        let slow_accepting = self.slow_accepting + rhs.slow_accepting;
+        let checking_style_sharing = add_opts(&self.checking_style_sharing, &rhs.checking_style_sharing);
+        let inserting_into_sharing_cache =
+            add_opts(
+                &self.inserting_into_sharing_cache,
+                &rhs.inserting_into_sharing_cache,
+            );
+        let querying_selector_map =
+            add_opts(
+                &self.querying_selector_map,
+                &rhs.querying_selector_map,
+            );
+        let _time_inside_buckets =
+            add_opts(
+                &self._time_inside_buckets,
+                &rhs._time_inside_buckets
+            );
+        TimingStats {
+            updating_bloom_filter,
+            slow_rejecting,
+            fast_rejecting,
+            slow_accepting,
+            checking_style_sharing,
+            inserting_into_sharing_cache,
+            querying_selector_map,
+            _time_inside_buckets,
         }
     }
 }
@@ -205,6 +234,19 @@ impl std::ops::AddAssign<Statistics> for Statistics {
         *self += &rhs;
     }
 }
+
+impl std::ops::AddAssign<&TimingStats> for TimingStats {
+    fn add_assign(&mut self, rhs: &TimingStats) {
+        *self = &*self + rhs;
+    }
+}
+
+impl std::ops::AddAssign<TimingStats> for TimingStats {
+    fn add_assign(&mut self, rhs: TimingStats) {
+        *self += &rhs;
+    }
+}
+
 
 impl ElementSelectorFlags {
     /// Returns the subset of flags that apply to the element.
@@ -420,13 +462,16 @@ where
                     selector_map_hits: None,
                     fast_rejects: Some(1),
                     slow_rejects: Some(0),
-                    time_spent_updating_bloom_filter: None,
-                    time_spent_slow_rejecting: Some(Duration::ZERO),
-                    time_spent_fast_rejecting: Some(fast_reject_duration),
-                    time_spent_checking_style_sharing: None,
-                    time_spent_inserting_into_sharing_cache: None,
-                    time_spent_querying_selector_map: None,
-                    time_spent_inside_buckets: None,
+                    times: TimingStats {
+                        updating_bloom_filter: None,
+                        slow_rejecting: Duration::ZERO,
+                        fast_rejecting: Some(fast_reject_duration),
+                        slow_accepting: Duration::ZERO,
+                        checking_style_sharing: None,
+                        inserting_into_sharing_cache: None,
+                        querying_selector_map: None,
+                        _time_inside_buckets: None,
+                    }
                 });
             }
         }
@@ -442,8 +487,9 @@ where
             SubjectOrPseudoElement::No
         },
     );
-    let slow_reject_duration = start.elapsed();
+    let slow_match_duration = start.elapsed();
     let slow_reject = if does_match == KleeneValue::True { 0 } else { 1 };
+    let slow_accept = 1 - slow_reject;
     (
         does_match,
         Statistics {
@@ -451,13 +497,16 @@ where
             selector_map_hits: None,
             fast_rejects: Some(0),
             slow_rejects: Some(slow_reject as usize),
-            time_spent_updating_bloom_filter: None,
-            time_spent_slow_rejecting: Some(slow_reject_duration * slow_reject),
-            time_spent_fast_rejecting: Some(Duration::ZERO),
-            time_spent_checking_style_sharing: None,
-            time_spent_inserting_into_sharing_cache: None,
-            time_spent_querying_selector_map: None,
-            time_spent_inside_buckets: None,
+            times: TimingStats {
+                updating_bloom_filter: None,
+                slow_rejecting: slow_match_duration * slow_reject,
+                fast_rejecting: Some(Duration::ZERO),
+                slow_accepting: slow_match_duration * slow_accept,
+                checking_style_sharing: None,
+                inserting_into_sharing_cache: None,
+                querying_selector_map: None,
+                _time_inside_buckets: None,
+            }
         }
     )
 }

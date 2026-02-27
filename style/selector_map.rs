@@ -400,7 +400,7 @@ impl SelectorMap<Rule> {
             stylist,
         );
         let duration = start.elapsed();
-        stats.time_spent_querying_selector_map = Some(duration - stats.time_spent_inside_buckets.unwrap());
+        stats.times.querying_selector_map = Some(duration - stats.times._time_inside_buckets.unwrap());
         stats.selector_map_hits = Some(hits);
         stats
     }
@@ -484,7 +484,7 @@ impl SelectorMap<Rule> {
                 matching_selectors.push(rule.selector.clone()); // TODO: Is cloning bad here?
             }
         }
-        statistics.time_spent_inside_buckets = Some(start.elapsed());
+        statistics.times._time_inside_buckets = Some(start.elapsed());
         statistics
     }
 }
