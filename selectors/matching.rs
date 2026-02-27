@@ -111,6 +111,13 @@ pub struct Statistics {
     pub time_spent_checking_style_sharing: Option<Duration>,
     /// Time spent inserting elements into the style sharing cache
     pub time_spent_inserting_into_sharing_cache: Option<Duration>,
+    /// Time spent querying the selector map
+    pub time_spent_querying_selector_map: Option<Duration>,
+
+    /// Time spent by each call to `get_matching_rules`. This will get subtracted
+    /// from the overall time in `get_all_matching_rules`, leaving the total time
+    /// spent querying the selector map
+    pub time_spent_inside_buckets: Option<Duration>,
 }
 
 impl Statistics {
@@ -124,6 +131,8 @@ impl Statistics {
             time_spent_fast_rejecting: Some(Duration::ZERO),
             time_spent_checking_style_sharing: None,
             time_spent_inserting_into_sharing_cache: None,
+            time_spent_querying_selector_map: Some(Duration::ZERO),
+            time_spent_inside_buckets: Some(Duration::ZERO),
         }
     }
 }
@@ -155,6 +164,16 @@ impl Add<&Statistics> for &Statistics {
                 &self.time_spent_inserting_into_sharing_cache,
                 &rhs.time_spent_inserting_into_sharing_cache,
             );
+        let time_spent_querying_selector_map =
+            add_opts(
+                &self.time_spent_querying_selector_map,
+                &rhs.time_spent_querying_selector_map,
+            );
+        let time_spent_inside_buckets =
+            add_opts(
+                &self.time_spent_inside_buckets,
+                &rhs.time_spent_inside_buckets
+            );
         Statistics {
             sharing_instances,
             selector_map_hits,
@@ -164,6 +183,8 @@ impl Add<&Statistics> for &Statistics {
             time_spent_fast_rejecting,
             time_spent_checking_style_sharing,
             time_spent_inserting_into_sharing_cache,
+            time_spent_querying_selector_map,
+            time_spent_inside_buckets,
         }
     }
 }
@@ -398,6 +419,8 @@ where
                     time_spent_fast_rejecting: Some(fast_reject_duration),
                     time_spent_checking_style_sharing: None,
                     time_spent_inserting_into_sharing_cache: None,
+                    time_spent_querying_selector_map: None,
+                    time_spent_inside_buckets: None,
                 });
             }
         }
@@ -426,6 +449,8 @@ where
             time_spent_fast_rejecting: Some(Duration::ZERO),
             time_spent_checking_style_sharing: None,
             time_spent_inserting_into_sharing_cache: None,
+            time_spent_querying_selector_map: None,
+            time_spent_inside_buckets: None,
         }
     )
 }

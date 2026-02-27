@@ -28,7 +28,7 @@ use smallvec::SmallVec;
 use std::collections::hash_map;
 use std::collections::{HashMap, HashSet};
 use std::hash::{BuildHasherDefault, Hash, Hasher};
-use std::time::Duration;
+use std::time::Instant;
 
 /// A hasher implementation that doesn't hash anything, because it expects its
 /// input to be a suitable u32 hash.
@@ -279,6 +279,8 @@ impl SelectorMap<Rule> {
         let mut hits = 0;
         let mut stats = Statistics::new_for_selector_map();
 
+        let start = Instant::now();
+
         if rule_hash_target.is_root() {
             hits += self.root.len();
             stats += SelectorMap::get_matching_rules(
@@ -397,6 +399,8 @@ impl SelectorMap<Rule> {
             cascade_data,
             stylist,
         );
+        let duration = start.elapsed();
+        stats.time_spent_querying_selector_map = Some(duration - stats.time_spent_inside_buckets.unwrap());
         stats.selector_map_hits = Some(hits);
         stats
     }
@@ -418,6 +422,7 @@ impl SelectorMap<Rule> {
     {
         use selectors::matching::IncludeStartingStyle;
 
+        let start = Instant::now();
         let include_starting_style = matches!(
             matching_context.include_starting_style,
             IncludeStartingStyle::Yes
@@ -479,6 +484,7 @@ impl SelectorMap<Rule> {
                 matching_selectors.push(rule.selector.clone()); // TODO: Is cloning bad here?
             }
         }
+        statistics.time_spent_inside_buckets = Some(start.elapsed());
         statistics
     }
 }
