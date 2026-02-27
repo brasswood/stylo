@@ -105,9 +105,11 @@ pub struct Statistics {
     /// - Selector appears in the selector map
     /// - Bloom filter does not fast reject
     pub time_spent_slow_rejecting: Option<Duration>,
-    /// Time spent checking if we can share styles
+    /// Time spent fast rejecting a selector
+    pub time_spent_fast_rejecting: Option<Duration>,
+    /// Time spent checking if a style can be shared
     pub time_spent_checking_style_sharing: Option<Duration>,
-    /// Time spent inserting into the style sharing cache
+    /// Time spent inserting elements into the style sharing cache
     pub time_spent_inserting_into_sharing_cache: Option<Duration>,
 }
 
@@ -380,7 +382,10 @@ where
     // Use the bloom filter to fast-reject.
     if let Some(hashes) = hashes {
         if let Some(filter) = context.bloom_filter {
-            if !selector_may_match(hashes, filter) {
+            let start = Instant::now();
+            let may_match = selector_may_match(hashes, filter);
+            let fast_reject_duration = start.elapsed();
+            if !may_match {
                 return (KleeneValue::False, Statistics {
                     sharing_instances: None,
                     selector_map_hits: None,
@@ -404,7 +409,7 @@ where
             SubjectOrPseudoElement::No
         },
     );
-    let duration = start.elapsed();
+    let slow_reject_duration = start.elapsed();
     let slow_reject = if does_match == KleeneValue::True { 0 } else { 1 };
     (
         does_match,
@@ -413,7 +418,7 @@ where
             selector_map_hits: None,
             fast_rejects: Some(0),
             slow_rejects: Some(slow_reject as usize),
-            time_spent_slow_rejecting: Some(duration * slow_reject),
+            time_spent_slow_rejecting: Some(slow_reject_duration * slow_reject),
             time_spent_checking_style_sharing: None,
             time_spent_inserting_into_sharing_cache: None,
         }
