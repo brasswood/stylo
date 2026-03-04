@@ -3455,10 +3455,10 @@ impl CascadeData {
         );
         let mut acc_stats = ScopeProximityStats::default();
         for candidate in result.candidates {
-            let (res, stats) = context.nest_for_scope(Some(candidate.root), |context| {
+            let (res, bloom_stats) = context.nest_for_scope(Some(candidate.root), |context| {
                 matches_selector(&rule.selector, 0, Some(&rule.hashes), &element, context)
             });
-            acc_stats += ScopeProximityStats::from(stats.clone());
+            acc_stats += bloom_stats;
             if res {
                 return (candidate.proximity, acc_stats);
             }

@@ -429,27 +429,27 @@ impl SelectorMap<Rule> {
         );
         let mut acc_stats = Statistics::default();
         for rule in rules {
-            let (scope_proximity, stats) = if rule.scope_condition_id == ScopeConditionId::none() {
-                let (res, stats) = matches_selector(
+            let (scope_proximity, selector_stats) = if rule.scope_condition_id == ScopeConditionId::none() {
+                let (res, bloom_stats) = matches_selector(
                     &rule.selector,
                     0,
                     Some(&rule.hashes),
                     &element,
                     matching_context,
                 );
-                acc_stats += Statistics::from(stats.clone());
+                acc_stats += bloom_stats;
                 if !res {
                     continue;
                 }
-                (ScopeProximity::infinity(), SelectorStats::Bloom(stats))
+                (ScopeProximity::infinity(), SelectorStats::Bloom(bloom_stats))
             } else {
-                let (result, stats) =
+                let (result, scope_proximity_stats) =
                     cascade_data.find_scope_proximity_if_matching(rule, element, matching_context);
-                acc_stats += Statistics::from(stats.clone());
+                acc_stats += scope_proximity_stats;
                 if result == ScopeProximity::infinity() {
                     continue;
                 }
-                (result, SelectorStats::ScopeProximity(stats))
+                (result, SelectorStats::ScopeProximity(scope_proximity_stats))
             };
 
             if rule.container_condition_id != ContainerConditionId::none() {
@@ -481,7 +481,7 @@ impl SelectorMap<Rule> {
             ));
 
             if let Some(matching_selectors) = matching_selectors {
-                matching_selectors.push((rule.selector.clone(), stats)); // TODO: Is cloning bad here?
+                matching_selectors.push((rule.selector.clone(), selector_stats)); // TODO: Is cloning bad here?
             }
         }
         acc_stats.times._time_inside_buckets = start.elapsed();

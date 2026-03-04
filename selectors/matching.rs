@@ -19,6 +19,7 @@ use crate::relative_selector::cache::RelativeSelectorCachedMatch;
 use crate::tree::Element;
 use bitflags::bitflags;
 use debug_unreachable::debug_unreachable;
+use derive_more::{Add, AddAssign};
 use log::debug;
 use smallvec::SmallVec;
 use std::borrow::Borrow;
@@ -89,7 +90,7 @@ bitflags! {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SelectorStats {
     Bloom(BloomQueryStats),
     ScopeProximity(ScopeProximityStats),
@@ -103,7 +104,7 @@ impl Default for SelectorStats {
 
 /// A sub-struct for when `find_scope_proximity_if_matching` iteratively calls `matches_selector`.
 /// Like `BloomQueryStats` but with fields for counting number of queries.
-#[derive(Default, Debug, Clone, PartialEq, Eq)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ScopeProximityStats {
     pub fast_rejects: usize,
     pub slow_rejects: usize,
@@ -113,47 +114,19 @@ pub struct ScopeProximityStats {
     pub time_slow_accepting: Duration,
 }
 
-impl From<BloomQueryStats> for ScopeProximityStats {
-    fn from(value: BloomQueryStats) -> Self {
-        ScopeProximityStats {
-            fast_rejects: usize::from(value.time_fast_rejecting.is_some()),
-            slow_rejects: usize::from(value.time_slow_rejecting.is_some()),
-            slow_accepts: usize::from(value.time_slow_accepting.is_some()),
-            time_fast_rejecting: value.time_fast_rejecting.unwrap_or_default(),
-            time_slow_rejecting: value.time_slow_rejecting.unwrap_or_default(),
-            time_slow_accepting: value.time_slow_accepting.unwrap_or_default(),
-        }
-    }
-}
-
-impl Add for &ScopeProximityStats {
-    type Output = ScopeProximityStats;
-    fn add(self, rhs: &ScopeProximityStats) -> ScopeProximityStats {
-        ScopeProximityStats {
-            fast_rejects: self.fast_rejects + rhs.fast_rejects,
-            slow_rejects: self.slow_rejects + rhs.slow_rejects,
-            slow_accepts: self.slow_accepts + rhs.slow_accepts,
-            time_fast_rejecting: self.time_fast_rejecting + rhs.time_fast_rejecting,
-            time_slow_rejecting: self.time_slow_rejecting + rhs.time_slow_rejecting,
-            time_slow_accepting: self.time_slow_accepting + rhs.time_slow_accepting,
-        }
-    }
-}
-
-impl AddAssign<&ScopeProximityStats> for ScopeProximityStats {
-    fn add_assign(&mut self, rhs: &ScopeProximityStats) {
-        *self = &*self + rhs;
-    }
-}
-
-impl AddAssign for ScopeProximityStats {
-    fn add_assign(&mut self, rhs: ScopeProximityStats) {
-        *self += &rhs;
+impl AddAssign<BloomQueryStats> for ScopeProximityStats {
+    fn add_assign(&mut self, rhs: BloomQueryStats) {
+        self.fast_rejects += usize::from(rhs.time_fast_rejecting.is_some());
+        self.slow_rejects += usize::from(rhs.time_slow_rejecting.is_some());
+        self.slow_accepts += usize::from(rhs.time_slow_accepting.is_some());
+        self.time_fast_rejecting += rhs.time_fast_rejecting.unwrap_or_default();
+        self.time_slow_rejecting += rhs.time_slow_rejecting.unwrap_or_default();
+        self.time_slow_accepting += rhs.time_slow_accepting.unwrap_or_default();
     }
 }
 
 /// A struct for bloom filter querying stats
-#[derive(Default, Debug, Clone, PartialEq, Eq)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BloomQueryStats {
     pub time_fast_rejecting: Option<Duration>,
     pub time_slow_rejecting: Option<Duration>,
@@ -161,7 +134,7 @@ pub struct BloomQueryStats {
 }
 
 /// A struct for returning statistics
-#[derive(Default, Debug, Clone, PartialEq, Eq)]
+#[derive(Default, Debug, Clone, Copy, Add, AddAssign, PartialEq, Eq)]
 pub struct Statistics {
     /// Number of sharing instances
     pub sharing_instances: usize,
@@ -178,7 +151,7 @@ pub struct Statistics {
 }
 
 /// A sub-struct for timing statistics
-#[derive(Default, Debug, Clone, PartialEq, Eq)]
+#[derive(Default, Debug, Clone, Copy, Add, AddAssign, PartialEq, Eq)]
 pub struct TimingStats {
     /// Time spent updating the bloom filter
     pub updating_bloom_filter: Duration,
@@ -204,29 +177,25 @@ pub struct TimingStats {
     pub _time_inside_buckets: Duration,
 }
 
-impl From<BloomQueryStats> for Statistics {
-    fn from(value: BloomQueryStats) -> Self {
-        let mut stats = Statistics::default();
-        stats.fast_rejects = usize::from(value.time_fast_rejecting.is_some());
-        stats.slow_rejects = usize::from(value.time_slow_rejecting.is_some());
-        stats.slow_accepts = usize::from(value.time_slow_accepting.is_some());
-        stats.times.fast_rejecting = value.time_fast_rejecting.unwrap_or_default();
-        stats.times.slow_rejecting = value.time_slow_rejecting.unwrap_or_default();
-        stats.times.slow_accepting = value.time_slow_accepting.unwrap_or_default();
-        stats
+impl AddAssign<BloomQueryStats> for Statistics {
+    fn add_assign(&mut self, rhs: BloomQueryStats) {
+        self.fast_rejects += usize::from(rhs.time_fast_rejecting.is_some());
+        self.slow_rejects += usize::from(rhs.time_slow_rejecting.is_some());
+        self.slow_accepts += usize::from(rhs.time_slow_accepting.is_some());
+        self.times.fast_rejecting += rhs.time_fast_rejecting.unwrap_or_default();
+        self.times.slow_rejecting += rhs.time_slow_rejecting.unwrap_or_default();
+        self.times.slow_accepting += rhs.time_slow_accepting.unwrap_or_default();
     }
 }
 
-impl From<ScopeProximityStats> for Statistics {
-    fn from(value: ScopeProximityStats) -> Self {
-        let mut stats = Statistics::default();
-        stats.fast_rejects = value.fast_rejects;
-        stats.slow_rejects = value.slow_rejects;
-        stats.slow_accepts = value.slow_accepts;
-        stats.times.fast_rejecting = value.time_fast_rejecting;
-        stats.times.slow_rejecting = value.time_slow_rejecting;
-        stats.times.slow_accepting = value.time_slow_accepting;
-        stats
+impl AddAssign<ScopeProximityStats> for Statistics {
+    fn add_assign(&mut self, rhs: ScopeProximityStats) {
+        self.fast_rejects += rhs.fast_rejects;
+        self.slow_rejects += rhs.slow_rejects;
+        self.slow_accepts += rhs.slow_accepts;
+        self.times.fast_rejecting += rhs.time_fast_rejecting;
+        self.times.slow_rejecting += rhs.time_slow_rejecting;
+        self.times.slow_accepting += rhs.time_slow_accepting;
     }
 }
 
@@ -238,61 +207,6 @@ impl From<SelectorStats> for Statistics {
         }
     }
 }
-
-impl Add for &Statistics {
-    type Output = Statistics;
-    fn add(self, rhs: &Statistics) -> Statistics {
-        Statistics {
-            sharing_instances: &self.sharing_instances + &rhs.sharing_instances,
-            selector_map_hits: &self.selector_map_hits + &rhs.selector_map_hits,
-            fast_rejects: &self.fast_rejects + &rhs.fast_rejects,
-            slow_rejects: &self.slow_rejects + &rhs.slow_rejects,
-            slow_accepts: &self.slow_accepts + &rhs.slow_accepts,
-            times: &self.times + &rhs.times,
-        }
-    }
-}
-
-impl Add for &TimingStats {
-    type Output = TimingStats;
-    fn add(self, rhs: &TimingStats) -> TimingStats {
-        TimingStats {
-            updating_bloom_filter: self.updating_bloom_filter + rhs.updating_bloom_filter,
-            slow_rejecting: self.slow_rejecting + rhs.slow_rejecting,
-            fast_rejecting: self.fast_rejecting + rhs.fast_rejecting,
-            slow_accepting: self.slow_accepting + rhs.slow_accepting,
-            checking_style_sharing: self.checking_style_sharing + rhs.checking_style_sharing,
-            inserting_into_sharing_cache: self.inserting_into_sharing_cache + rhs.inserting_into_sharing_cache,
-            querying_selector_map: self.querying_selector_map + rhs.querying_selector_map,
-            _time_inside_buckets: self._time_inside_buckets + rhs._time_inside_buckets,
-        }
-    }
-}
-
-impl AddAssign<&Statistics> for Statistics {
-    fn add_assign(&mut self, rhs: &Statistics) {
-        *self = &*self + rhs;
-    }
-}
-
-impl AddAssign for Statistics {
-    fn add_assign(&mut self, rhs: Statistics) {
-        *self += &rhs;
-    }
-}
-
-impl AddAssign<&TimingStats> for TimingStats {
-    fn add_assign(&mut self, rhs: &TimingStats) {
-        *self = &*self + rhs;
-    }
-}
-
-impl AddAssign for TimingStats {
-    fn add_assign(&mut self, rhs: TimingStats) {
-        *self += &rhs;
-    }
-}
-
 
 impl ElementSelectorFlags {
     /// Returns the subset of flags that apply to the element.
