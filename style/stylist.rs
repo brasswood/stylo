@@ -3454,7 +3454,7 @@ impl CascadeData {
             &self.scope_subject_map,
             context,
         );
-        let mut statistics = Statistics::new_for_selector_map();
+        let mut statistics = Statistics::default();
         for candidate in result.candidates {
             let (res, stats) = context.nest_for_scope(Some(candidate.root), |context| {
                 matches_selector(&rule.selector, 0, Some(&rule.hashes), &element, context)

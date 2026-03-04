@@ -272,12 +272,12 @@ impl SelectorMap<Rule> {
         E: SelectorMapElement,
     {
         if self.is_empty() {
-            return Statistics::new_for_selector_map();
+            return Statistics::default();
         }
 
         let quirks_mode = matching_context.quirks_mode();
         let mut hits = 0;
-        let mut stats = Statistics::new_for_selector_map();
+        let mut stats = Statistics::default();
 
         let start = Instant::now();
 
@@ -400,8 +400,8 @@ impl SelectorMap<Rule> {
             stylist,
         );
         let duration = start.elapsed();
-        stats.times.querying_selector_map = Some(duration - stats.times._time_inside_buckets.unwrap());
-        stats.selector_map_hits = Some(hits);
+        stats.times.querying_selector_map = duration - stats.times._time_inside_buckets;
+        stats.selector_map_hits = hits;
         stats
     }
 
@@ -427,7 +427,7 @@ impl SelectorMap<Rule> {
             matching_context.include_starting_style,
             IncludeStartingStyle::Yes
         );
-        let mut acc_stats = Statistics::new_for_selector_map();
+        let mut acc_stats = Statistics::default();
         for rule in rules {
             let (scope_proximity, stats) = if rule.scope_condition_id == ScopeConditionId::none() {
                 let (res, stats) = matches_selector(
@@ -484,7 +484,7 @@ impl SelectorMap<Rule> {
                 matching_selectors.push((rule.selector.clone(), stats)); // TODO: Is cloning bad here?
             }
         }
-        acc_stats.times._time_inside_buckets = Some(start.elapsed());
+        acc_stats.times._time_inside_buckets = start.elapsed();
         acc_stats
     }
 }
