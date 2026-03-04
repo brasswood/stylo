@@ -70,8 +70,7 @@ use rustc_hash::FxHashMap;
 use selectors::attr::{CaseSensitivity, NamespaceConstraint};
 use selectors::bloom::BloomFilter;
 use selectors::matching::{
-    matches_selector, selector_may_match, MatchingContext, MatchingMode, NeedsSelectorFlags,
-    SelectorCaches, Statistics,
+    MatchingContext, MatchingMode, NeedsSelectorFlags, ScopeProximityStats, SelectorCaches, Statistics, matches_selector, selector_may_match
 };
 use selectors::matching::{MatchingForInvalidation, VisitedHandlingMode};
 use selectors::parser::{
@@ -3437,7 +3436,7 @@ impl CascadeData {
         rule: &Rule,
         element: E,
         context: &mut MatchingContext<E::Impl>,
-    ) -> (ScopeProximity, Statistics) {
+    ) -> (ScopeProximity, ScopeProximityStats) {
         context
             .extra_data
             .cascade_input_flags
@@ -3454,17 +3453,17 @@ impl CascadeData {
             &self.scope_subject_map,
             context,
         );
-        let mut statistics = Statistics::default();
+        let mut acc_stats = ScopeProximityStats::default();
         for candidate in result.candidates {
-            let (res, stats) = context.nest_for_scope(Some(candidate.root), |context| {
+            let (res, bloom_stats) = context.nest_for_scope(Some(candidate.root), |context| {
                 matches_selector(&rule.selector, 0, Some(&rule.hashes), &element, context)
             });
-            statistics += stats;
+            acc_stats += bloom_stats;
             if res {
-                return (candidate.proximity, statistics);
+                return (candidate.proximity, acc_stats);
             }
         }
-        (ScopeProximity::infinity(), statistics)
+        (ScopeProximity::infinity(), acc_stats)
     }
 
     fn did_finish_rebuild(&mut self) {

@@ -22,7 +22,7 @@ use atomic_refcell::AtomicRef;
 use dom::ElementState;
 use precomputed_hash::PrecomputedHash;
 use selectors::{Element, OpaqueElement};
-use selectors::matching::{matches_selector, MatchingContext, Statistics};
+use selectors::matching::{MatchingContext, SelectorStats, Statistics, matches_selector};
 use selectors::parser::{Combinator, Component, Selector, SelectorIter};
 use smallvec::SmallVec;
 use std::collections::hash_map;
@@ -262,7 +262,7 @@ impl SelectorMap<Rule> {
         element: E,
         rule_hash_target: E,
         matching_rules_list: &mut ApplicableDeclarationList,
-        matching_selectors: &mut Option<&mut SmallVec<[(Selector<SelectorImpl>, Statistics); 16]>>,
+        matching_selectors: &mut Option<&mut SmallVec<[(Selector<SelectorImpl>, SelectorStats); 16]>>,
         matching_context: &mut MatchingContext<E::Impl>,
         cascade_level: CascadeLevel,
         cascade_data: &CascadeData,
@@ -411,7 +411,7 @@ impl SelectorMap<Rule> {
         element: E,
         rules: &[Rule],
         matching_rules: &mut ApplicableDeclarationList,
-        matching_selectors: &mut Option<&mut SmallVec<[(Selector<SelectorImpl>, Statistics); 16]>>,
+        matching_selectors: &mut Option<&mut SmallVec<[(Selector<SelectorImpl>, SelectorStats); 16]>>,
         matching_context: &mut MatchingContext<E::Impl>,
         cascade_level: CascadeLevel,
         cascade_data: &CascadeData,
@@ -429,27 +429,27 @@ impl SelectorMap<Rule> {
         );
         let mut acc_stats = Statistics::default();
         for rule in rules {
-            let (scope_proximity, stats) = if rule.scope_condition_id == ScopeConditionId::none() {
-                let (res, stats) = matches_selector(
+            let (scope_proximity, selector_stats) = if rule.scope_condition_id == ScopeConditionId::none() {
+                let (res, bloom_stats) = matches_selector(
                     &rule.selector,
                     0,
                     Some(&rule.hashes),
                     &element,
                     matching_context,
                 );
-                acc_stats += &stats;
+                acc_stats += bloom_stats;
                 if !res {
                     continue;
                 }
-                (ScopeProximity::infinity(), stats)
+                (ScopeProximity::infinity(), SelectorStats::Bloom(bloom_stats))
             } else {
-                let (result, stats) =
+                let (result, scope_proximity_stats) =
                     cascade_data.find_scope_proximity_if_matching(rule, element, matching_context);
-                acc_stats += &stats;
+                acc_stats += scope_proximity_stats;
                 if result == ScopeProximity::infinity() {
                     continue;
                 }
-                (result, stats)
+                (result, SelectorStats::ScopeProximity(scope_proximity_stats))
             };
 
             if rule.container_condition_id != ContainerConditionId::none() {
@@ -481,7 +481,7 @@ impl SelectorMap<Rule> {
             ));
 
             if let Some(matching_selectors) = matching_selectors {
-                matching_selectors.push((rule.selector.clone(), stats)); // TODO: Is cloning bad here?
+                matching_selectors.push((rule.selector.clone(), selector_stats)); // TODO: Is cloning bad here?
             }
         }
         acc_stats.times._time_inside_buckets = start.elapsed();
