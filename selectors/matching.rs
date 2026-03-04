@@ -23,7 +23,7 @@ use derive_more::{Add, AddAssign};
 use log::debug;
 use smallvec::SmallVec;
 use std::borrow::Borrow;
-use std::ops::{Add, AddAssign};
+use std::ops::AddAssign;
 use std::time::{Duration, Instant};
 
 pub use crate::context::*;
