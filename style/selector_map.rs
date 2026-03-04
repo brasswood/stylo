@@ -262,7 +262,7 @@ impl SelectorMap<Rule> {
         element: E,
         rule_hash_target: E,
         matching_rules_list: &mut ApplicableDeclarationList,
-        matching_selectors: &mut Option<&mut SmallVec<[Selector<SelectorImpl>; 16]>>,
+        matching_selectors: &mut Option<&mut SmallVec<[(Selector<SelectorImpl>, Statistics); 16]>>,
         matching_context: &mut MatchingContext<E::Impl>,
         cascade_level: CascadeLevel,
         cascade_data: &CascadeData,
@@ -411,7 +411,7 @@ impl SelectorMap<Rule> {
         element: E,
         rules: &[Rule],
         matching_rules: &mut ApplicableDeclarationList,
-        matching_selectors: &mut Option<&mut SmallVec<[Selector<SelectorImpl>; 16]>>,
+        matching_selectors: &mut Option<&mut SmallVec<[(Selector<SelectorImpl>, Statistics); 16]>>,
         matching_context: &mut MatchingContext<E::Impl>,
         cascade_level: CascadeLevel,
         cascade_data: &CascadeData,
@@ -481,7 +481,7 @@ impl SelectorMap<Rule> {
             ));
 
             if let Some(matching_selectors) = matching_selectors {
-                matching_selectors.push(rule.selector.clone()); // TODO: Is cloning bad here?
+                matching_selectors.push((rule.selector.clone(), Statistics::default())); // TODO: Is cloning bad here?
             }
         }
         statistics.times._time_inside_buckets = Some(start.elapsed());
