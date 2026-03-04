@@ -22,7 +22,7 @@ use debug_unreachable::debug_unreachable;
 use log::debug;
 use smallvec::SmallVec;
 use std::borrow::Borrow;
-use std::ops::Add;
+use std::ops::{Add, AddAssign};
 use std::time::{Duration, Instant};
 
 pub use crate::context::*;
@@ -89,15 +89,86 @@ bitflags! {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SelectorStats {
+    Bloom(BloomQueryStats),
+    ScopeProximity(ScopeProximityStats),
+}
+
+impl Default for SelectorStats {
+    fn default() -> SelectorStats {
+        SelectorStats::Bloom(BloomQueryStats::default())
+    }
+}
+
+/// A sub-struct for when `find_scope_proximity_if_matching` iteratively calls `matches_selector`.
+/// Like `BloomQueryStats` but with fields for counting number of queries.
+#[derive(Default, Debug, Clone, PartialEq, Eq)]
+pub struct ScopeProximityStats {
+    pub fast_rejects: usize,
+    pub slow_rejects: usize,
+    pub slow_accepts: usize,
+    pub time_fast_rejecting: Duration, // Non-optional, since `fast_rejects` will tell us whether there were any.
+    pub time_slow_rejecting: Duration,
+    pub time_slow_accepting: Duration,
+}
+
+impl From<BloomQueryStats> for ScopeProximityStats {
+    fn from(value: BloomQueryStats) -> Self {
+        ScopeProximityStats {
+            fast_rejects: usize::from(value.time_fast_rejecting.is_some()),
+            slow_rejects: usize::from(value.time_slow_rejecting.is_some()),
+            slow_accepts: usize::from(value.time_slow_accepting.is_some()),
+            time_fast_rejecting: value.time_fast_rejecting.unwrap_or_default(),
+            time_slow_rejecting: value.time_slow_rejecting.unwrap_or_default(),
+            time_slow_accepting: value.time_slow_accepting.unwrap_or_default(),
+        }
+    }
+}
+
+impl Add for &ScopeProximityStats {
+    type Output = ScopeProximityStats;
+    fn add(self, rhs: &ScopeProximityStats) -> ScopeProximityStats {
+        ScopeProximityStats {
+            fast_rejects: self.fast_rejects + rhs.fast_rejects,
+            slow_rejects: self.slow_rejects + rhs.slow_rejects,
+            slow_accepts: self.slow_accepts + rhs.slow_accepts,
+            time_fast_rejecting: self.time_fast_rejecting + rhs.time_fast_rejecting,
+            time_slow_rejecting: self.time_slow_rejecting + rhs.time_slow_rejecting,
+            time_slow_accepting: self.time_slow_accepting + rhs.time_slow_accepting,
+        }
+    }
+}
+
+impl AddAssign<&ScopeProximityStats> for ScopeProximityStats {
+    fn add_assign(&mut self, rhs: &ScopeProximityStats) {
+        *self = &*self + rhs;
+    }
+}
+
+impl AddAssign for ScopeProximityStats {
+    fn add_assign(&mut self, rhs: ScopeProximityStats) {
+        *self += &rhs;
+    }
+}
+
+/// A struct for bloom filter querying stats
+#[derive(Default, Debug, Clone, PartialEq, Eq)]
+pub struct BloomQueryStats {
+    pub time_fast_rejecting: Option<Duration>,
+    pub time_slow_rejecting: Option<Duration>,
+    pub time_slow_accepting: Option<Duration>,
+}
+
 /// A struct for returning statistics
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
 pub struct Statistics {
     /// Number of sharing instances
-    pub sharing_instances: Option<usize>,
+    pub sharing_instances: usize,
     /// Number of selector map hits
-    pub selector_map_hits: Option<usize>,
+    pub selector_map_hits: usize,
     /// Number of fast rejects from the bloom filter
-    pub fast_rejects: Option<usize>, // This is optional, i.e., if we are not using the bloom filter.
+    pub fast_rejects: usize, // This is optional, i.e., if we are not using the bloom filter.
     /// Number of slow rejects from the bloom filter
     pub slow_rejects: usize, // This is non-optional. If we are not using the bloom filter, all matches are either slow rejects or slow accepts.
     /// Number of slow accepts
@@ -110,79 +181,71 @@ pub struct Statistics {
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
 pub struct TimingStats {
     /// Time spent updating the bloom filter
-    pub updating_bloom_filter: Option<Duration>,
+    pub updating_bloom_filter: Duration,
     /// Time spent checking if a style can be shared
-    pub checking_style_sharing: Option<Duration>,
+    pub checking_style_sharing: Duration,
     /// Time spent querying the selector map
-    pub querying_selector_map: Option<Duration>,
+    pub querying_selector_map: Duration,
     /// Time spent fast rejecting a selector
-    pub fast_rejecting: Option<Duration>, // Optional: we may not be using bloom filter
+    pub fast_rejecting: Duration,
     /// Time spent slow rejecting a selector after all of the following happen:
     /// - Style sharing fails
     /// - Selector appears in the selector map
     /// - Bloom filter does not fast reject
-    pub slow_rejecting: Duration, // Non-optional: If not using bloom filter, all matches are either slow-rejects or slow-accepts
+    pub slow_rejecting: Duration,
     /// Time spent slow accepting
     pub slow_accepting: Duration,
     /// Time spent inserting elements into the style sharing cache
-    pub inserting_into_sharing_cache: Option<Duration>,
+    pub inserting_into_sharing_cache: Duration,
 
     /// Time spent by each call to `get_matching_rules`. This will get subtracted
     /// from the overall time in `get_all_matching_rules`, leaving the total time
     /// spent querying the selector map
-    pub _time_inside_buckets: Option<Duration>,
+    pub _time_inside_buckets: Duration,
 }
 
-impl Statistics {
-    pub fn new_for_selector_map() -> Statistics {
-        Statistics {
-            sharing_instances: None,
-            selector_map_hits: Some(0),
-            fast_rejects: Some(0),
-            slow_rejects: 0,
-            slow_accepts: 0,
-            times: TimingStats::new_for_selector_map(),
+impl From<BloomQueryStats> for Statistics {
+    fn from(value: BloomQueryStats) -> Self {
+        let mut stats = Statistics::default();
+        stats.fast_rejects = usize::from(value.time_fast_rejecting.is_some());
+        stats.slow_rejects = usize::from(value.time_slow_rejecting.is_some());
+        stats.slow_accepts = usize::from(value.time_slow_accepting.is_some());
+        stats.times.fast_rejecting = value.time_fast_rejecting.unwrap_or_default();
+        stats.times.slow_rejecting = value.time_slow_rejecting.unwrap_or_default();
+        stats.times.slow_accepting = value.time_slow_accepting.unwrap_or_default();
+        stats
+    }
+}
+
+impl From<ScopeProximityStats> for Statistics {
+    fn from(value: ScopeProximityStats) -> Self {
+        let mut stats = Statistics::default();
+        stats.fast_rejects = value.fast_rejects;
+        stats.slow_rejects = value.slow_rejects;
+        stats.slow_accepts = value.slow_accepts;
+        stats.times.fast_rejecting = value.time_fast_rejecting;
+        stats.times.slow_rejecting = value.time_slow_rejecting;
+        stats.times.slow_accepting = value.time_slow_accepting;
+        stats
+    }
+}
+
+impl From<SelectorStats> for Statistics {
+    fn from(value: SelectorStats) -> Self {
+        match value {
+            SelectorStats::Bloom(bf) => bf.into(),
+            SelectorStats::ScopeProximity(sp) => sp.into(),
         }
     }
 }
 
-impl TimingStats {
-    pub fn new_for_selector_map() -> TimingStats {
-        TimingStats {
-            updating_bloom_filter: Some(Duration::ZERO),
-            checking_style_sharing: None,
-            querying_selector_map: Some(Duration::ZERO),
-            fast_rejecting: Some(Duration::ZERO),
-            slow_rejecting: Duration::ZERO,
-            slow_accepting: Duration::ZERO,
-            inserting_into_sharing_cache: None,
-            _time_inside_buckets: Some(Duration::ZERO),
-        }
-    }
-}
-
-fn add_opts<T>(lhs: &Option<T>, rhs: &Option<T>) -> Option<T>
-where
-    T: Add<Output = T> + Copy
-{
-    match (lhs, rhs) {
-        (&None, &None) => None,
-        (&None, &Some(rhs)) => Some(rhs),
-        (&Some(lhs), &None) => Some(lhs),
-        (&Some(lhs), &Some(rhs)) => Some(lhs + rhs),
-    }
-}
-
-impl Add<&Statistics> for &Statistics {
+impl Add for &Statistics {
     type Output = Statistics;
     fn add(self, rhs: &Statistics) -> Statistics {
-        let sharing_instances = add_opts(&self.sharing_instances, &rhs.sharing_instances);
-        let selector_map_hits = add_opts(&self.selector_map_hits, &rhs.selector_map_hits);
-        let fast_rejects = add_opts(&self.fast_rejects, &rhs.fast_rejects);
         Statistics {
-            sharing_instances,
-            selector_map_hits,
-            fast_rejects,
+            sharing_instances: &self.sharing_instances + &rhs.sharing_instances,
+            selector_map_hits: &self.selector_map_hits + &rhs.selector_map_hits,
+            fast_rejects: &self.fast_rejects + &rhs.fast_rejects,
             slow_rejects: &self.slow_rejects + &rhs.slow_rejects,
             slow_accepts: &self.slow_accepts + &rhs.slow_accepts,
             times: &self.times + &rhs.times,
@@ -190,61 +253,41 @@ impl Add<&Statistics> for &Statistics {
     }
 }
 
-impl Add<&TimingStats> for &TimingStats {
+impl Add for &TimingStats {
     type Output = TimingStats;
     fn add(self, rhs: &TimingStats) -> TimingStats {
-        let updating_bloom_filter = add_opts(&self.updating_bloom_filter, &rhs.updating_bloom_filter);
-        let slow_rejecting = self.slow_rejecting + rhs.slow_rejecting;
-        let fast_rejecting = add_opts(&self.fast_rejecting, &rhs.fast_rejecting);
-        let slow_accepting = self.slow_accepting + rhs.slow_accepting;
-        let checking_style_sharing = add_opts(&self.checking_style_sharing, &rhs.checking_style_sharing);
-        let inserting_into_sharing_cache =
-            add_opts(
-                &self.inserting_into_sharing_cache,
-                &rhs.inserting_into_sharing_cache,
-            );
-        let querying_selector_map =
-            add_opts(
-                &self.querying_selector_map,
-                &rhs.querying_selector_map,
-            );
-        let _time_inside_buckets =
-            add_opts(
-                &self._time_inside_buckets,
-                &rhs._time_inside_buckets
-            );
         TimingStats {
-            updating_bloom_filter,
-            slow_rejecting,
-            fast_rejecting,
-            slow_accepting,
-            checking_style_sharing,
-            inserting_into_sharing_cache,
-            querying_selector_map,
-            _time_inside_buckets,
+            updating_bloom_filter: self.updating_bloom_filter + rhs.updating_bloom_filter,
+            slow_rejecting: self.slow_rejecting + rhs.slow_rejecting,
+            fast_rejecting: self.fast_rejecting + rhs.fast_rejecting,
+            slow_accepting: self.slow_accepting + rhs.slow_accepting,
+            checking_style_sharing: self.checking_style_sharing + rhs.checking_style_sharing,
+            inserting_into_sharing_cache: self.inserting_into_sharing_cache + rhs.inserting_into_sharing_cache,
+            querying_selector_map: self.querying_selector_map + rhs.querying_selector_map,
+            _time_inside_buckets: self._time_inside_buckets + rhs._time_inside_buckets,
         }
     }
 }
 
-impl std::ops::AddAssign<&Statistics> for Statistics {
+impl AddAssign<&Statistics> for Statistics {
     fn add_assign(&mut self, rhs: &Statistics) {
         *self = &*self + rhs;
     }
 }
 
-impl std::ops::AddAssign<Statistics> for Statistics {
+impl AddAssign for Statistics {
     fn add_assign(&mut self, rhs: Statistics) {
         *self += &rhs;
     }
 }
 
-impl std::ops::AddAssign<&TimingStats> for TimingStats {
+impl AddAssign<&TimingStats> for TimingStats {
     fn add_assign(&mut self, rhs: &TimingStats) {
         *self = &*self + rhs;
     }
 }
 
-impl std::ops::AddAssign<TimingStats> for TimingStats {
+impl AddAssign for TimingStats {
     fn add_assign(&mut self, rhs: TimingStats) {
         *self += &rhs;
     }
@@ -424,7 +467,7 @@ pub fn matches_selector<E>(
     hashes: Option<&AncestorHashes>,
     element: &E,
     context: &mut MatchingContext<E::Impl>,
-) -> (bool, Statistics)
+) -> (bool, BloomQueryStats)
 where
     E: Element,
 {
@@ -449,7 +492,7 @@ pub fn matches_selector_kleene<E>(
     hashes: Option<&AncestorHashes>,
     element: &E,
     context: &mut MatchingContext<E::Impl>,
-) -> (KleeneValue, Statistics)
+) -> (KleeneValue, BloomQueryStats)
 where
     E: Element,
 {
@@ -460,22 +503,10 @@ where
             let may_match = selector_may_match(hashes, filter);
             let fast_reject_duration = start.elapsed();
             if !may_match {
-                return (KleeneValue::False, Statistics {
-                    sharing_instances: None,
-                    selector_map_hits: None,
-                    fast_rejects: Some(1),
-                    slow_rejects: 0,
-                    slow_accepts: 0,
-                    times: TimingStats {
-                        updating_bloom_filter: None,
-                        slow_rejecting: Duration::ZERO,
-                        fast_rejecting: Some(fast_reject_duration),
-                        slow_accepting: Duration::ZERO,
-                        checking_style_sharing: None,
-                        inserting_into_sharing_cache: None,
-                        querying_selector_map: None,
-                        _time_inside_buckets: None,
-                    }
+                return (KleeneValue::False, BloomQueryStats {
+                    time_fast_rejecting: Some(fast_reject_duration),
+                    time_slow_rejecting: None,
+                    time_slow_accepting: None,
                 });
             }
         }
@@ -492,26 +523,14 @@ where
         },
     );
     let slow_match_duration = start.elapsed();
-    let slow_reject = if does_match == KleeneValue::True { 0 } else { 1 };
-    let slow_accept = 1 - slow_reject;
+    let is_slow_accept = does_match == KleeneValue::True;
+    let is_slow_reject = !is_slow_accept;
     (
         does_match,
-        Statistics {
-            sharing_instances: None,
-            selector_map_hits: None,
-            fast_rejects: Some(0),
-            slow_rejects: slow_reject as usize,
-            slow_accepts: slow_accept as usize,
-            times: TimingStats {
-                updating_bloom_filter: None,
-                slow_rejecting: slow_match_duration * slow_reject,
-                fast_rejecting: Some(Duration::ZERO),
-                slow_accepting: slow_match_duration * slow_accept,
-                checking_style_sharing: None,
-                inserting_into_sharing_cache: None,
-                querying_selector_map: None,
-                _time_inside_buckets: None,
-            }
+        BloomQueryStats {
+            time_fast_rejecting: None,
+            time_slow_rejecting: is_slow_reject.then_some(slow_match_duration),
+            time_slow_accepting: is_slow_accept.then_some(slow_match_duration),
         }
     )
 }
