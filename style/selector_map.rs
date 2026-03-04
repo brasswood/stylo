@@ -427,9 +427,9 @@ impl SelectorMap<Rule> {
             matching_context.include_starting_style,
             IncludeStartingStyle::Yes
         );
-        let mut statistics = Statistics::new_for_selector_map();
+        let mut acc_stats = Statistics::new_for_selector_map();
         for rule in rules {
-            let scope_proximity = if rule.scope_condition_id == ScopeConditionId::none() {
+            let (scope_proximity, stats) = if rule.scope_condition_id == ScopeConditionId::none() {
                 let (res, stats) = matches_selector(
                     &rule.selector,
                     0,
@@ -437,19 +437,19 @@ impl SelectorMap<Rule> {
                     &element,
                     matching_context,
                 );
-                statistics += stats;
+                acc_stats += &stats;
                 if !res {
                     continue;
                 }
-                ScopeProximity::infinity()
+                (ScopeProximity::infinity(), stats)
             } else {
                 let (result, stats) =
                     cascade_data.find_scope_proximity_if_matching(rule, element, matching_context);
-                statistics += stats;
+                acc_stats += &stats;
                 if result == ScopeProximity::infinity() {
                     continue;
                 }
-                result
+                (result, stats)
             };
 
             if rule.container_condition_id != ContainerConditionId::none() {
@@ -481,11 +481,11 @@ impl SelectorMap<Rule> {
             ));
 
             if let Some(matching_selectors) = matching_selectors {
-                matching_selectors.push((rule.selector.clone(), Statistics::default())); // TODO: Is cloning bad here?
+                matching_selectors.push((rule.selector.clone(), stats)); // TODO: Is cloning bad here?
             }
         }
-        statistics.times._time_inside_buckets = Some(start.elapsed());
-        statistics
+        acc_stats.times._time_inside_buckets = Some(start.elapsed());
+        acc_stats
     }
 }
 
