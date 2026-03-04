@@ -97,9 +97,11 @@ pub struct Statistics {
     /// Number of selector map hits
     pub selector_map_hits: Option<usize>,
     /// Number of fast rejects from the bloom filter
-    pub fast_rejects: Option<usize>,
+    pub fast_rejects: Option<usize>, // This is optional, i.e., if we are not using the bloom filter.
     /// Number of slow rejects from the bloom filter
-    pub slow_rejects: Option<usize>,
+    pub slow_rejects: usize, // This is non-optional. If we are not using the bloom filter, all matches are either slow rejects or slow accepts.
+    /// Number of slow accepts
+    pub slow_accepts: usize,
     /// Times
     pub times: TimingStats,
 }
@@ -114,12 +116,12 @@ pub struct TimingStats {
     /// Time spent querying the selector map
     pub querying_selector_map: Option<Duration>,
     /// Time spent fast rejecting a selector
-    pub fast_rejecting: Option<Duration>,
+    pub fast_rejecting: Option<Duration>, // Optional: we may not be using bloom filter
     /// Time spent slow rejecting a selector after all of the following happen:
     /// - Style sharing fails
     /// - Selector appears in the selector map
     /// - Bloom filter does not fast reject
-    pub slow_rejecting: Duration,
+    pub slow_rejecting: Duration, // Non-optional: If not using bloom filter, all matches are either slow-rejects or slow-accepts
     /// Time spent slow accepting
     pub slow_accepting: Duration,
     /// Time spent inserting elements into the style sharing cache
@@ -137,7 +139,8 @@ impl Statistics {
             sharing_instances: None,
             selector_map_hits: Some(0),
             fast_rejects: Some(0),
-            slow_rejects: Some(0),
+            slow_rejects: 0,
+            slow_accepts: 0,
             times: TimingStats::new_for_selector_map(),
         }
     }
@@ -176,12 +179,12 @@ impl Add<&Statistics> for &Statistics {
         let sharing_instances = add_opts(&self.sharing_instances, &rhs.sharing_instances);
         let selector_map_hits = add_opts(&self.selector_map_hits, &rhs.selector_map_hits);
         let fast_rejects = add_opts(&self.fast_rejects, &rhs.fast_rejects);
-        let slow_rejects = add_opts(&self.slow_rejects, &rhs.slow_rejects);
         Statistics {
             sharing_instances,
             selector_map_hits,
             fast_rejects,
-            slow_rejects,
+            slow_rejects: &self.slow_rejects + &rhs.slow_rejects,
+            slow_accepts: &self.slow_accepts + &rhs.slow_accepts,
             times: &self.times + &rhs.times,
         }
     }
@@ -461,7 +464,8 @@ where
                     sharing_instances: None,
                     selector_map_hits: None,
                     fast_rejects: Some(1),
-                    slow_rejects: Some(0),
+                    slow_rejects: 0,
+                    slow_accepts: 0,
                     times: TimingStats {
                         updating_bloom_filter: None,
                         slow_rejecting: Duration::ZERO,
@@ -496,7 +500,8 @@ where
             sharing_instances: None,
             selector_map_hits: None,
             fast_rejects: Some(0),
-            slow_rejects: Some(slow_reject as usize),
+            slow_rejects: slow_reject as usize,
+            slow_accepts: slow_accept as usize,
             times: TimingStats {
                 updating_bloom_filter: None,
                 slow_rejecting: slow_match_duration * slow_reject,
