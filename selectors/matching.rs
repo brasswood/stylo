@@ -199,15 +199,6 @@ impl AddAssign<ScopeProximityStats> for Statistics {
     }
 }
 
-impl From<SelectorStats> for Statistics {
-    fn from(value: SelectorStats) -> Self {
-        match value {
-            SelectorStats::Bloom(bf) => bf.into(),
-            SelectorStats::ScopeProximity(sp) => sp.into(),
-        }
-    }
-}
-
 impl ElementSelectorFlags {
     /// Returns the subset of flags that apply to the element.
     pub fn for_self(self) -> ElementSelectorFlags {
