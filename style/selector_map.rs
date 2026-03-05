@@ -262,7 +262,8 @@ impl SelectorMap<Rule> {
         element: E,
         rule_hash_target: E,
         matching_rules_list: &mut ApplicableDeclarationList,
-        matching_selectors: &mut Option<&mut SmallVec<[(Selector<SelectorImpl>, SelectorStats); 16]>>,
+        mut matching_selectors: Option<&mut SmallVec<[Selector<SelectorImpl> ; 16]>>,
+        mut selector_stats: Option<&mut SmallVec<[(Selector<SelectorImpl>, SelectorStats); 16]>>,
         matching_context: &mut MatchingContext<E::Impl>,
         cascade_level: CascadeLevel,
         cascade_data: &CascadeData,
@@ -287,7 +288,8 @@ impl SelectorMap<Rule> {
                 element,
                 &self.root,
                 matching_rules_list,
-                matching_selectors,
+                matching_selectors.as_deref_mut(),
+                selector_stats.as_deref_mut(),
                 matching_context,
                 cascade_level,
                 cascade_data,
@@ -302,7 +304,8 @@ impl SelectorMap<Rule> {
                     element,
                     rules,
                     matching_rules_list,
-                    matching_selectors,
+                    matching_selectors.as_deref_mut(),
+                    selector_stats.as_deref_mut(),
                     matching_context,
                     cascade_level,
                     cascade_data,
@@ -318,7 +321,8 @@ impl SelectorMap<Rule> {
                     element,
                     rules,
                     matching_rules_list,
-                    matching_selectors,
+                    matching_selectors.as_deref_mut(),
+                    selector_stats.as_deref_mut(),
                     matching_context,
                     cascade_level,
                     cascade_data,
@@ -334,7 +338,8 @@ impl SelectorMap<Rule> {
                     element,
                     rules,
                     matching_rules_list,
-                    matching_selectors,
+                    matching_selectors.as_deref_mut(),
+                    selector_stats.as_deref_mut(),
                     matching_context,
                     cascade_level,
                     cascade_data,
@@ -349,7 +354,8 @@ impl SelectorMap<Rule> {
                 element,
                 rules,
                 matching_rules_list,
-                matching_selectors,
+                matching_selectors.as_deref_mut(),
+                selector_stats.as_deref_mut(),
                 matching_context,
                 cascade_level,
                 cascade_data,
@@ -366,7 +372,8 @@ impl SelectorMap<Rule> {
                 element,
                 &self.rare_pseudo_classes,
                 matching_rules_list,
-                matching_selectors,
+                matching_selectors.as_deref_mut(),
+                selector_stats.as_deref_mut(),
                 matching_context,
                 cascade_level,
                 cascade_data,
@@ -380,7 +387,8 @@ impl SelectorMap<Rule> {
                 element,
                 rules,
                 matching_rules_list,
-                matching_selectors,
+                matching_selectors.as_deref_mut(),
+                selector_stats.as_deref_mut(),
                 matching_context,
                 cascade_level,
                 cascade_data,
@@ -393,7 +401,8 @@ impl SelectorMap<Rule> {
             element,
             &self.other,
             matching_rules_list,
-            matching_selectors,
+            matching_selectors.as_deref_mut(),
+            selector_stats.as_deref_mut(),
             matching_context,
             cascade_level,
             cascade_data,
@@ -411,7 +420,8 @@ impl SelectorMap<Rule> {
         element: E,
         rules: &[Rule],
         matching_rules: &mut ApplicableDeclarationList,
-        matching_selectors: &mut Option<&mut SmallVec<[(Selector<SelectorImpl>, SelectorStats); 16]>>,
+        mut matching_selectors: Option<&mut SmallVec<[Selector<SelectorImpl>; 16]>>,
+        mut selector_stats: Option<&mut SmallVec<[(Selector<SelectorImpl>, SelectorStats); 16]>>,
         matching_context: &mut MatchingContext<E::Impl>,
         cascade_level: CascadeLevel,
         cascade_data: &CascadeData,
@@ -429,7 +439,7 @@ impl SelectorMap<Rule> {
         );
         let mut acc_stats = Statistics::default();
         for rule in rules {
-            let (scope_proximity, selector_stats) = if rule.scope_condition_id == ScopeConditionId::none() {
+            let scope_proximity = if rule.scope_condition_id == ScopeConditionId::none() {
                 let (res, bloom_stats) = matches_selector(
                     &rule.selector,
                     0,
@@ -437,21 +447,28 @@ impl SelectorMap<Rule> {
                     &element,
                     matching_context,
                 );
+                if let Some(selector_stats) = selector_stats.as_deref_mut() {
+                    selector_stats.push((rule.selector.clone(), SelectorStats::Bloom(bloom_stats)));
+                }
                 acc_stats += bloom_stats;
                 if !res {
                     continue;
                 }
-                (ScopeProximity::infinity(), SelectorStats::Bloom(bloom_stats))
+                ScopeProximity::infinity()
             } else {
                 let (result, scope_proximity_stats) =
                     cascade_data.find_scope_proximity_if_matching(rule, element, matching_context);
+                if let Some(selector_stats) = selector_stats.as_deref_mut() {
+                    selector_stats.push((rule.selector.clone(), SelectorStats::ScopeProximity(scope_proximity_stats)));
+                }
                 acc_stats += scope_proximity_stats;
                 if result == ScopeProximity::infinity() {
                     continue;
                 }
-                (result, SelectorStats::ScopeProximity(scope_proximity_stats))
+                result
             };
 
+            // TODO: figure out what stats to push for these if statements below the above one.
             if rule.container_condition_id != ContainerConditionId::none() {
                 if !cascade_data.container_condition_matches(
                     rule.container_condition_id,
@@ -480,8 +497,8 @@ impl SelectorMap<Rule> {
                 scope_proximity,
             ));
 
-            if let Some(matching_selectors) = matching_selectors {
-                matching_selectors.push((rule.selector.clone(), selector_stats)); // TODO: Is cloning bad here?
+            if let Some(matching_selectors) = matching_selectors.as_deref_mut() {
+                matching_selectors.push(rule.selector.clone()); // TODO: Is cloning bad here?
             }
         }
         acc_stats.times._time_inside_buckets = start.elapsed();
