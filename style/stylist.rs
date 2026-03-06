@@ -70,7 +70,7 @@ use rustc_hash::FxHashMap;
 use selectors::attr::{CaseSensitivity, NamespaceConstraint};
 use selectors::bloom::BloomFilter;
 use selectors::matching::{
-    MatchingContext, MatchingMode, NeedsSelectorFlags, ScopeProximityStats, SelectorCaches, Statistics, matches_selector, selector_may_match
+    MatchingContext, MatchingMode, NeedsSelectorFlags, ScopeProximityStats, SelectorCaches, matches_selector, selector_may_match
 };
 use selectors::matching::{MatchingForInvalidation, VisitedHandlingMode};
 use selectors::parser::{
