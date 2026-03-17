@@ -268,6 +268,7 @@ impl SelectorMap<Rule> {
         cascade_level: CascadeLevel,
         cascade_data: &CascadeData,
         stylist: &Stylist,
+        debug_html_selector: Option<(&str, &str)>,
     ) -> Statistics
     where
         E: SelectorMapElement,
@@ -294,6 +295,7 @@ impl SelectorMap<Rule> {
                 cascade_level,
                 cascade_data,
                 stylist,
+                debug_html_selector,
             );
         }
 
@@ -310,6 +312,7 @@ impl SelectorMap<Rule> {
                     cascade_level,
                     cascade_data,
                     stylist,
+                    debug_html_selector,
                 )
             }
         }
@@ -327,6 +330,7 @@ impl SelectorMap<Rule> {
                     cascade_level,
                     cascade_data,
                     stylist,
+                    debug_html_selector,
                 )
             }
         });
@@ -344,6 +348,7 @@ impl SelectorMap<Rule> {
                     cascade_level,
                     cascade_data,
                     stylist,
+                    debug_html_selector,
                 )
             }
         });
@@ -360,6 +365,7 @@ impl SelectorMap<Rule> {
                 cascade_level,
                 cascade_data,
                 stylist,
+                debug_html_selector,
             )
         }
 
@@ -378,6 +384,7 @@ impl SelectorMap<Rule> {
                 cascade_level,
                 cascade_data,
                 stylist,
+                debug_html_selector,
             );
         }
 
@@ -393,6 +400,7 @@ impl SelectorMap<Rule> {
                 cascade_level,
                 cascade_data,
                 stylist,
+                debug_html_selector,
             )
         }
 
@@ -407,6 +415,7 @@ impl SelectorMap<Rule> {
             cascade_level,
             cascade_data,
             stylist,
+            debug_html_selector,
         );
         let duration = start.elapsed();
         stats.times.querying_selector_map = duration - stats.times._time_inside_buckets;
@@ -426,6 +435,7 @@ impl SelectorMap<Rule> {
         cascade_level: CascadeLevel,
         cascade_data: &CascadeData,
         stylist: &Stylist,
+        debug_html_selector: Option<(&str, &str)>,
     ) -> Statistics
     where
         E: SelectorMapElement,
@@ -439,6 +449,10 @@ impl SelectorMap<Rule> {
         );
         let mut acc_stats = Statistics::default();
         for rule in rules {
+            #[cfg(debug_assertions)]
+            if let Some((html_str, debug_selector_str)) = debug_html_selector {
+                debug_element_selector(element, html_str, &rule.selector, debug_selector_str);
+            }
             let scope_proximity = if rule.scope_condition_id == ScopeConditionId::none() {
                 let (res, bloom_stats) = matches_selector(
                     &rule.selector,
@@ -1006,5 +1020,18 @@ impl<V> MaybeCaseInsensitiveHashMap<Atom, V> {
         } else {
             self.0.get(key)
         }
+    }
+}
+
+#[cfg(debug_assertions)]
+/// Debug an element and selector
+pub fn debug_element_selector<E>(element: E, html_str: &str, current_selector: &Selector<SelectorImpl>, debug_selector_str: &str)
+where
+    E: Element<Impl = SelectorImpl>,
+{
+    use cssparser::ToCss as _;
+    if element.has_class(&AtomIdent::from("DEBUG_ME"), selectors::attr::CaseSensitivity::CaseSensitive)
+        && current_selector.to_css_string() == debug_selector_str {
+        std::hint::black_box(()); // put breakpoint here
     }
 }
