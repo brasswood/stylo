@@ -449,7 +449,7 @@ impl SelectorMap<Rule> {
         );
         let mut acc_stats = Statistics::default();
         for rule in rules {
-            #[cfg(feature = "debug-element")]
+            #[cfg(feature = "debug_element")]
             if let Some((html_str, debug_selector_str)) = debug_html_selector {
                 debug_element_selector(element, html_str, &rule.selector, debug_selector_str);
             }
@@ -1023,7 +1023,7 @@ impl<V> MaybeCaseInsensitiveHashMap<Atom, V> {
     }
 }
 
-#[cfg(feature = "debug-element")]
+#[cfg(feature = "debug_element")]
 /// Debug an element and selector
 pub fn debug_element_selector<E>(element: E, html_str: &str, current_selector: &Selector<SelectorImpl>, debug_selector_str: &str)
 where

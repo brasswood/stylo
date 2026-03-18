@@ -51,6 +51,7 @@ servo = [
 gecko_debug = []
 gecko_refcount_logging = []
 nsstring = []
+debug_element = []
 
 [dependencies]
 app_units = "0.7.8"
