@@ -7,7 +7,7 @@
 
 pub mod attr;
 pub mod bloom;
-mod builder;
+pub mod builder;
 pub mod context;
 pub mod kleene_value;
 pub mod matching;
