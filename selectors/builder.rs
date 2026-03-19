@@ -77,7 +77,7 @@ impl<Impl: SelectorImpl> SelectorBuilder<Impl> {
         self.last_compound_start = Some(self.components.len());
     }
 
-    fn reverse_last_compound(&mut self) {
+    pub fn reverse_last_compound(&mut self) {
         let start = self.last_compound_start.unwrap_or(0);
         self.components[start..].reverse();
     }
