@@ -834,7 +834,7 @@ impl MatchesFeaturelessHost {
 #[cfg_attr(feature = "to_shmem", shmem(no_bounds))]
 #[repr(transparent)]
 pub struct Selector<Impl: SelectorImpl>(
-    #[cfg_attr(feature = "to_shmem", shmem(field_bound))] SelectorData<Impl>,
+    #[cfg_attr(feature = "to_shmem", shmem(field_bound))] pub(crate) SelectorData<Impl>,
 );
 
 impl<Impl: SelectorImpl> Selector<Impl> {

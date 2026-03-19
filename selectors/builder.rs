@@ -102,6 +102,15 @@ impl<Impl: SelectorImpl> SelectorBuilder<Impl> {
         self.build_with_specificity_and_flags(sf, parse_relative)
     }
 
+    /// Consumes the builder, producing an *actual* Selector.
+    #[inline(always)]
+    pub fn build_selector(
+        &mut self,
+        parse_relative: ParseRelative,
+    ) -> Selector<Impl> {
+        Selector(self.build(parse_relative))
+    }
+
     /// Builds with an explicit SpecificityAndFlags. This is separated from build() so that unit
     /// tests can pass an explicit specificity.
     #[inline(always)]
