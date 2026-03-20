@@ -268,7 +268,7 @@ impl SelectorMap<Rule> {
         cascade_level: CascadeLevel,
         cascade_data: &CascadeData,
         stylist: &Stylist,
-        debug_html_selector: Option<(&str, &str)>,
+        debug_html_str: Option<&str>,
     ) -> Statistics
     where
         E: SelectorMapElement,
@@ -295,7 +295,7 @@ impl SelectorMap<Rule> {
                 cascade_level,
                 cascade_data,
                 stylist,
-                debug_html_selector,
+                debug_html_str,
             );
         }
 
@@ -312,7 +312,7 @@ impl SelectorMap<Rule> {
                     cascade_level,
                     cascade_data,
                     stylist,
-                    debug_html_selector,
+                    debug_html_str,
                 )
             }
         }
@@ -330,7 +330,7 @@ impl SelectorMap<Rule> {
                     cascade_level,
                     cascade_data,
                     stylist,
-                    debug_html_selector,
+                    debug_html_str,
                 )
             }
         });
@@ -348,7 +348,7 @@ impl SelectorMap<Rule> {
                     cascade_level,
                     cascade_data,
                     stylist,
-                    debug_html_selector,
+                    debug_html_str,
                 )
             }
         });
@@ -365,7 +365,7 @@ impl SelectorMap<Rule> {
                 cascade_level,
                 cascade_data,
                 stylist,
-                debug_html_selector,
+                debug_html_str,
             )
         }
 
@@ -384,7 +384,7 @@ impl SelectorMap<Rule> {
                 cascade_level,
                 cascade_data,
                 stylist,
-                debug_html_selector,
+                debug_html_str,
             );
         }
 
@@ -400,7 +400,7 @@ impl SelectorMap<Rule> {
                 cascade_level,
                 cascade_data,
                 stylist,
-                debug_html_selector,
+                debug_html_str,
             )
         }
 
@@ -415,7 +415,7 @@ impl SelectorMap<Rule> {
             cascade_level,
             cascade_data,
             stylist,
-            debug_html_selector,
+            debug_html_str,
         );
         let duration = start.elapsed();
         stats.times.querying_selector_map = duration - stats.times._time_inside_buckets;
@@ -435,7 +435,7 @@ impl SelectorMap<Rule> {
         cascade_level: CascadeLevel,
         cascade_data: &CascadeData,
         stylist: &Stylist,
-        debug_html_selector: Option<(&str, &str)>,
+        debug_html_str: Option<&str>,
     ) -> Statistics
     where
         E: SelectorMapElement,
@@ -450,8 +450,8 @@ impl SelectorMap<Rule> {
         let mut acc_stats = Statistics::default();
         for rule in rules {
             #[cfg(feature = "debug_element")]
-            if let Some((html_str, debug_selector_str)) = debug_html_selector {
-                debug_element_selector(element, html_str, &rule.selector, debug_selector_str);
+            if let Some(html_str) = debug_html_str {
+                debug_element_selector(element, html_str, &rule.selector);
             }
             let scope_proximity = if rule.scope_condition_id == ScopeConditionId::none() {
                 let (res, bloom_stats) = matches_selector(
@@ -1025,13 +1025,16 @@ impl<V> MaybeCaseInsensitiveHashMap<Atom, V> {
 
 #[cfg(feature = "debug_element")]
 /// Debug an element and selector
-pub fn debug_element_selector<E>(element: E, html_str: &str, current_selector: &Selector<SelectorImpl>, debug_selector_str: &str)
+/// INSTRUCTIONS: Give an element the .DEBUG_ME class,
+/// and put :where(*, .DEBUG_ME) somewhere in a selector you want to debug
+pub fn debug_element_selector<E>(element: E, html_str: &str, current_selector: &Selector<SelectorImpl>)
 where
     E: Element<Impl = SelectorImpl>,
 {
     use cssparser::ToCss as _;
+
     if element.has_class(&AtomIdent::from("DEBUG_ME"), selectors::attr::CaseSensitivity::CaseSensitive)
-        && current_selector.to_css_string() == debug_selector_str {
+        && current_selector.to_css_string().contains("DEBUG_ME") {
         std::hint::black_box(()); // put breakpoint here
     }
 }
