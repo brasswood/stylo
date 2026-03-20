@@ -249,7 +249,7 @@ where
 
 /// Given the ancestor hashes from a selector, see if the current element,
 /// represented by the bloom filter, has a chance of matching at all.
-#[inline(always)]
+#[cfg_attr(not(feature = "debug_element"), inline(always))]
 pub fn selector_may_match(hashes: &AncestorHashes, bf: &BloomFilter) -> bool {
     // Check the first three hashes. Note that we can check for zero before
     // masking off the high bits, since if any of the first three hashes is
@@ -365,7 +365,8 @@ impl From<SelectorMatchingResult> for KleeneValue {
 /// requires dereferencing the selector to get the length, which adds an
 /// unnecessary cache miss for cases when we can fast-reject with AncestorHashes
 /// (which the caller can store inline with the selector pointer).
-#[inline(always)]
+#[cfg_attr(not(feature = "debug_element"), inline(always))]
+
 pub fn matches_selector<E>(
     selector: &Selector<E::Impl>,
     offset: usize,
@@ -390,7 +391,7 @@ where
 
 /// Same as matches_selector, but returns the Kleene value as-is.
 /// Also returns whether we fast-rejected.
-#[inline(always)]
+#[cfg_attr(not(feature = "debug_element"), inline(always))]
 pub fn matches_selector_kleene<E>(
     selector: &Selector<E::Impl>,
     offset: usize,
@@ -539,7 +540,7 @@ where
 }
 
 /// Matches a complex selector.
-#[inline(always)]
+#[cfg_attr(not(feature = "debug_element"), inline(always))]
 fn matches_complex_selector<E>(
     mut iter: SelectorIter<E::Impl>,
     element: &E,
