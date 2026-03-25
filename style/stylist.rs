@@ -1751,7 +1751,7 @@ impl Stylist {
         needs_selector_flags: NeedsSelectorFlags,
     ) -> RevalidationResult
     where
-        E: TElement,
+        E: StyleSharingElement,
     {
         // NB: `MatchingMode` doesn't really matter, given we don't share style
         // between pseudos.
@@ -1773,7 +1773,7 @@ impl Stylist {
         let mut relevant_attributes = &mut result.relevant_attributes;
         let selectors_matched = &mut result.selectors_matched;
 
-        let matches_document_rules =
+        let matches_document_rules = false; /* TODO: shadow dom
             element.each_applicable_non_document_style_rule_data(|data, host| {
                 matching_context.with_shadow_host(Some(host), |matching_context| {
                     data.selectors_for_cache_revalidation.lookup(
@@ -1793,6 +1793,7 @@ impl Stylist {
                     );
                 })
             });
+            */
 
         for (data, origin) in self.cascade_data.iter_origins() {
             if origin == Origin::Author && !matches_document_rules {

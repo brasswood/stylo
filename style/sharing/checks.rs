@@ -120,7 +120,7 @@ pub fn revalidate<E>(
     selector_caches: &mut SelectorCaches,
 ) -> bool
 where
-    E: TElement,
+    E: StyleSharingElement,
 {
     let stylist = &shared_context.stylist;
 

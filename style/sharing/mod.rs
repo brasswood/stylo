@@ -282,7 +282,7 @@ impl ValidationData {
         needs_selector_flags: NeedsSelectorFlags,
     ) -> &RevalidationResult
     where
-        E: TElement,
+        E: StyleSharingElement,
     {
         self.revalidation_match_results.get_or_insert_with(|| {
             // The bloom filter may already be set up for our element.
@@ -434,16 +434,6 @@ impl<E: StyleSharingElement> StyleSharingCandidate<E> {
     fn parent_style_identity(&mut self) -> OpaqueComputedValues {
         self.validation_data.parent_style_identity(self.element)
     }
-}
-
-impl<E: TElement> StyleSharingCandidate<E> {
-    fn scope_revalidation_results(
-        &mut self,
-        stylist: &Stylist,
-        selector_caches: &mut SelectorCaches,
-    ) -> ScopeRevalidationResult {
-        stylist.revalidate_scopes(&self.element, selector_caches, NeedsSelectorFlags::No)
-    }
 
     /// Compute the bit vector of revalidation selector match results
     /// for this candidate.
@@ -463,6 +453,16 @@ impl<E: TElement> StyleSharingCandidate<E> {
             // needed.
             NeedsSelectorFlags::No,
         )
+    }
+}
+
+impl<E: TElement> StyleSharingCandidate<E> {
+    fn scope_revalidation_results(
+        &mut self,
+        stylist: &Stylist,
+        selector_caches: &mut SelectorCaches,
+    ) -> ScopeRevalidationResult {
+        stylist.revalidate_scopes(&self.element, selector_caches, NeedsSelectorFlags::No)
     }
 }
 
@@ -544,9 +544,7 @@ impl<E: StyleSharingElement> StyleSharingTarget<E> {
     pub fn take_validation_data(&mut self) -> ValidationData {
         self.validation_data.take()
     }
-}
 
-impl<E: TElement> StyleSharingTarget<E> {
     fn revalidation_match_results(
         &mut self,
         stylist: &Stylist,
@@ -577,7 +575,9 @@ impl<E: TElement> StyleSharingTarget<E> {
             NeedsSelectorFlags::Yes,
         )
     }
+}
 
+impl<E: TElement> StyleSharingTarget<E> {
     fn scope_revalidation_results(
         &mut self,
         stylist: &Stylist,
@@ -955,12 +955,11 @@ impl<E: StyleSharingElement> StyleSharingCache<E> {
             return None;
         }
 
-        /* TODO: Shadow DOM
+        // this was actually important for correct results
         if !checks::revalidate(target, candidate, shared, bloom, selector_caches) {
             trace!("Miss: Revalidation");
             return None;
         }
-        */
 
         /* TODO: figure out whether/how to handle scoping
         // While the scoped style rules may be different (e.g. `@scope { .foo + .foo { /* .. */} }`),
