@@ -1000,6 +1000,25 @@ impl Stylist {
         had_invalidations
     }
 
+    /// Flush the list of stylesheets if they changed, rebuilding cascade data
+    /// without running stylesheet invalidation.
+    #[cfg(feature = "servo")]
+    pub fn flush_without_invalidation(&mut self, guards: &StylesheetGuards) {
+        if !self.stylesheets.has_changed() {
+            return;
+        }
+
+        self.num_rebuilds += 1;
+
+        let flusher = self.stylesheets.flusher_without_invalidation();
+
+        self.cascade_data
+            .rebuild(&self.device, self.quirks_mode, flusher, guards)
+            .unwrap_or_else(|_| warn!("OOM in Stylist::flush_without_invalidation"));
+
+        self.rebuild_initial_values_for_custom_properties();
+    }
+
     /// Marks a given stylesheet origin as dirty, due to, for example, changes
     /// in the declarations that affect a given rule.
     ///

@@ -529,14 +529,25 @@ where
 
     /// Flush stylesheets, but without running any of the invalidation passes.
     #[cfg(feature = "servo")]
-    pub fn flush_without_invalidation(&mut self) -> OriginSet {
-        debug!("DocumentStylesheetSet::flush_without_invalidation");
+    pub fn flusher_without_invalidation(&mut self) -> DocumentStylesheetFlusher<'_, S> {
+        debug!("DocumentStylesheetSet::flusher_without_invalidation");
 
-        let mut origins = OriginSet::empty();
         self.invalidations.clear();
 
-        for (collection, origin) in self.collections.iter_mut_origins() {
-            if collection.flush().dirty() {
+        DocumentStylesheetFlusher {
+            collections: &mut self.collections,
+            had_invalidations: false,
+        }
+    }
+
+    /// Flush stylesheets, but without running any of the invalidation passes.
+    #[cfg(feature = "servo")]
+    pub fn flush_without_invalidation(&mut self) -> OriginSet {
+        let mut flusher = self.flusher_without_invalidation();
+        let mut origins = OriginSet::empty();
+
+        for origin in [Origin::UserAgent, Origin::User, Origin::Author] {
+            if flusher.flush_origin(origin).dirty() {
                 origins |= origin;
             }
         }
