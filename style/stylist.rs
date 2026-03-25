@@ -1773,7 +1773,7 @@ impl Stylist {
         let mut relevant_attributes = &mut result.relevant_attributes;
         let selectors_matched = &mut result.selectors_matched;
 
-        let matches_document_rules = false; /* TODO: shadow dom
+        let matches_document_rules = true; /* TODO: shadow dom
             element.each_applicable_non_document_style_rule_data(|data, host| {
                 matching_context.with_shadow_host(Some(host), |matching_context| {
                     data.selectors_for_cache_revalidation.lookup(
