@@ -543,11 +543,13 @@ where
     /// Flush stylesheets, but without running any of the invalidation passes.
     #[cfg(feature = "servo")]
     pub fn flush_without_invalidation(&mut self) -> OriginSet {
-        let mut flusher = self.flusher_without_invalidation();
-        let mut origins = OriginSet::empty();
+        debug!("DocumentStylesheetSet::flush_without_invalidation");
 
-        for origin in [Origin::UserAgent, Origin::User, Origin::Author] {
-            if flusher.flush_origin(origin).dirty() {
+        let mut origins = OriginSet::empty();
+        self.invalidations.clear();
+
+        for (collection, origin) in self.collections.iter_mut_origins() {
+            if collection.flush().dirty() {
                 origins |= origin;
             }
         }
