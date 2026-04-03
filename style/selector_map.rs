@@ -531,16 +531,20 @@ impl<T: SelectorMapEntry> SelectorMap<T> {
         // common path.
         macro_rules! insert_into_bucket {
             ($entry:ident, $bucket:expr) => {{
-                let vec = match $bucket {
-                    Bucket::Root => &mut self.root,
-                    Bucket::ID(id) => self
-                        .id_hash
-                        .try_entry(id.clone(), quirks_mode)?
-                        .or_default(),
-                    Bucket::Class(class) => self
-                        .class_hash
-                        .try_entry(class.clone(), quirks_mode)?
-                        .or_default(),
+                if let Some(vec) = match $bucket {
+                    Bucket::Root => Some(&mut self.root),
+                    Bucket::ID(id) => Some(
+                        self
+                            .id_hash
+                            .try_entry(id.clone(), quirks_mode)?
+                            .or_default()
+                    ),
+                    Bucket::Class(class) => Some(
+                        self
+                            .class_hash
+                            .try_entry(class.clone(), quirks_mode)?
+                            .or_default()
+                    ),
                     Bucket::Attribute { name, lower_name }
                     | Bucket::LocalName { name, lower_name } => {
                         // If the local name in the selector isn't lowercase,
@@ -569,17 +573,19 @@ impl<T: SelectorMapEntry> SelectorMap<T> {
                             vec.push($entry.clone());
                         }
                         hash.try_reserve(1)?;
-                        hash.entry(name.clone()).or_default()
+                        Some(hash.entry(name.clone()).or_default())
                     },
                     Bucket::Namespace(url) => {
                         self.namespace_hash.try_reserve(1)?;
-                        self.namespace_hash.entry(url.clone()).or_default()
+                        Some(self.namespace_hash.entry(url.clone()).or_default())
                     },
-                    Bucket::RarePseudoClasses => &mut self.rare_pseudo_classes,
-                    Bucket::Universal => &mut self.other,
-                };
-                vec.try_reserve(1)?;
-                vec.push($entry);
+                    Bucket::RarePseudoClasses => Some(&mut self.rare_pseudo_classes),
+                    Bucket::Universal => Some(&mut self.other),
+                    Bucket::None => None,
+                } {
+                    vec.try_reserve(1)?;
+                    vec.push($entry);
+                }
             }};
         }
 
@@ -827,6 +833,7 @@ enum Bucket<'a> {
     Class(&'a Atom),
     ID(&'a Atom),
     Root,
+    None,
 }
 
 impl<'a> Bucket<'a> {
@@ -842,6 +849,7 @@ impl<'a> Bucket<'a> {
             Bucket::Class(..) => 5,
             Bucket::ID(..) => 6,
             Bucket::Root => 7,
+            Bucket::None => 8,
         }
     }
 
@@ -909,7 +917,9 @@ fn specific_bucket_for<'a>(
         Component::Slotted(ref selector) => find_bucket(selector.iter(), disjoint_buckets),
         Component::Host(Some(ref selector)) => find_bucket(selector.iter(), disjoint_buckets),
         Component::Is(ref list) | Component::Where(ref list) => {
-            if list.len() == 1 {
+            if list.len() == 0 {
+                Bucket::None
+            } else if list.len() == 1 {
                 find_bucket(list.slice()[0].iter(), disjoint_buckets)
             } else {
                 for selector in list.slice() {
