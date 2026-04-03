@@ -2191,6 +2191,42 @@ pub enum Component<Impl: SelectorImpl> {
 }
 
 impl<Impl: SelectorImpl> Component<Impl> {
+    /// Returns the name of this enum variant for debugging.
+    pub fn component_variant_name(&self) -> &'static str {
+        match self {
+            Component::LocalName(_) => "LocalName",
+            Component::ID(_) => "ID",
+            Component::Class(_) => "Class",
+            Component::AttributeInNoNamespaceExists { .. } => "AttributeInNoNamespaceExists",
+            Component::AttributeInNoNamespace { .. } => "AttributeInNoNamespace",
+            Component::AttributeOther(_) => "AttributeOther",
+            Component::ExplicitUniversalType => "ExplicitUniversalType",
+            Component::ExplicitAnyNamespace => "ExplicitAnyNamespace",
+            Component::ExplicitNoNamespace => "ExplicitNoNamespace",
+            Component::DefaultNamespace(_) => "DefaultNamespace",
+            Component::Namespace(_, _) => "Namespace",
+            Component::Negation(_) => "Negation",
+            Component::Root => "Root",
+            Component::Empty => "Empty",
+            Component::Scope => "Scope",
+            Component::ImplicitScope => "ImplicitScope",
+            Component::ParentSelector => "ParentSelector",
+            Component::Nth(_) => "Nth",
+            Component::NthOf(_) => "NthOf",
+            Component::NonTSPseudoClass(_) => "NonTSPseudoClass",
+            Component::Slotted(_) => "Slotted",
+            Component::Part(_) => "Part",
+            Component::Host(_) => "Host",
+            Component::Where(_) => "Where",
+            Component::Is(_) => "Is",
+            Component::Has(_) => "Has",
+            Component::Invalid(_) => "Invalid",
+            Component::PseudoElement(_) => "PseudoElement",
+            Component::Combinator(_) => "Combinator",
+            Component::RelativeSelectorAnchor => "RelativeSelectorAnchor",
+        }
+    }
+
     /// Returns true if this is a combinator.
     #[inline]
     pub fn is_combinator(&self) -> bool {
