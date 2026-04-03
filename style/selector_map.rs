@@ -917,9 +917,7 @@ fn specific_bucket_for<'a>(
         Component::Slotted(ref selector) => find_bucket(selector.iter(), disjoint_buckets),
         Component::Host(Some(ref selector)) => find_bucket(selector.iter(), disjoint_buckets),
         Component::Is(ref list) | Component::Where(ref list) => {
-            if list.len() == 0 {
-                Bucket::None
-            } else if list.len() == 1 {
+            if list.len() == 1 {
                 find_bucket(list.slice()[0].iter(), disjoint_buckets)
             } else {
                 for selector in list.slice() {
@@ -936,6 +934,7 @@ fn specific_bucket_for<'a>(
         {
             Bucket::RarePseudoClasses
         },
+        Component::Invalid(_) => Bucket::None,
         _ => Bucket::Universal,
     }
 }
