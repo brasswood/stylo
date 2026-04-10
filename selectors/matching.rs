@@ -136,18 +136,25 @@ pub struct BloomQueryStats {
 /// A struct for returning statistics
 #[derive(Default, Debug, Div, Clone, Copy, Add, AddAssign, PartialEq, Eq)]
 pub struct Statistics {
+    /// Counts
+    pub counts: CountingStats,
+    /// Times
+    pub times: TimingStats,
+}
+
+/// A sub-struct for counting statistics.
+#[derive(Default, Debug, Div, Clone, Copy, Add, AddAssign, PartialEq, Eq)]
+pub struct CountingStats {
     /// Number of sharing instances
     pub sharing_instances: usize,
     /// Number of selector map hits
     pub selector_map_hits: usize,
     /// Number of fast rejects from the bloom filter
-    pub fast_rejects: usize, // This is optional, i.e., if we are not using the bloom filter.
+    pub fast_rejects: usize,
     /// Number of slow rejects from the bloom filter
-    pub slow_rejects: usize, // This is non-optional. If we are not using the bloom filter, all matches are either slow rejects or slow accepts.
+    pub slow_rejects: usize,
     /// Number of slow accepts
     pub slow_accepts: usize,
-    /// Times
-    pub times: TimingStats,
 }
 
 /// A sub-struct for timing statistics
@@ -179,9 +186,9 @@ pub struct TimingStats {
 
 impl AddAssign<BloomQueryStats> for Statistics {
     fn add_assign(&mut self, rhs: BloomQueryStats) {
-        self.fast_rejects += usize::from(rhs.time_fast_rejecting.is_some());
-        self.slow_rejects += usize::from(rhs.time_slow_rejecting.is_some());
-        self.slow_accepts += usize::from(rhs.time_slow_accepting.is_some());
+        self.counts.fast_rejects += usize::from(rhs.time_fast_rejecting.is_some());
+        self.counts.slow_rejects += usize::from(rhs.time_slow_rejecting.is_some());
+        self.counts.slow_accepts += usize::from(rhs.time_slow_accepting.is_some());
         self.times.fast_rejecting += rhs.time_fast_rejecting.unwrap_or_default();
         self.times.slow_rejecting += rhs.time_slow_rejecting.unwrap_or_default();
         self.times.slow_accepting += rhs.time_slow_accepting.unwrap_or_default();
@@ -190,9 +197,9 @@ impl AddAssign<BloomQueryStats> for Statistics {
 
 impl AddAssign<ScopeProximityStats> for Statistics {
     fn add_assign(&mut self, rhs: ScopeProximityStats) {
-        self.fast_rejects += rhs.fast_rejects;
-        self.slow_rejects += rhs.slow_rejects;
-        self.slow_accepts += rhs.slow_accepts;
+        self.counts.fast_rejects += rhs.fast_rejects;
+        self.counts.slow_rejects += rhs.slow_rejects;
+        self.counts.slow_accepts += rhs.slow_accepts;
         self.times.fast_rejecting += rhs.time_fast_rejecting;
         self.times.slow_rejecting += rhs.time_slow_rejecting;
         self.times.slow_accepting += rhs.time_slow_accepting;

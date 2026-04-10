@@ -419,7 +419,7 @@ impl SelectorMap<Rule> {
         );
         let duration = start.elapsed();
         stats.times.querying_selector_map = duration - stats.times._time_inside_buckets;
-        stats.selector_map_hits = hits;
+        stats.counts.selector_map_hits = hits;
         stats
     }
 
