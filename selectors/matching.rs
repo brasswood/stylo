@@ -19,7 +19,7 @@ use crate::relative_selector::cache::RelativeSelectorCachedMatch;
 use crate::tree::Element;
 use bitflags::bitflags;
 use debug_unreachable::debug_unreachable;
-use derive_more::{Add, AddAssign};
+use derive_more::{Add, AddAssign, Div};
 use log::debug;
 use smallvec::SmallVec;
 use std::borrow::Borrow;
@@ -134,7 +134,7 @@ pub struct BloomQueryStats {
 }
 
 /// A struct for returning statistics
-#[derive(Default, Debug, Clone, Copy, Add, AddAssign, PartialEq, Eq)]
+#[derive(Default, Debug, Div, Clone, Copy, Add, AddAssign, PartialEq, Eq)]
 pub struct Statistics {
     /// Number of sharing instances
     pub sharing_instances: usize,
@@ -151,7 +151,7 @@ pub struct Statistics {
 }
 
 /// A sub-struct for timing statistics
-#[derive(Default, Debug, Clone, Copy, Add, AddAssign, PartialEq, Eq)]
+#[derive(Default, Debug, Div, Clone, Copy, Add, AddAssign, PartialEq, Eq)]
 pub struct TimingStats {
     /// Time spent updating the bloom filter
     pub updating_bloom_filter: Duration,
