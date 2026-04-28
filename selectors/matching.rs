@@ -24,7 +24,7 @@ use log::debug;
 use smallvec::SmallVec;
 use std::borrow::Borrow;
 use std::ops::AddAssign;
-use std::time::{Duration, Instant};
+use tsc_timer::{Start, Duration};
 
 pub use crate::context::*;
 
@@ -412,7 +412,7 @@ where
     // Use the bloom filter to fast-reject.
     if let Some(hashes) = hashes {
         if let Some(filter) = context.bloom_filter {
-            let start = Instant::now();
+            let start = Start::now();
             let may_match = selector_may_match(hashes, filter);
             let fast_reject_duration = start.elapsed();
             if !may_match {
@@ -424,7 +424,7 @@ where
             }
         }
     }
-    let start = Instant::now();
+    let start = Start::now();
     let does_match = matches_complex_selector(
         selector.iter_from(offset),
         element,

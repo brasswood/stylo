@@ -33,6 +33,7 @@ smallvec = "1.0"
 to_shmem = { workspace = true, optional = true }
 to_shmem_derive = { workspace = true, optional = true }
 new_debug_unreachable = "1"
+tsc-timer = { path = "../../tsc" }
 
 [build-dependencies]
 phf_codegen = "0.13"
