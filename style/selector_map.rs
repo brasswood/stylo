@@ -927,12 +927,20 @@ fn specific_bucket_for<'a>(
                 Bucket::Universal
             }
         },
-        Component::NonTSPseudoClass(ref pseudo_class)
+        Component::NonTSPseudoClass(ref pseudo_class) =>
+        {
             if pseudo_class
                 .state_flag()
-                .intersects(RARE_PSEUDO_CLASS_STATES) =>
-        {
-            Bucket::RarePseudoClasses
+                .intersects(RARE_PSEUDO_CLASS_STATES)
+            {
+                Bucket::RarePseudoClasses
+            } else {
+                // The goal of this is to get `:hover` selectors into a highly specific bucket. We are seeing that these are slow, and we think this is happening because if an element is not actually `:hover`ed, it won't be known until the slow match phase. In other words, `:hover` is quite a specific selector, so we should put `:hover` selectors in a bucket so that they are only tested against hovered elements.
+                // For now, we are just going to put this in Bucket::None. It will serve our purposes since we have no `:hover`ed elements. In reality, this should probably go into a 'hover' bucket, likely more specific than a class bucket but less specific than an ID bucket.
+                // We also need to consider what should be done about all the other pseudo-classes.
+                // TODO: put `:hover` into an actual bucket and figure out how to handle all the other pseudo-classes correctly.
+                Bucket::None
+            }
         },
         Component::Invalid(_) => Bucket::None,
         _ => Bucket::Universal,
