@@ -179,6 +179,8 @@ pub struct SelectorMap<T: 'static> {
     pub root: SmallVec<[T; 1]>,
     /// A hash from an ID to rules which contain that ID selector.
     pub id_hash: MaybeCaseInsensitiveHashMap<Atom, SmallVec<[T; 1]>>,
+    /// Rules with selectors that have common pseudo-classes such as :hover.
+    pub common_pseudo_classes: SmallVec<[T; 1]>,
     /// A hash from a class name to rules which contain that class selector.
     pub class_hash: MaybeCaseInsensitiveHashMap<Atom, SmallVec<[T; 1]>>,
     /// A hash from local name to rules which contain that local name selector.
@@ -208,6 +210,7 @@ impl<T> SelectorMap<T> {
         SelectorMap {
             root: SmallVec::new(),
             id_hash: MaybeCaseInsensitiveHashMap::new(),
+            common_pseudo_classes: SmallVec::new(),
             class_hash: MaybeCaseInsensitiveHashMap::new(),
             attribute_hash: HashMap::default(),
             local_name_hash: HashMap::default(),
@@ -315,6 +318,23 @@ impl SelectorMap<Rule> {
                     debug_html_str,
                 )
             }
+        }
+
+        // TODO: this is my best guess at how to determine if an element is eligible to be matched against all the selectors that have common pseudo-classes such as :hover.
+        if !rule_hash_target.state().is_empty() {
+            hits += self.common_pseudo_classes.len();
+            stats += SelectorMap::get_matching_rules(
+                element,
+                &self.common_pseudo_classes,
+                matching_rules_list,
+                matching_selectors.as_deref_mut(),
+                selector_stats.as_deref_mut(),
+                matching_context,
+                cascade_level,
+                cascade_data,
+                stylist,
+                debug_html_str,
+            );
         }
 
         rule_hash_target.each_class(|class| {
@@ -539,6 +559,7 @@ impl<T: SelectorMapEntry> SelectorMap<T> {
                             .try_entry(id.clone(), quirks_mode)?
                             .or_default()
                     ),
+                    Bucket::CommonPseudoClasses => Some(&mut self.common_pseudo_classes),
                     Bucket::Class(class) => Some(
                         self
                             .class_hash
@@ -831,6 +852,7 @@ enum Bucket<'a> {
         lower_name: &'a LocalName,
     },
     Class(&'a Atom),
+    CommonPseudoClasses,
     ID(&'a Atom),
     Root,
     None,
@@ -847,9 +869,10 @@ impl<'a> Bucket<'a> {
             Bucket::LocalName { .. } => 3,
             Bucket::Attribute { .. } => 4,
             Bucket::Class(..) => 5,
-            Bucket::ID(..) => 6,
-            Bucket::Root => 7,
-            Bucket::None => 8,
+            Bucket::CommonPseudoClasses => 6, // TODO: :hover should be more specific than class and less specific than ID, since it can match up to one element and its ancestor chain. What about the other non-rare pseudo-classes?
+            Bucket::ID(..) => 7,
+            Bucket::Root => 8,
+            Bucket::None => 9,
         }
     }
 
@@ -936,10 +959,8 @@ fn specific_bucket_for<'a>(
                 Bucket::RarePseudoClasses
             } else {
                 // The goal of this is to get `:hover` selectors into a highly specific bucket. We are seeing that these are slow, and we think this is happening because if an element is not actually `:hover`ed, it won't be known until the slow match phase. In other words, `:hover` is quite a specific selector, so we should put `:hover` selectors in a bucket so that they are only tested against hovered elements.
-                // For now, we are just going to put this in Bucket::None. It will serve our purposes since we have no `:hover`ed elements. In reality, this should probably go into a 'hover' bucket, likely more specific than a class bucket but less specific than an ID bucket.
-                // We also need to consider what should be done about all the other pseudo-classes.
-                // TODO: put `:hover` into an actual bucket and figure out how to handle all the other pseudo-classes correctly.
-                Bucket::None
+                // TODO: should this really be one bucket for all selectors with any of the common pseudo-classes?
+                Bucket::CommonPseudoClasses
             }
         },
         Component::Invalid(_) => Bucket::None,
