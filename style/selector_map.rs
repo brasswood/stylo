@@ -321,7 +321,7 @@ impl SelectorMap<Rule> {
         }
 
         // TODO: this is my best guess at how to determine if an element is eligible to be matched against all the selectors that have common pseudo-classes such as :hover.
-        if !rule_hash_target.state().is_empty() {
+        if !rule_hash_target.state().intersects(RARE_PSEUDO_CLASS_STATES.complement()) {
             hits += self.common_pseudo_classes.len();
             stats += SelectorMap::get_matching_rules(
                 element,
