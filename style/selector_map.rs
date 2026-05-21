@@ -45,24 +45,6 @@ impl Default for PrecomputedHasher {
 /// A vector of relevant attributes, that can be useful for revalidation.
 pub type RelevantAttributes = thin_vec::ThinVec<LocalName>;
 
-/// This is a set of pseudo-classes that are both relatively-rare (they don't
-/// affect most elements by default) and likely or known to have global rules
-/// (in e.g., the UA sheets).
-///
-/// We can avoid selector-matching those global rules for all elements without
-/// these pseudo-class states.
-const RARE_PSEUDO_CLASS_STATES: ElementState = ElementState::from_bits_retain(
-    ElementState::FULLSCREEN.bits()
-        | ElementState::VISITED_OR_UNVISITED.bits()
-        | ElementState::URLTARGET.bits()
-        | ElementState::INERT.bits()
-        | ElementState::FOCUS.bits()
-        | ElementState::FOCUSRING.bits()
-        | ElementState::TOPMOST_MODAL.bits()
-        | ElementState::SUPPRESS_FOR_PRINT_SELECTION.bits()
-        | ElementState::HEADING_LEVEL_BITS.bits(),
-);
-
 /// A simple alias for a hashmap using PrecomputedHasher.
 pub type PrecomputedHashMap<K, V> = HashMap<K, V, BuildHasherDefault<PrecomputedHasher>>;
 
@@ -321,7 +303,7 @@ impl SelectorMap<Rule> {
         }
 
         // TODO: this is my best guess at how to determine if an element is eligible to be matched against all the selectors that have common pseudo-classes such as :hover.
-        if !rule_hash_target.state().intersects(RARE_PSEUDO_CLASS_STATES.complement()) {
+        if !rule_hash_target.state().intersects(ElementState::RARE_PSEUDO_CLASS_STATES.complement()) {
             hits += self.common_pseudo_classes.len();
             stats += SelectorMap::get_matching_rules(
                 element,
@@ -391,7 +373,7 @@ impl SelectorMap<Rule> {
 
         if rule_hash_target
             .state()
-            .intersects(RARE_PSEUDO_CLASS_STATES)
+            .intersects(ElementState::RARE_PSEUDO_CLASS_STATES)
         {
             hits += self.rare_pseudo_classes.len();
             stats += SelectorMap::get_matching_rules(
@@ -764,7 +746,7 @@ impl<T: SelectorMapEntry> SelectorMap<T> {
             }
         }
 
-        if element_state.intersects(RARE_PSEUDO_CLASS_STATES) {
+        if element_state.intersects(ElementState::RARE_PSEUDO_CLASS_STATES) {
             for entry in self.rare_pseudo_classes.iter() {
                 if !f(&entry) {
                     return false;
@@ -954,7 +936,7 @@ fn specific_bucket_for<'a>(
         {
             if pseudo_class
                 .state_flag()
-                .intersects(RARE_PSEUDO_CLASS_STATES)
+                .intersects(ElementState::RARE_PSEUDO_CLASS_STATES)
             {
                 Bucket::RarePseudoClasses
             } else {

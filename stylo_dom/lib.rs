@@ -159,6 +159,22 @@ bitflags! {
         const DISABLED_STATES = Self::DISABLED.bits() | Self::ENABLED.bits();
 
         const REQUIRED_STATES = Self::REQUIRED.bits() | Self::OPTIONAL_.bits();
+
+        /// This is a set of pseudo-classes that are both relatively-rare (they don't
+        /// affect most elements by default) and likely or known to have global rules
+        /// (in e.g., the UA sheets).
+        ///
+        /// We can avoid selector-matching those global rules for all elements without
+        /// these pseudo-class states.
+        const RARE_PSEUDO_CLASS_STATES = Self::FULLSCREEN.bits()
+        | Self::VISITED_OR_UNVISITED.bits()
+        | Self::URLTARGET.bits()
+        | Self::INERT.bits()
+        | Self::FOCUS.bits()
+        | Self::FOCUSRING.bits()
+        | Self::TOPMOST_MODAL.bits()
+        | Self::SUPPRESS_FOR_PRINT_SELECTION.bits()
+        | Self::HEADING_LEVEL_BITS.bits();
     }
 }
 
