@@ -361,6 +361,10 @@ impl ::selectors::parser::NonTSPseudoClass for NonTSPseudoClass {
     {
         true
     }
+
+    fn is_common(&self) -> bool {
+        self.state_flag().intersects(ElementState::RARE_PSEUDO_CLASS_STATES.complement())
+    }
 }
 
 impl ToCss for NonTSPseudoClass {

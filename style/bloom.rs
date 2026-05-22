@@ -10,6 +10,7 @@
 use crate::{dom::SendElement, selector_map::SelectorMapElement};
 use crate::LocalName;
 use atomic_refcell::{AtomicRefCell, AtomicRefMut};
+use dom::ElementState;
 use selectors::bloom::BloomFilter;
 use smallvec::SmallVec;
 
@@ -76,6 +77,9 @@ pub struct StyleBloom<E: BloomFilterElement> {
 
     /// Stack of hashes that have been pushed onto this filter.
     pushed_hashes: SmallVec<[u32; 64]>,
+
+    /// Number of common pseudo-classes we've seen. Like an extra counting bit in the bloom filter.
+    common_pseudo_classes: u8,
 }
 
 /// The very rough benchmarks in the selectors crate show clear()
@@ -164,12 +168,13 @@ impl<E: BloomFilterElement> StyleBloom<E> {
             filter,
             elements: Default::default(),
             pushed_hashes: Default::default(),
+            common_pseudo_classes: Default::default(),
         }
     }
 
     /// Return the bloom filter used properly by the `selectors` crate.
-    pub fn filter(&self) -> &BloomFilter {
-        &*self.filter
+    pub fn filter(&self) -> (&BloomFilter, &u8) {
+        (&*self.filter, &self.common_pseudo_classes)
     }
 
     /// Push an element to the bloom filter, knowing that it's a child of the
@@ -193,6 +198,10 @@ impl<E: BloomFilterElement> StyleBloom<E> {
             self.pushed_hashes.push(hash);
         });
         self.elements.push(PushedElement::new(element, count));
+
+        if element.state().intersects(ElementState::RARE_PSEUDO_CLASS_STATES.complement()) {
+            self.common_pseudo_classes = self.common_pseudo_classes.saturating_add(1);
+        }
     }
 
     /// Pop the last element in the bloom filter and return it.
@@ -214,6 +223,12 @@ impl<E: BloomFilterElement> StyleBloom<E> {
             let hash = self.pushed_hashes.pop().unwrap();
             debug_assert_eq!(expected_hashes.pop().unwrap(), hash);
             self.filter.remove_hash(hash);
+        }
+
+        if element.state().intersects(ElementState::RARE_PSEUDO_CLASS_STATES.complement()) {
+            if self.common_pseudo_classes < u8::MAX {
+                self.common_pseudo_classes -= 1;
+            }
         }
 
         Some(popped_element)
@@ -239,6 +254,7 @@ impl<E: BloomFilterElement> StyleBloom<E> {
             }
             debug_assert!(self.filter.is_zeroed());
         }
+        self.common_pseudo_classes = 0;
     }
 
     /// Rebuilds the bloom filter up to the parent of the given element.

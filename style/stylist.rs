@@ -1765,7 +1765,7 @@ impl Stylist {
     pub fn match_revalidation_selectors<E>(
         &self,
         element: E,
-        bloom: Option<&BloomFilter>,
+        bloom: Option<(&BloomFilter, &u8)>,
         selector_caches: &mut SelectorCaches,
         needs_selector_flags: NeedsSelectorFlags,
     ) -> RevalidationResult
@@ -2813,6 +2813,7 @@ impl ScopeBoundWithHashes {
             .iter()
             .map(|_| AncestorHashes {
                 packed_hashes: [0, 0, 0],
+                has_common_pseudo_class: false,
             })
             .collect();
         Self { selectors, hashes }

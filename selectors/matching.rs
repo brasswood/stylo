@@ -257,7 +257,7 @@ where
 /// Given the ancestor hashes from a selector, see if the current element,
 /// represented by the bloom filter, has a chance of matching at all.
 #[cfg_attr(not(feature = "debug_element"), inline(always))]
-pub fn selector_may_match(hashes: &AncestorHashes, bf: &BloomFilter) -> bool {
+pub fn selector_may_match(hashes: &AncestorHashes, (bf, common_pseudo_classes): (&BloomFilter, &u8)) -> bool {
     // Check the first three hashes. Note that we can check for zero before
     // masking off the high bits, since if any of the first three hashes is
     // zero the fourth will be as well. We also take care to avoid the
@@ -281,7 +281,11 @@ pub fn selector_may_match(hashes: &AncestorHashes, bf: &BloomFilter) -> bool {
     // Now do the slighty-more-complex work of synthesizing the fourth hash,
     // and check it against the filter if it exists.
     let fourth = hashes.fourth_hash();
-    fourth == 0 || bf.might_contain_hash(fourth)
+    if !(fourth == 0 || bf.might_contain_hash(fourth)) {
+        return false;
+    }
+
+    !(hashes.has_common_pseudo_class && *common_pseudo_classes == 0)
 }
 
 /// A result of selector matching, includes 3 failure types,

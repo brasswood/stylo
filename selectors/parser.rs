@@ -97,6 +97,9 @@ pub trait NonTSPseudoClass: Sized + ToCss {
     {
         true
     }
+
+    /// Whether this is a "common" pseudo-class
+    fn is_common(&self) -> bool;
 }
 
 /// Returns a Cow::Borrowed if `s` is already ASCII lowercase, and a
@@ -653,6 +656,7 @@ where
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AncestorHashes {
     pub packed_hashes: [u32; 3],
+    pub has_common_pseudo_class: bool,
 }
 
 pub(crate) fn collect_selector_hashes<'a, Impl: SelectorImpl, Iter>(
@@ -774,8 +778,13 @@ impl AncestorHashes {
             hashes[2] |= (fourth & 0x00ff0000) << 8;
         }
 
+        // Figure out if there are any common pseudo-classes
+        let has_common_pseudo_class = selector.iter().any(|component|
+            matches!(component, Component::NonTSPseudoClass(pseudo_class) if pseudo_class.is_common())
+        );
         AncestorHashes {
             packed_hashes: [hashes[0], hashes[1], hashes[2]],
+            has_common_pseudo_class,
         }
     }
 
@@ -3856,6 +3865,10 @@ pub mod tests {
 
         #[inline]
         fn is_user_action_state(&self) -> bool {
+            self.is_active_or_hover()
+        }
+
+        fn is_common(&self) -> bool {
             self.is_active_or_hover()
         }
     }
