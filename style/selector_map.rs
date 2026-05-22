@@ -242,13 +242,13 @@ impl SelectorMap<Rule> {
     /// Extract matching rules as per element's ID, classes, tag name, etc..
     /// Sort the Rules at the end to maintain cascading order.
     /// Return statistics
-    pub fn get_all_matching_rules<E>(
-        &self,
+    pub fn get_all_matching_rules<'selectormap, E>(
+        &'selectormap self,
         element: E,
         rule_hash_target: E,
         matching_rules_list: &mut ApplicableDeclarationList,
-        mut matching_selectors: Option<&mut SmallVec<[Selector<SelectorImpl> ; 16]>>,
-        mut selector_stats: Option<&mut SmallVec<[(Selector<SelectorImpl>, SelectorStats); 16]>>,
+        mut matching_selectors: Option<&mut SmallVec<[&'selectormap Selector<SelectorImpl> ; 16]>>,
+        mut selector_stats: Option<&mut SmallVec<[(&'selectormap Selector<SelectorImpl>, SelectorStats); 16]>>,
         matching_context: &mut MatchingContext<E::Impl>,
         cascade_level: CascadeLevel,
         cascade_data: &CascadeData,
@@ -427,12 +427,12 @@ impl SelectorMap<Rule> {
 
     /// Adds rules in `rules` that match `element` to the `matching_rules` list.
     /// Returns number of fast-rejects from the bloom filter.
-    pub(crate) fn get_matching_rules<E>(
+    pub(crate) fn get_matching_rules<'rule, E>(
         element: E,
-        rules: &[Rule],
+        rules: &'rule [Rule],
         matching_rules: &mut ApplicableDeclarationList,
-        mut matching_selectors: Option<&mut SmallVec<[Selector<SelectorImpl>; 16]>>,
-        mut selector_stats: Option<&mut SmallVec<[(Selector<SelectorImpl>, SelectorStats); 16]>>,
+        mut matching_selectors: Option<&mut SmallVec<[&'rule Selector<SelectorImpl>; 16]>>,
+        mut selector_stats: Option<&mut SmallVec<[(&'rule Selector<SelectorImpl>, SelectorStats); 16]>>,
         matching_context: &mut MatchingContext<E::Impl>,
         cascade_level: CascadeLevel,
         cascade_data: &CascadeData,
@@ -464,7 +464,7 @@ impl SelectorMap<Rule> {
                     matching_context,
                 );
                 if let Some(selector_stats) = selector_stats.as_deref_mut() {
-                    selector_stats.push((rule.selector.clone(), SelectorStats::Bloom(bloom_stats)));
+                    selector_stats.push((&rule.selector, SelectorStats::Bloom(bloom_stats)));
                 }
                 acc_stats += bloom_stats;
                 if !res {
@@ -475,7 +475,7 @@ impl SelectorMap<Rule> {
                 let (result, scope_proximity_stats) =
                     cascade_data.find_scope_proximity_if_matching(rule, element, matching_context);
                 if let Some(selector_stats) = selector_stats.as_deref_mut() {
-                    selector_stats.push((rule.selector.clone(), SelectorStats::ScopeProximity(scope_proximity_stats)));
+                    selector_stats.push((&rule.selector, SelectorStats::ScopeProximity(scope_proximity_stats)));
                 }
                 acc_stats += scope_proximity_stats;
                 if result == ScopeProximity::infinity() {
@@ -514,7 +514,7 @@ impl SelectorMap<Rule> {
             ));
 
             if let Some(matching_selectors) = matching_selectors.as_deref_mut() {
-                matching_selectors.push(rule.selector.clone()); // TODO: Is cloning bad here?
+                matching_selectors.push(&rule.selector); // TODO: Is cloning bad here?
             }
         }
         acc_stats.times._time_inside_buckets = start.elapsed();
