@@ -657,8 +657,8 @@ impl<T: MallocSizeOf, U> MallocSizeOf for euclid::Vector2D<T, U> {
 
 impl MallocSizeOf for selectors::parser::AncestorHashes {
     fn size_of(&self, ops: &mut MallocSizeOfOps) -> usize {
-        let selectors::parser::AncestorHashes { ref packed_hashes, ref has_common_pseudo_class} = *self;
-        packed_hashes.size_of(ops) + has_common_pseudo_class.size_of(ops)
+        let selectors::parser::AncestorHashes { ref packed_hashes } = *self;
+        packed_hashes.size_of(ops)
     }
 }
 

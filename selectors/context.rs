@@ -151,7 +151,7 @@ where
     matching_mode: MatchingMode,
     /// Input with the bloom filter used to fast-reject selectors.
     /// Includes extra field tracking number of elements that would match pseudo-classes.
-    pub bloom_filter: Option<(&'a BloomFilter, &'a u8)>,
+    pub bloom_filter: Option<&'a BloomFilter>,
     /// The element which is going to match :scope pseudo-class. It can be
     /// either one :scope element, or the scoping element.
     ///
@@ -216,7 +216,7 @@ where
     /// Constructs a new `MatchingContext`.
     pub fn new(
         matching_mode: MatchingMode,
-        bloom_filter: Option<(&'a BloomFilter, &'a u8)>,
+        bloom_filter: Option<&'a BloomFilter>,
         selector_caches: &'a mut SelectorCaches,
         quirks_mode: QuirksMode,
         needs_selector_flags: NeedsSelectorFlags,
@@ -237,7 +237,7 @@ where
     /// Constructs a new `MatchingContext` for use in visited matching.
     pub fn new_for_visited(
         matching_mode: MatchingMode,
-        bloom_filter: Option<(&'a BloomFilter, &'a u8)>,
+        bloom_filter: Option<&'a BloomFilter>,
         selector_caches: &'a mut SelectorCaches,
         visited_handling: VisitedHandlingMode,
         include_starting_style: IncludeStartingStyle,

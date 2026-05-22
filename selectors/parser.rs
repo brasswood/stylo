@@ -656,7 +656,6 @@ where
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AncestorHashes {
     pub packed_hashes: [u32; 3],
-    pub has_common_pseudo_class: bool,
 }
 
 pub(crate) fn collect_selector_hashes<'a, Impl: SelectorImpl, Iter>(
@@ -738,6 +737,11 @@ where
                 }
                 continue;
             },
+            Component::NonTSPseudoClass(ref pc) if pc.is_common() => {
+                // Hash value 1 if the selector has a "common" pseudo-class (0 is sentinel)
+                // TODO: maybe compute a more reasonable hash
+                1
+            },
             _ => continue,
         };
 
@@ -778,13 +782,8 @@ impl AncestorHashes {
             hashes[2] |= (fourth & 0x00ff0000) << 8;
         }
 
-        // Figure out if there are any common pseudo-classes
-        let has_common_pseudo_class = selector.iter().any(|component|
-            matches!(component, Component::NonTSPseudoClass(pseudo_class) if pseudo_class.is_common())
-        );
         AncestorHashes {
             packed_hashes: [hashes[0], hashes[1], hashes[2]],
-            has_common_pseudo_class,
         }
     }
 
