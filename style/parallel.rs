@@ -63,7 +63,7 @@ pub(crate) fn create_thread_local_context<'scope, E>(slot: &mut Option<ThreadLoc
 where
     E: TElement + 'scope,
 {
-    *slot = Some(ThreadLocalStyleContext::new());
+    *slot = Some(ThreadLocalStyleContext::new(false));
 }
 
 // Sends one chunk of work to the thread-pool.

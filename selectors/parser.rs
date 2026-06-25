@@ -114,6 +114,10 @@ fn to_ascii_lowercase(s: &str) -> Cow<'_, str> {
     }
 }
 
+pub const COMMON_PSEUDO_CLASS_HASH: u32 = 1;
+pub const FIRST_EDGE_CHILD_HASH: u32 = 2;
+pub const LAST_EDGE_CHILD_HASH: u32 = 3;
+
 bitflags! {
     /// Flags that indicate at which point of parsing a selector are we.
     #[derive(Copy, Clone)]
@@ -661,6 +665,7 @@ pub struct AncestorHashes {
 pub(crate) fn collect_selector_hashes<'a, Impl: SelectorImpl, Iter>(
     iter: Iter,
     quirks_mode: QuirksMode,
+    use_edge_selector_optimization: bool,
     hashes: &mut [u32; 4],
     len: &mut usize,
     create_inner_iterator: fn(&'a Selector<Impl>) -> Iter,
@@ -728,6 +733,7 @@ where
                     && !collect_selector_hashes(
                         create_inner_iterator(&slice[0]),
                         quirks_mode,
+                        use_edge_selector_optimization,
                         hashes,
                         len,
                         create_inner_iterator,
@@ -738,9 +744,16 @@ where
                 continue;
             },
             Component::NonTSPseudoClass(ref pc) if pc.is_common() => {
-                // Hash value 1 if the selector has a "common" pseudo-class (0 is sentinel)
-                // TODO: maybe compute a more reasonable hash
-                1
+                COMMON_PSEUDO_CLASS_HASH
+            },
+            Component::Nth(ref nth)
+                if use_edge_selector_optimization && nth.is_simple_edge() =>
+            {
+                if nth.ty.is_from_end() {
+                    LAST_EDGE_CHILD_HASH
+                } else {
+                    FIRST_EDGE_CHILD_HASH
+                }
             },
             _ => continue,
         };
@@ -757,20 +770,37 @@ where
 fn collect_ancestor_hashes<Impl: SelectorImpl>(
     iter: SelectorIter<Impl>,
     quirks_mode: QuirksMode,
+    use_edge_selector_optimization: bool,
     hashes: &mut [u32; 4],
     len: &mut usize,
 ) {
-    collect_selector_hashes(AncestorIter::new(iter), quirks_mode, hashes, len, |s| {
+    collect_selector_hashes(
+        AncestorIter::new(iter),
+        quirks_mode,
+        use_edge_selector_optimization,
+        hashes,
+        len,
+        |s| {
         AncestorIter(s.iter())
     });
 }
 
 impl AncestorHashes {
-    pub fn new<Impl: SelectorImpl>(selector: &Selector<Impl>, quirks_mode: QuirksMode) -> Self {
+    pub fn new<Impl: SelectorImpl>(
+        selector: &Selector<Impl>,
+        quirks_mode: QuirksMode,
+        use_edge_selector_optimization: bool,
+    ) -> Self {
         // Compute ancestor hashes for the bloom filter.
         let mut hashes = [0u32; 4];
         let mut len = 0;
-        collect_ancestor_hashes(selector.iter(), quirks_mode, &mut hashes, &mut len);
+        collect_ancestor_hashes(
+            selector.iter(),
+            quirks_mode,
+            use_edge_selector_optimization,
+            &mut hashes,
+            &mut len,
+        );
         debug_assert!(len <= 4);
 
         // Now, pack the fourth hash (if it exists) into the upper byte of each of

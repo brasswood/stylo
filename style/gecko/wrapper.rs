@@ -2234,7 +2234,9 @@ impl<'le> ::selectors::Element for GeckoElement<'le> {
     }
 
     fn add_element_unique_hashes(&self, filter: &mut BloomFilter) -> bool {
-        each_relevant_element_hash(*self, |hash| filter.insert_hash(hash & BLOOM_HASH_MASK));
+        each_relevant_element_hash(*self, false, |hash| {
+            filter.insert_hash(hash & BLOOM_HASH_MASK)
+        });
         true
     }
 }
