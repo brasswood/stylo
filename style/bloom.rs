@@ -150,10 +150,13 @@ where
     }
 
     if use_edge_selector_optimization {
-        if element.prev_sibling_element().is_none() {
+        let local_name = element.local_name();
+        let should_hash_edge =
+            local_name != &*local_name!("html") && local_name != &*local_name!("body");
+        if should_hash_edge && element.prev_sibling_element().is_none() {
             f(FIRST_EDGE_CHILD_HASH);
         }
-        if element.next_sibling_element().is_none() {
+        if should_hash_edge && element.next_sibling_element().is_none() {
             f(LAST_EDGE_CHILD_HASH);
         }
     }
