@@ -10,6 +10,38 @@ use crate::relative_selector::cache::RelativeSelectorCache;
 use crate::relative_selector::filter::RelativeSelectorFilterMap;
 use crate::tree::{Element, OpaqueElement};
 
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct FailCache {
+    entries: [u16; 8],
+}
+
+impl FailCache {
+    #[inline]
+    pub fn contains(&self, id: u16) -> bool {
+        debug_assert_ne!(id, 0, "0 is reserved as the vacant fail-cache entry");
+        self.entries.contains(&id)
+    }
+
+    #[inline]
+    pub fn insert(&mut self, id: u16) {
+        debug_assert_ne!(id, 0, "0 is reserved as the vacant fail-cache entry");
+        if let Some(index) = self.entries.iter().position(|entry| *entry == id) {
+            self.entries[..=index].rotate_right(1);
+            self.entries[0] = id;
+            return;
+        }
+
+        if let Some(index) = self.entries.iter().position(|entry| *entry == 0) {
+            self.entries[..=index].rotate_right(1);
+            self.entries[0] = id;
+            return;
+        }
+
+        self.entries.rotate_right(1);
+        self.entries[0] = id;
+    }
+}
+
 /// What kind of selector matching mode we should use.
 ///
 /// There are two modes of selector matching. The difference is only noticeable
@@ -205,6 +237,7 @@ where
     /// Caches to speed up expensive selector matches.
     pub selector_caches: &'a mut SelectorCaches,
 
+    use_fail_caches: bool,
     classes_and_ids_case_sensitivity: CaseSensitivity,
     _impl: ::std::marker::PhantomData<Impl>,
 }
@@ -264,6 +297,7 @@ where
             extra_data: Default::default(),
             current_relative_selector_anchor: None,
             selector_caches,
+            use_fail_caches: false,
             _impl: ::std::marker::PhantomData,
         }
     }
@@ -309,6 +343,16 @@ where
     #[inline]
     pub fn needs_selector_flags(&self) -> bool {
         self.needs_selector_flags == NeedsSelectorFlags::Yes
+    }
+
+    #[inline]
+    pub fn set_use_fail_caches(&mut self, value: bool) {
+        self.use_fail_caches = value;
+    }
+
+    #[inline]
+    pub fn use_fail_caches(&self) -> bool {
+        self.use_fail_caches
     }
 
     /// Whether or not we're matching to invalidate.

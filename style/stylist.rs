@@ -62,6 +62,7 @@ use crate::values::specified::position::PositionTryFallbacksTryTactic;
 use crate::values::{computed, AtomIdent};
 use crate::AllocErr;
 use crate::{Atom, LocalName, Namespace, ShrinkIfNeeded, WeakAtom};
+use cssparser::ToCss as _;
 use dom::{DocumentState, ElementState};
 #[cfg(feature = "gecko")]
 use malloc_size_of::MallocUnconditionalShallowSizeOf;
@@ -3206,6 +3207,12 @@ pub struct CascadeData {
     /// Effective media query results cached from the last rebuild.
     effective_media_query_results: EffectiveMediaQueryResults,
 
+    /// Stable ids assigned to selector prefixes used by the fail cache.
+    fail_cache_prefix_ids: FxHashMap<String, u16>,
+
+    /// The next fail-cache prefix id to assign. Zero is reserved as vacant.
+    next_fail_cache_prefix_id: u16,
+
     /// Extra data, like different kinds of rules, etc.
     extra_data: ExtraStyleData,
 
@@ -3229,6 +3236,18 @@ lazy_static! {
         list.mark_as_intentionally_leaked();
         list
     };
+}
+
+fn next_selector_offset(selector: &Selector<SelectorImpl>, offset: usize) -> Option<(usize, Combinator)> {
+    let slice = selector.iter_raw_match_order().as_slice();
+    let mut index = offset;
+    while index < slice.len() {
+        if let Some(combinator) = slice[index].as_combinator() {
+            return Some((index + 1, combinator));
+        }
+        index += 1;
+    }
+    None
 }
 
 fn scope_start_matches_shadow_host(start: &SelectorList<SelectorImpl>) -> bool {
@@ -3280,6 +3299,8 @@ impl CascadeData {
             scope_subject_map: Default::default(),
             extra_data: ExtraStyleData::default(),
             effective_media_query_results: EffectiveMediaQueryResults::new(),
+            fail_cache_prefix_ids: FxHashMap::default(),
+            next_fail_cache_prefix_id: 1,
             rules_source_order: 0,
             num_selectors: 0,
             num_declarations: 0,
@@ -3510,7 +3531,14 @@ impl CascadeData {
         let mut acc_stats = ScopeProximityStats::default();
         for candidate in result.candidates {
             let (res, bloom_stats) = context.nest_for_scope(Some(candidate.root), |context| {
-                matches_selector(&rule.selector, 0, Some(&rule.hashes), &element, context)
+                selectors::matching::matches_selector_with_fail_cache(
+                    &rule.selector,
+                    0,
+                    Some(&rule.hashes),
+                    rule.fail_cache_entries.as_deref(),
+                    &element,
+                    context,
+                )
             });
             acc_stats += bloom_stats;
             if res {
@@ -3651,6 +3679,49 @@ impl CascadeData {
         }
     }
 
+    fn fail_cache_prefix_id(&mut self, selector: &Selector<SelectorImpl>) -> Option<u16> {
+        let selector_css = selector.to_css_string();
+        if let Some(id) = self.fail_cache_prefix_ids.get(&selector_css) {
+            return Some(*id);
+        }
+        if self.next_fail_cache_prefix_id == 0 {
+            return None;
+        }
+        let id = self.next_fail_cache_prefix_id;
+        self.next_fail_cache_prefix_id = self.next_fail_cache_prefix_id.wrapping_add(1);
+        if self.next_fail_cache_prefix_id == 0 {
+            log::warn!("Ran out of fail-cache prefix ids; later prefixes will not be cached");
+        }
+        self.fail_cache_prefix_ids.insert(selector_css, id);
+        Some(id)
+    }
+
+    fn fail_cache_entries_for_selector(
+        &mut self,
+        selector: &Selector<SelectorImpl>,
+    ) -> Option<Box<[(u16, u16)]>> {
+        let mut entries = Vec::new();
+        let mut offset = 0usize;
+        while let Some((next_offset, combinator)) = next_selector_offset(selector, offset) {
+            if !matches!(combinator, Combinator::Child | Combinator::Descendant) {
+                break;
+            }
+            let prefix = selector.suffix_from_offset(next_offset);
+            if next_selector_offset(&prefix, 0).is_none() {
+                break;
+            }
+            let Some(prefix_id) = self.fail_cache_prefix_id(&prefix) else {
+                break;
+            };
+            let Some(next_offset) = u16::try_from(next_offset).ok() else {
+                break;
+            };
+            entries.push((next_offset, prefix_id));
+            offset = usize::from(next_offset);
+        }
+        (!entries.is_empty()).then(|| entries.into_boxed_slice())
+    }
+
     fn add_styles(
         &mut self,
         selectors: &SelectorList<SelectorImpl>,
@@ -3713,10 +3784,12 @@ impl CascadeData {
                 quirks_mode,
                 self.use_edge_selector_optimization,
             );
+            let fail_cache_entries = self.fail_cache_entries_for_selector(&selector);
 
             let rule = Rule::new(
                 selector,
                 hashes,
+                fail_cache_entries,
                 StyleSource::from_declarations(declarations.clone()),
                 self.rules_source_order,
                 containing_rule_state.layer_id,
@@ -4689,6 +4762,9 @@ pub struct Rule {
     /// The ancestor hashes associated with the selector.
     pub hashes: AncestorHashes,
 
+    /// Match-order offsets paired with website-wide fail-cache prefix ids.
+    pub fail_cache_entries: Option<Box<[(u16, u16)]>>,
+
     /// The source order this style rule appears in. Note that we only use
     /// three bytes to store this value in ApplicableDeclarationsBlock, so
     /// we could repurpose that storage here if we needed to.
@@ -4745,6 +4821,7 @@ impl Rule {
     pub fn new(
         selector: Selector<SelectorImpl>,
         hashes: AncestorHashes,
+        fail_cache_entries: Option<Box<[(u16, u16)]>>,
         style_source: StyleSource,
         source_order: u32,
         layer_id: LayerId,
@@ -4755,6 +4832,7 @@ impl Rule {
         Self {
             selector,
             hashes,
+            fail_cache_entries,
             style_source,
             source_order,
             layer_id,
@@ -4769,7 +4847,7 @@ impl Rule {
 // microbenchmark.
 // When iterating over a large Rule array, we want to be able to fast-reject
 // selectors (with the inline hashes) with as few cache misses as possible.
-size_of_test!(Rule, 40);
+size_of_test!(Rule, 56);
 
 /// A function to be able to test the revalidation stuff.
 pub fn needs_revalidation_for_testing(s: &Selector<SelectorImpl>) -> bool {

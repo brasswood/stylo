@@ -22,7 +22,9 @@ use atomic_refcell::AtomicRef;
 use dom::ElementState;
 use precomputed_hash::PrecomputedHash;
 use selectors::{Element, OpaqueElement};
-use selectors::matching::{MatchingContext, SelectorStats, Statistics, matches_selector};
+use selectors::matching::{
+    MatchingContext, SelectorStats, Statistics, matches_selector_with_fail_cache,
+};
 use selectors::parser::{Combinator, Component, Selector, SelectorIter};
 use smallvec::SmallVec;
 use std::collections::hash_map;
@@ -456,10 +458,11 @@ impl SelectorMap<Rule> {
                 debug_element_selector(element, html_str, &rule.selector);
             }
             let scope_proximity = if rule.scope_condition_id == ScopeConditionId::none() {
-                let (res, bloom_stats) = matches_selector(
+                let (res, bloom_stats) = matches_selector_with_fail_cache(
                     &rule.selector,
                     0,
                     Some(&rule.hashes),
+                    rule.fail_cache_entries.as_deref(),
                     &element,
                     matching_context,
                 );

@@ -1102,6 +1102,24 @@ impl<Impl: SelectorImpl> Selector<Impl> {
         }
     }
 
+    /// Clones the selector suffix starting at `offset` in match order.
+    ///
+    /// Since selectors are stored in match order, this corresponds to a prefix
+    /// in parse order.
+    #[inline]
+    pub fn suffix_from_offset(&self, offset: usize) -> Self {
+        debug_assert!(offset <= self.len());
+        let mut builder = SelectorBuilder::default();
+        for component in self.iter_raw_parse_order_from(offset).cloned() {
+            if let Some(combinator) = component.as_combinator() {
+                builder.push_combinator(combinator);
+            } else {
+                builder.push_simple_selector(component);
+            }
+        }
+        Selector(builder.build(ParseRelative::No))
+    }
+
     /// Returns the combinator at index `index` (zero-indexed from the right),
     /// or panics if the component is not a combinator.
     #[inline]
