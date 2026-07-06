@@ -19,7 +19,13 @@ impl FailCache {
     #[inline]
     pub fn contains(&self, id: u16) -> bool {
         debug_assert_ne!(id, 0, "0 is reserved as the vacant fail-cache entry");
-        self.entries.contains(&id)
+        // This for-loop vectorizes better than `Slice::contains` for my small fixed-size slice
+        for entry in self.entries {
+            if entry == id {
+                return true;
+            }
+        }
+        false
     }
 
     #[inline]
