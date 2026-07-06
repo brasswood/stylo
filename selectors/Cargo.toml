@@ -19,6 +19,7 @@ path = "lib.rs"
 bench = []
 to_shmem = ["dep:to_shmem", "dep:to_shmem_derive"]
 debug_element = []
+fail_cache_fill_stats = []
 
 [dependencies]
 bitflags = "2"

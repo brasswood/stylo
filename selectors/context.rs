@@ -14,6 +14,8 @@ use crate::tree::{Element, OpaqueElement};
 pub struct FailCache {
     entries: [u16; 8],
     next_insert_index: u8,
+    #[cfg(feature = "fail_cache_fill_stats")]
+    filled_once: bool,
 }
 
 impl FailCache {
@@ -39,6 +41,22 @@ impl FailCache {
         let index = self.next_insert_index as usize;
         self.entries[index] = id;
         self.next_insert_index = (index as u8 + 1) % self.entries.len() as u8;
+        #[cfg(feature = "fail_cache_fill_stats")]
+        if self.next_insert_index == 0 {
+            self.filled_once = true;
+        }
+    }
+
+    #[inline]
+    pub fn filled_once(&self) -> bool {
+        #[cfg(feature = "fail_cache_fill_stats")]
+        {
+            self.filled_once
+        }
+        #[cfg(not(feature = "fail_cache_fill_stats"))]
+        {
+            false
+        }
     }
 }
 
