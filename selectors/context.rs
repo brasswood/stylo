@@ -13,6 +13,7 @@ use crate::tree::{Element, OpaqueElement};
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct FailCache {
     entries: [u16; 8],
+    next_insert_index: u8,
 }
 
 impl FailCache {
@@ -29,22 +30,15 @@ impl FailCache {
     }
 
     #[inline]
-    pub fn insert(&mut self, id: u16) {
+    pub fn insert_unchecked(&mut self, id: u16) {
         debug_assert_ne!(id, 0, "0 is reserved as the vacant fail-cache entry");
-        if let Some(index) = self.entries.iter().position(|entry| *entry == id) {
-            self.entries[..=index].rotate_right(1);
-            self.entries[0] = id;
-            return;
-        }
-
-        if let Some(index) = self.entries.iter().position(|entry| *entry == 0) {
-            self.entries[..=index].rotate_right(1);
-            self.entries[0] = id;
-            return;
-        }
-
-        self.entries.rotate_right(1);
-        self.entries[0] = id;
+        debug_assert!(
+            !self.contains(id),
+            "callers are expected to check whether the entry is already cached",
+        );
+        let index = self.next_insert_index as usize;
+        self.entries[index] = id;
+        self.next_insert_index = (index as u8 + 1) % self.entries.len() as u8;
     }
 }
 
