@@ -281,6 +281,13 @@ lazy_static! {
         Mutex::new(UserAgentCascadeDataCache::new());
 }
 
+/// Fine-grained timings for fail-cache metadata construction.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct FailCacheBuildTimings {
+    /// Time spent constructing per-selector fail-cache entry lists.
+    pub entry_build: tsc_timer::Duration,
+}
+
 impl CascadeDataCacheEntry for UserAgentCascadeData {
     fn rebuild<S>(
         device: &Device,
@@ -1141,6 +1148,14 @@ impl Stylist {
         }
 
         /* TODO: shadow DOM. doc_author_rules_apply && */ f(&self.cascade_data.author)
+    }
+
+    /// Returns accumulated timings for fail-cache metadata construction.
+    pub fn fail_cache_build_timings(&self) -> FailCacheBuildTimings {
+        FailCacheBuildTimings {
+            entry_build: self.cascade_data.author.fail_cache_entry_build_time +
+                self.cascade_data.user.fail_cache_entry_build_time,
+        }
     }
 
     /// Execute callback for all applicable style rule data.
@@ -3096,6 +3111,8 @@ impl Default for StylistImplicitScopeRoot {
 pub struct CascadeData {
     use_edge_selector_optimization: bool,
     build_fail_cache_entries: bool,
+    #[ignore_malloc_size_of = "benchmark-only timing counter"]
+    fail_cache_entry_build_time: tsc_timer::Duration,
 
     /// The data coming from normal style rules that apply to elements at this
     /// cascade level.
@@ -3276,6 +3293,7 @@ impl CascadeData {
         Self {
             use_edge_selector_optimization: false,
             build_fail_cache_entries: false,
+            fail_cache_entry_build_time: tsc_timer::Duration::from_cycles(0),
             normal_rules: ElementAndPseudoRules::default(),
             featureless_host_rules: None,
             slotted_rules: None,
@@ -3705,6 +3723,7 @@ impl CascadeData {
         &mut self,
         selector: &Selector<SelectorImpl>,
     ) -> Option<Box<[(u16, u16)]>> {
+        let start = tsc_timer::Start::now();
         let mut entries = Vec::new();
         let mut offset = 0usize;
         while let Some((next_offset, combinator)) = next_selector_offset(selector, offset) {
@@ -3724,7 +3743,9 @@ impl CascadeData {
             entries.push((next_offset, prefix_id));
             offset = usize::from(next_offset);
         }
-        (!entries.is_empty()).then(|| entries.into_boxed_slice())
+        let result = (!entries.is_empty()).then(|| entries.into_boxed_slice());
+        self.fail_cache_entry_build_time += start.elapsed();
+        result
     }
 
     fn add_styles(
@@ -4605,6 +4626,7 @@ impl CascadeData {
         self.scope_conditions.push(ScopeConditionReference::none());
         #[cfg(feature = "gecko")]
         self.extra_data.clear();
+        self.fail_cache_entry_build_time = tsc_timer::Duration::from_cycles(0);
         self.rules_source_order = 0;
         self.num_selectors = 0;
         self.num_declarations = 0;
