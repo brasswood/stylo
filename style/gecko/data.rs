@@ -178,7 +178,7 @@ impl PerDocumentStyleData {
         let quirks_mode = device.document().mCompatMode;
 
         PerDocumentStyleData(AtomicRefCell::new(PerDocumentStyleDataImpl {
-            stylist: Stylist::new(device, quirks_mode.into(), false),
+            stylist: Stylist::new(device, quirks_mode.into(), false, false),
             undisplayed_style_cache: Default::default(),
             undisplayed_style_cache_generation: 0,
         }))

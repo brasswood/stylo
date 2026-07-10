@@ -793,10 +793,13 @@ impl Stylist {
         device: Device,
         quirks_mode: QuirksMode,
         use_edge_selector_optimization: bool,
+        build_fail_cache_entries: bool,
     ) -> Self {
         let mut cascade_data = DocumentCascadeData::default();
         cascade_data.user.use_edge_selector_optimization = use_edge_selector_optimization;
         cascade_data.author.use_edge_selector_optimization = use_edge_selector_optimization;
+        cascade_data.user.build_fail_cache_entries = build_fail_cache_entries;
+        cascade_data.author.build_fail_cache_entries = build_fail_cache_entries;
         Self {
             device,
             quirks_mode,
@@ -3092,6 +3095,7 @@ impl Default for StylistImplicitScopeRoot {
 #[derive(Debug, Clone, MallocSizeOf)]
 pub struct CascadeData {
     use_edge_selector_optimization: bool,
+    build_fail_cache_entries: bool,
 
     /// The data coming from normal style rules that apply to elements at this
     /// cascade level.
@@ -3271,6 +3275,7 @@ impl CascadeData {
     pub fn new() -> Self {
         Self {
             use_edge_selector_optimization: false,
+            build_fail_cache_entries: false,
             normal_rules: ElementAndPseudoRules::default(),
             featureless_host_rules: None,
             slotted_rules: None,
@@ -3784,7 +3789,11 @@ impl CascadeData {
                 quirks_mode,
                 self.use_edge_selector_optimization,
             );
-            let fail_cache_entries = self.fail_cache_entries_for_selector(&selector);
+            let fail_cache_entries = if self.build_fail_cache_entries {
+                self.fail_cache_entries_for_selector(&selector)
+            } else {
+                None
+            };
 
             let rule = Rule::new(
                 selector,
