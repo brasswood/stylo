@@ -1102,6 +1102,19 @@ impl<Impl: SelectorImpl> Selector<Impl> {
         }
     }
 
+    /// Serializes the selector suffix starting at `offset` in match order.
+    ///
+    /// Since selectors are stored in match order, this corresponds to a prefix
+    /// in parse order.
+    #[inline]
+    pub fn to_css_from_offset<W>(&self, offset: usize, dest: &mut W) -> fmt::Result
+    where
+        W: fmt::Write,
+    {
+        debug_assert!(offset <= self.len());
+        serialize_selector(&self.0.slice()[offset..], dest)
+    }
+
     /// Returns the combinator at index `index` (zero-indexed from the right),
     /// or panics if the component is not a combinator.
     #[inline]
@@ -2482,11 +2495,11 @@ impl<Impl: SelectorImpl> ToCss for SelectorList<Impl> {
     }
 }
 
-impl<Impl: SelectorImpl> ToCss for Selector<Impl> {
-    fn to_css<W>(&self, dest: &mut W) -> fmt::Result
-    where
-        W: fmt::Write,
-    {
+fn serialize_selector<Impl, W>(components: &[Component<Impl>], dest: &mut W) -> fmt::Result
+where
+    Impl: SelectorImpl,
+    W: fmt::Write,
+{
         // Compound selectors invert the order of their contents, so we need to
         // undo that during serialization.
         //
@@ -2499,13 +2512,11 @@ impl<Impl: SelectorImpl> ToCss for Selector<Impl> {
         // which we need for |split|. So we split by combinators on a match-order
         // sequence and then reverse.
 
-        let mut combinators = self
-            .iter_raw_match_order()
+        let mut combinators = components
+            .iter()
             .rev()
             .filter_map(|x| x.as_combinator());
-        let compound_selectors = self
-            .iter_raw_match_order()
-            .as_slice()
+        let compound_selectors = components
             .split(|x| x.is_combinator())
             .rev();
 
@@ -2623,7 +2634,15 @@ impl<Impl: SelectorImpl> ToCss for Selector<Impl> {
             // (we handle this above)
         }
 
-        Ok(())
+    Ok(())
+}
+
+impl<Impl: SelectorImpl> ToCss for Selector<Impl> {
+    fn to_css<W>(&self, dest: &mut W) -> fmt::Result
+    where
+        W: fmt::Write,
+    {
+        serialize_selector(self.0.slice(), dest)
     }
 }
 

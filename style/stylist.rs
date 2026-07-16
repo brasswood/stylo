@@ -66,8 +66,7 @@ use dom::{DocumentState, ElementState};
 #[cfg(feature = "gecko")]
 use malloc_size_of::MallocUnconditionalShallowSizeOf;
 use malloc_size_of::{MallocShallowSizeOf, MallocSizeOf, MallocSizeOfOps};
-use precomputed_hash::PrecomputedHash;
-use rustc_hash::{FxHashMap, FxHasher};
+use rustc_hash::FxHashMap;
 use selectors::attr::{CaseSensitivity, NamespaceConstraint};
 use selectors::bloom::BloomFilter;
 use selectors::matching::{
@@ -84,7 +83,7 @@ use smallvec::SmallVec;
 use std::cmp::Ordering;
 use std::hash::{Hash, Hasher};
 use std::sync::Mutex;
-use std::{mem, ops};
+use std::{fmt, mem, ops};
 
 /// The type of the stylesheets that the stylist contains.
 #[cfg(feature = "servo")]
@@ -3229,7 +3228,7 @@ pub struct CascadeData {
     effective_media_query_results: EffectiveMediaQueryResults,
 
     /// Stable ids assigned to selector prefixes used by the fail cache.
-    fail_cache_prefix_ids: FxHashMap<u64, SmallVec<[FailCachePrefixEntry; 1]>>,
+    fail_cache_prefix_ids: FxHashMap<String, u16>,
 
     /// The next fail-cache prefix id to assign. Zero is reserved as vacant.
     next_fail_cache_prefix_id: u16,
@@ -3259,61 +3258,27 @@ lazy_static! {
     };
 }
 
-#[derive(Clone, Debug, MallocSizeOf)]
-struct FailCachePrefixEntry {
-    #[ignore_malloc_size_of = "secondary reference to a selector owned by a style rule"]
-    selector: Selector<SelectorImpl>,
-    offset: usize,
-    id: u16,
-}
+#[derive(Default)]
+struct InlineCssString(SmallVec<[u8; 128]>);
 
-impl FailCachePrefixEntry {
-    fn components(&self) -> &[Component<SelectorImpl>] {
-        &self.selector.iter_raw_match_order().as_slice()[self.offset..]
+impl InlineCssString {
+    fn as_str(&self) -> &str {
+        // SAFETY: The buffer is private and is only extended with valid UTF-8
+        // through the fmt::Write implementation below.
+        unsafe { std::str::from_utf8_unchecked(&self.0) }
+    }
+
+    fn into_string(self) -> String {
+        // SAFETY: See as_str().
+        unsafe { String::from_utf8_unchecked(self.0.into_vec()) }
     }
 }
 
-fn fail_cache_prefix_hash(components: &[Component<SelectorImpl>]) -> u64 {
-    let mut hasher = FxHasher::default();
-    components.len().hash(&mut hasher);
-    for component in components {
-        mem::discriminant(component).hash(&mut hasher);
-        match component {
-            Component::LocalName(local_name) => {
-                local_name.name.precomputed_hash().hash(&mut hasher);
-            },
-            Component::ID(identifier) | Component::Class(identifier) => {
-                identifier.precomputed_hash().hash(&mut hasher);
-            },
-            Component::AttributeInNoNamespaceExists { local_name, .. }
-            | Component::AttributeInNoNamespace { local_name, .. } => {
-                local_name.precomputed_hash().hash(&mut hasher);
-            },
-            Component::AttributeOther(attribute) => {
-                attribute.local_name.precomputed_hash().hash(&mut hasher);
-            },
-            Component::DefaultNamespace(url) | Component::Namespace(_, url) => {
-                url.precomputed_hash().hash(&mut hasher);
-            },
-            Component::Part(part_names) => {
-                for name in part_names {
-                    name.precomputed_hash().hash(&mut hasher);
-                }
-            },
-            Component::Combinator(combinator) => {
-                mem::discriminant(combinator).hash(&mut hasher);
-            },
-            Component::NonTSPseudoClass(pseudo) => {
-                mem::discriminant(pseudo).hash(&mut hasher);
-            },
-            Component::PseudoElement(pseudo) => {
-                mem::discriminant(pseudo).hash(&mut hasher);
-            },
-            Component::Invalid(value) => value.hash(&mut hasher),
-            _ => {},
-        }
+impl fmt::Write for InlineCssString {
+    fn write_str(&mut self, value: &str) -> fmt::Result {
+        self.0.extend_from_slice(value.as_bytes());
+        Ok(())
     }
-    hasher.finish()
 }
 
 fn next_selector_offset(selector: &Selector<SelectorImpl>, offset: usize) -> Option<(usize, Combinator)> {
@@ -3764,12 +3729,12 @@ impl CascadeData {
         selector: &Selector<SelectorImpl>,
         offset: usize,
     ) -> Option<u16> {
-        let components = &selector.iter_raw_match_order().as_slice()[offset..];
-        let hash = fail_cache_prefix_hash(components);
-        if let Some(entries) = self.fail_cache_prefix_ids.get(&hash) {
-            if let Some(entry) = entries.iter().find(|entry| entry.components() == components) {
-                return Some(entry.id);
-            }
+        let mut selector_css = InlineCssString::default();
+        selector
+            .to_css_from_offset(offset, &mut selector_css)
+            .expect("writing CSS to an inline buffer should be infallible");
+        if let Some(id) = self.fail_cache_prefix_ids.get(selector_css.as_str()) {
+            return Some(*id);
         }
         if self.next_fail_cache_prefix_id == 0 {
             return None;
@@ -3779,14 +3744,7 @@ impl CascadeData {
         if self.next_fail_cache_prefix_id == 0 {
             log::warn!("Ran out of fail-cache prefix ids; later prefixes will not be cached");
         }
-        self.fail_cache_prefix_ids
-            .entry(hash)
-            .or_default()
-            .push(FailCachePrefixEntry {
-                selector: selector.clone(),
-                offset,
-                id,
-            });
+        self.fail_cache_prefix_ids.insert(selector_css.into_string(), id);
         Some(id)
     }
 
