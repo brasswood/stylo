@@ -62,12 +62,12 @@ use crate::values::specified::position::PositionTryFallbacksTryTactic;
 use crate::values::{computed, AtomIdent};
 use crate::AllocErr;
 use crate::{Atom, LocalName, Namespace, ShrinkIfNeeded, WeakAtom};
-use cssparser::ToCss as _;
 use dom::{DocumentState, ElementState};
 #[cfg(feature = "gecko")]
 use malloc_size_of::MallocUnconditionalShallowSizeOf;
 use malloc_size_of::{MallocShallowSizeOf, MallocSizeOf, MallocSizeOfOps};
-use rustc_hash::FxHashMap;
+use precomputed_hash::PrecomputedHash;
+use rustc_hash::{FxHashMap, FxHasher};
 use selectors::attr::{CaseSensitivity, NamespaceConstraint};
 use selectors::bloom::BloomFilter;
 use selectors::matching::{
@@ -3229,7 +3229,7 @@ pub struct CascadeData {
     effective_media_query_results: EffectiveMediaQueryResults,
 
     /// Stable ids assigned to selector prefixes used by the fail cache.
-    fail_cache_prefix_ids: FxHashMap<String, u16>,
+    fail_cache_prefix_ids: FxHashMap<u64, SmallVec<[FailCachePrefixEntry; 1]>>,
 
     /// The next fail-cache prefix id to assign. Zero is reserved as vacant.
     next_fail_cache_prefix_id: u16,
@@ -3257,6 +3257,63 @@ lazy_static! {
         list.mark_as_intentionally_leaked();
         list
     };
+}
+
+#[derive(Clone, Debug, MallocSizeOf)]
+struct FailCachePrefixEntry {
+    #[ignore_malloc_size_of = "secondary reference to a selector owned by a style rule"]
+    selector: Selector<SelectorImpl>,
+    offset: usize,
+    id: u16,
+}
+
+impl FailCachePrefixEntry {
+    fn components(&self) -> &[Component<SelectorImpl>] {
+        &self.selector.iter_raw_match_order().as_slice()[self.offset..]
+    }
+}
+
+fn fail_cache_prefix_hash(components: &[Component<SelectorImpl>]) -> u64 {
+    let mut hasher = FxHasher::default();
+    components.len().hash(&mut hasher);
+    for component in components {
+        mem::discriminant(component).hash(&mut hasher);
+        match component {
+            Component::LocalName(local_name) => {
+                local_name.name.precomputed_hash().hash(&mut hasher);
+            },
+            Component::ID(identifier) | Component::Class(identifier) => {
+                identifier.precomputed_hash().hash(&mut hasher);
+            },
+            Component::AttributeInNoNamespaceExists { local_name, .. }
+            | Component::AttributeInNoNamespace { local_name, .. } => {
+                local_name.precomputed_hash().hash(&mut hasher);
+            },
+            Component::AttributeOther(attribute) => {
+                attribute.local_name.precomputed_hash().hash(&mut hasher);
+            },
+            Component::DefaultNamespace(url) | Component::Namespace(_, url) => {
+                url.precomputed_hash().hash(&mut hasher);
+            },
+            Component::Part(part_names) => {
+                for name in part_names {
+                    name.precomputed_hash().hash(&mut hasher);
+                }
+            },
+            Component::Combinator(combinator) => {
+                mem::discriminant(combinator).hash(&mut hasher);
+            },
+            Component::NonTSPseudoClass(pseudo) => {
+                mem::discriminant(pseudo).hash(&mut hasher);
+            },
+            Component::PseudoElement(pseudo) => {
+                mem::discriminant(pseudo).hash(&mut hasher);
+            },
+            Component::Invalid(value) => value.hash(&mut hasher),
+            _ => {},
+        }
+    }
+    hasher.finish()
 }
 
 fn next_selector_offset(selector: &Selector<SelectorImpl>, offset: usize) -> Option<(usize, Combinator)> {
@@ -3702,10 +3759,17 @@ impl CascadeData {
         }
     }
 
-    fn fail_cache_prefix_id(&mut self, selector: &Selector<SelectorImpl>) -> Option<u16> {
-        let selector_css = selector.to_css_string();
-        if let Some(id) = self.fail_cache_prefix_ids.get(&selector_css) {
-            return Some(*id);
+    fn fail_cache_prefix_id(
+        &mut self,
+        selector: &Selector<SelectorImpl>,
+        offset: usize,
+    ) -> Option<u16> {
+        let components = &selector.iter_raw_match_order().as_slice()[offset..];
+        let hash = fail_cache_prefix_hash(components);
+        if let Some(entries) = self.fail_cache_prefix_ids.get(&hash) {
+            if let Some(entry) = entries.iter().find(|entry| entry.components() == components) {
+                return Some(entry.id);
+            }
         }
         if self.next_fail_cache_prefix_id == 0 {
             return None;
@@ -3715,7 +3779,14 @@ impl CascadeData {
         if self.next_fail_cache_prefix_id == 0 {
             log::warn!("Ran out of fail-cache prefix ids; later prefixes will not be cached");
         }
-        self.fail_cache_prefix_ids.insert(selector_css, id);
+        self.fail_cache_prefix_ids
+            .entry(hash)
+            .or_default()
+            .push(FailCachePrefixEntry {
+                selector: selector.clone(),
+                offset,
+                id,
+            });
         Some(id)
     }
 
@@ -3730,11 +3801,10 @@ impl CascadeData {
             if !matches!(combinator, Combinator::Child | Combinator::Descendant) {
                 break;
             }
-            let prefix = selector.suffix_from_offset(next_offset);
-            if next_selector_offset(&prefix, 0).is_none() {
+            if next_selector_offset(selector, next_offset).is_none() {
                 break;
             }
-            let Some(prefix_id) = self.fail_cache_prefix_id(&prefix) else {
+            let Some(prefix_id) = self.fail_cache_prefix_id(selector, next_offset) else {
                 break;
             };
             let Some(next_offset) = u16::try_from(next_offset).ok() else {
