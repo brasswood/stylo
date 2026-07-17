@@ -3731,7 +3731,7 @@ impl CascadeData {
     ) -> Option<u16> {
         let mut selector_css = InlineCssString::default();
         selector
-            .to_css_from_offset(offset, &mut selector_css)
+            .suffix_to_css(offset, &mut selector_css)
             .expect("writing CSS to an inline buffer should be infallible");
         if let Some(id) = self.fail_cache_prefix_ids.get(selector_css.as_str()) {
             return Some(*id);
@@ -3759,7 +3759,11 @@ impl CascadeData {
             if !matches!(combinator, Combinator::Child | Combinator::Descendant) {
                 break;
             }
-            if next_selector_offset(selector, next_offset).is_none() {
+            let suffix_end = selector.len() - next_offset;
+            if !selector.iter_raw_match_order().as_slice()[..suffix_end]
+                .iter()
+                .any(Component::is_combinator)
+            {
                 break;
             }
             let Some(prefix_id) = self.fail_cache_prefix_id(selector, next_offset) else {

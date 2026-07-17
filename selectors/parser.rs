@@ -1102,17 +1102,15 @@ impl<Impl: SelectorImpl> Selector<Impl> {
         }
     }
 
-    /// Serializes the selector suffix starting at `offset` in match order.
-    ///
-    /// Since selectors are stored in match order, this corresponds to a prefix
-    /// in parse order.
+    /// Serializes the selector suffix obtained by removing `offset` components
+    /// from the start in parse order.
     #[inline]
-    pub fn to_css_from_offset<W>(&self, offset: usize, dest: &mut W) -> fmt::Result
+    pub fn suffix_to_css<W>(&self, offset: usize, dest: &mut W) -> fmt::Result
     where
         W: fmt::Write,
     {
         debug_assert!(offset <= self.len());
-        serialize_selector(&self.0.slice()[offset..], dest)
+        serialize_selector(&self.0.slice()[..self.len() - offset], dest)
     }
 
     /// Returns the combinator at index `index` (zero-indexed from the right),
