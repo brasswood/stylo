@@ -3259,7 +3259,7 @@ lazy_static! {
 }
 
 #[derive(Default)]
-struct InlineCssString(SmallVec<[u8; 128]>);
+struct InlineCssString(SmallVec<[u8; 256]>);
 
 impl InlineCssString {
     fn as_str(&self) -> &str {
@@ -3277,6 +3277,17 @@ impl InlineCssString {
 impl fmt::Write for InlineCssString {
     fn write_str(&mut self, value: &str) -> fmt::Result {
         self.0.extend_from_slice(value.as_bytes());
+        Ok(())
+    }
+
+    fn write_char(&mut self, value: char) -> fmt::Result {
+        if value.is_ascii() {
+            self.0.push(value as u8);
+        } else {
+            let mut buffer = [0; 4];
+            self.0
+                .extend_from_slice(value.encode_utf8(&mut buffer).as_bytes());
+        }
         Ok(())
     }
 }
