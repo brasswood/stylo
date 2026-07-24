@@ -1832,6 +1832,7 @@ impl Stylist {
                                 &selector_and_hashes.selector,
                                 selector_and_hashes.selector_offset,
                                 Some(&selector_and_hashes.hashes),
+                                None,
                                 &element,
                                 matching_context,
                             ).0);
@@ -1856,6 +1857,7 @@ impl Stylist {
                         &selector_and_hashes.selector,
                         selector_and_hashes.selector_offset,
                         Some(&selector_and_hashes.hashes),
+                        None,
                         &element,
                         &mut matching_context,
                     ).0);
@@ -3587,7 +3589,7 @@ impl CascadeData {
         let mut acc_stats = ScopeProximityStats::default();
         for candidate in result.candidates {
             let (res, bloom_stats) = context.nest_for_scope(Some(candidate.root), |context| {
-                selectors::matching::matches_selector_with_fail_cache(
+                selectors::matching::matches_selector(
                     &rule.selector,
                     0,
                     Some(&rule.hashes),
@@ -3773,7 +3775,7 @@ impl CascadeData {
             let suffix_end = selector.len() - next_offset;
             if !selector.iter_raw_match_order().as_slice()[..suffix_end]
                 .iter()
-                .any(Component::is_combinator)
+                .any(Component::is_combinator) // TODO: red flag, isn't this already verified by `next_selector_offset`?
             {
                 break;
             }

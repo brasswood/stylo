@@ -182,6 +182,7 @@ impl<'a, E: TElement> OptimizationContext<'a, E> {
             &dependency.selector,
             dependency.selector_offset,
             None,
+            None,
             &sibling,
             &mut matching_context,
         ).0;
@@ -202,6 +203,7 @@ impl<'a, E: TElement> OptimizationContext<'a, E> {
                 !matches_selector(
                     &next.selector,
                     next.selector_offset,
+                    None,
                     None,
                     &sibling,
                     &mut matching_context,
@@ -234,6 +236,7 @@ impl<'a, E: TElement> OptimizationContext<'a, E> {
         !matches_selector(
             &dependency.selector,
             dependency.selector_offset,
+            None,
             None,
             &element,
             &mut matching_context,
@@ -1113,6 +1116,7 @@ where
                 if !matches_selector(
                     &d.selector,
                     d.selector_offset,
+                    None,
                     None,
                     &element,
                     self.matching_context(),

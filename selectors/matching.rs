@@ -245,7 +245,7 @@ where
     // This is pretty much any(..) but manually inlined because the compiler
     // refuses to do so from querySelector / querySelectorAll.
     for selector in selector_list.slice() {
-        let matches = matches_selector(selector, 0, None, element, context).0;
+        let matches = matches_selector(selector, 0, None, None, element, context).0;
         if matches {
             return true;
         }
@@ -378,36 +378,6 @@ pub fn matches_selector<E>(
     selector: &Selector<E::Impl>,
     offset: usize,
     hashes: Option<&AncestorHashes>,
-    element: &E,
-    context: &mut MatchingContext<E::Impl>,
-) -> (bool, BloomQueryStats)
-where
-    E: Element,
-{
-    matches_selector_with_fail_cache(selector, offset, hashes, None, element, context)
-}
-
-/// Same as matches_selector, but returns the Kleene value as-is.
-/// Also returns whether we fast-rejected.
-#[cfg_attr(not(feature = "debug_element"), inline(always))]
-pub fn matches_selector_kleene<E>(
-    selector: &Selector<E::Impl>,
-    offset: usize,
-    hashes: Option<&AncestorHashes>,
-    element: &E,
-    context: &mut MatchingContext<E::Impl>,
-) -> (KleeneValue, BloomQueryStats)
-where
-    E: Element,
-{
-    matches_selector_kleene_with_fail_cache(selector, offset, hashes, None, element, context)
-}
-
-#[cfg_attr(not(feature = "debug_element"), inline(always))]
-pub fn matches_selector_with_fail_cache<E>(
-    selector: &Selector<E::Impl>,
-    offset: usize,
-    hashes: Option<&AncestorHashes>,
     fail_cache_entries: Option<&[(u16, u16)]>,
     element: &E,
     context: &mut MatchingContext<E::Impl>,
@@ -415,7 +385,7 @@ pub fn matches_selector_with_fail_cache<E>(
 where
     E: Element,
 {
-    let (result, stats) = matches_selector_kleene_with_fail_cache(
+    let (result, stats) = matches_selector_kleene(
         selector,
         offset,
         hashes,
@@ -434,8 +404,10 @@ where
     (result.to_bool(true), stats)
 }
 
+/// Same as matches_selector, but returns the Kleene value as-is.
+/// Also returns whether we fast-rejected.
 #[cfg_attr(not(feature = "debug_element"), inline(always))]
-pub fn matches_selector_kleene_with_fail_cache<E>(
+pub fn matches_selector_kleene<E>(
     selector: &Selector<E::Impl>,
     offset: usize,
     hashes: Option<&AncestorHashes>,
