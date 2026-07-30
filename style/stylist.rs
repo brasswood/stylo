@@ -3593,7 +3593,7 @@ impl CascadeData {
                     &rule.selector,
                     0,
                     Some(&rule.hashes),
-                    rule.fail_cache_entries.as_deref(),
+                    rule.fail_cache_prefix_ids.as_deref(),
                     &element,
                     context,
                 )
@@ -3761,12 +3761,12 @@ impl CascadeData {
         Some(id)
     }
 
-    fn fail_cache_entries_for_selector(
+    fn fail_cache_prefix_ids_for_selector(
         &mut self,
         selector: &Selector<SelectorImpl>,
-    ) -> Option<Box<[(u16, u16)]>> {
+    ) -> Option<Box<[u16]>> {
         let start = tsc_timer::Start::now();
-        let mut entries = Vec::new();
+        let mut prefix_ids = Vec::new();
         let mut offset = 0usize;
         while let Some((next_offset, combinator)) = next_selector_offset(selector, offset) {
             if !matches!(combinator, Combinator::Child | Combinator::Descendant) {
@@ -3782,13 +3782,10 @@ impl CascadeData {
             let Some(prefix_id) = self.fail_cache_prefix_id(selector, next_offset) else {
                 break;
             };
-            let Some(next_offset) = u16::try_from(next_offset).ok() else {
-                break;
-            };
-            entries.push((next_offset, prefix_id));
-            offset = usize::from(next_offset);
+            prefix_ids.push(prefix_id);
+            offset = next_offset;
         }
-        let result = (!entries.is_empty()).then(|| entries.into_boxed_slice());
+        let result = (!prefix_ids.is_empty()).then(|| prefix_ids.into_boxed_slice());
         self.fail_cache_entry_build_time += start.elapsed();
         result
     }
@@ -3855,8 +3852,8 @@ impl CascadeData {
                 quirks_mode,
                 self.use_edge_selector_optimization,
             );
-            let fail_cache_entries = if self.build_fail_cache_entries {
-                self.fail_cache_entries_for_selector(&selector)
+            let fail_cache_prefix_ids = if self.build_fail_cache_entries {
+                self.fail_cache_prefix_ids_for_selector(&selector)
             } else {
                 None
             };
@@ -3864,7 +3861,7 @@ impl CascadeData {
             let rule = Rule::new(
                 selector,
                 hashes,
-                fail_cache_entries,
+                fail_cache_prefix_ids,
                 StyleSource::from_declarations(declarations.clone()),
                 self.rules_source_order,
                 containing_rule_state.layer_id,
@@ -4838,8 +4835,8 @@ pub struct Rule {
     /// The ancestor hashes associated with the selector.
     pub hashes: AncestorHashes,
 
-    /// Match-order offsets paired with website-wide fail-cache prefix ids.
-    pub fail_cache_entries: Option<Box<[(u16, u16)]>>,
+    /// Website-wide fail-cache prefix ids in combinator match order.
+    pub fail_cache_prefix_ids: Option<Box<[u16]>>,
 
     /// The source order this style rule appears in. Note that we only use
     /// three bytes to store this value in ApplicableDeclarationsBlock, so
@@ -4897,7 +4894,7 @@ impl Rule {
     pub fn new(
         selector: Selector<SelectorImpl>,
         hashes: AncestorHashes,
-        fail_cache_entries: Option<Box<[(u16, u16)]>>,
+        fail_cache_prefix_ids: Option<Box<[u16]>>,
         style_source: StyleSource,
         source_order: u32,
         layer_id: LayerId,
@@ -4908,7 +4905,7 @@ impl Rule {
         Self {
             selector,
             hashes,
-            fail_cache_entries,
+            fail_cache_prefix_ids,
             style_source,
             source_order,
             layer_id,

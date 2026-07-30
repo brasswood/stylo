@@ -378,7 +378,7 @@ pub fn matches_selector<E>(
     selector: &Selector<E::Impl>,
     offset: usize,
     hashes: Option<&AncestorHashes>,
-    selector_fail_cache_entries: Option<&[(u16, u16)]>,
+    selector_fail_cache_prefix_ids: Option<&[u16]>,
     element: &E,
     context: &mut MatchingContext<E::Impl>,
 ) -> (bool, BloomQueryStats)
@@ -389,7 +389,7 @@ where
         selector,
         offset,
         hashes,
-        selector_fail_cache_entries,
+        selector_fail_cache_prefix_ids,
         element,
         context,
     );
@@ -411,7 +411,7 @@ pub fn matches_selector_kleene<E>(
     selector: &Selector<E::Impl>,
     offset: usize,
     hashes: Option<&AncestorHashes>,
-    selector_fail_cache_entries: Option<&[(u16, u16)]>,
+    selector_fail_cache_prefix_ids: Option<&[u16]>,
     element: &E,
     context: &mut MatchingContext<E::Impl>,
 ) -> (KleeneValue, BloomQueryStats)
@@ -437,7 +437,7 @@ where
     let does_match = matches_complex_selector(
         selector,
         offset,
-        selector_fail_cache_entries,
+        selector_fail_cache_prefix_ids,
         element,
         context,
         if selector.is_rightmost(offset) {
@@ -473,17 +473,6 @@ fn next_selector_offset<Impl: SelectorImpl>(
         index += 1;
     }
     None
-}
-
-#[inline]
-fn fail_cache_prefix_id_for_offset(
-    selector_fail_cache_entries: Option<&[(u16, u16)]>,
-    offset: usize,
-) -> Option<u16> {
-    let offset = u16::try_from(offset).ok()?;
-    selector_fail_cache_entries?
-        .iter()
-        .find_map(|(entry_offset, prefix_id)| (*entry_offset == offset).then_some(*prefix_id))
 }
 
 #[inline]
@@ -606,7 +595,7 @@ where
 fn matches_complex_selector<E>(
     selector: &Selector<E::Impl>,
     mut offset: usize,
-    selector_fail_cache_entries: Option<&[(u16, u16)]>,
+    selector_fail_cache_prefix_ids: Option<&[u16]>,
     element: &E,
     context: &mut MatchingContext<E::Impl>,
     rightmost: SubjectOrPseudoElement,
@@ -653,10 +642,22 @@ where
             .unwrap();
     }
 
+    let matched_combinators = if offset == 0 {
+        0
+    } else {
+        selector_fail_cache_prefix_ids.map_or(0, |_| {
+            selector.iter_raw_match_order().as_slice()[..offset]
+                .iter()
+                .filter(|component| component.is_combinator())
+                .count()
+        })
+    };
+
     matches_complex_selector_internal(
         selector,
         offset,
-        selector_fail_cache_entries,
+        selector_fail_cache_prefix_ids,
+        matched_combinators,
         element,
         context,
         rightmost,
@@ -1024,7 +1025,8 @@ where
 fn matches_complex_selector_internal<E>(
     selector: &Selector<E::Impl>,
     offset: usize,
-    selector_fail_cache_entries: Option<&[(u16, u16)]>,
+    selector_fail_cache_prefix_ids: Option<&[u16]>,
+    matched_combinators: usize,
     element: &E,
     context: &mut MatchingContext<E::Impl>,
     mut rightmost: SubjectOrPseudoElement,
@@ -1035,7 +1037,11 @@ where
 {
     let fail_cache_prefix_id = context
         .use_fail_caches()
-        .then(|| fail_cache_prefix_id_for_offset(selector_fail_cache_entries, offset))
+        .then(|| {
+            selector_fail_cache_prefix_ids?
+                .get(matched_combinators.checked_sub(1)?)
+                .copied()
+        })
         .flatten();
     if let Some(prefix_id) = fail_cache_prefix_id {
         if element.fail_cache_contains(prefix_id) {
@@ -1138,7 +1144,8 @@ where
                 matches_complex_selector_internal(
                     selector,
                     next_offset,
-                    selector_fail_cache_entries,
+                    selector_fail_cache_prefix_ids,
+                    matched_combinators + 1,
                     &element,
                     context,
                     rightmost,
