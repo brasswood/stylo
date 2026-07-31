@@ -459,22 +459,6 @@ where
 }
 
 #[inline]
-fn next_selector_offset<Impl: SelectorImpl>(
-    selector: &Selector<Impl>,
-    offset: usize,
-) -> Option<(usize, Combinator)> {
-    let slice = selector.iter_raw_match_order().as_slice();
-    let mut index = offset;
-    while index < slice.len() {
-        if let Some(combinator) = slice[index].as_combinator() {
-            return Some((index + 1, combinator));
-        }
-        index += 1;
-    }
-    None
-}
-
-#[inline]
 fn finish_with_fail_cache<E>(
     element: Option<&E>,
     prefix_id: Option<u16>,
@@ -1053,12 +1037,13 @@ where
             fail_cache_target.as_ref(),
             active_fail_cache_prefix_id,
             match matches_compound_selector {
-            KleeneValue::True => SelectorMatchingResult::Matched,
-            KleeneValue::Unknown => SelectorMatchingResult::Unknown,
-            KleeneValue::False => {
-                SelectorMatchingResult::NotMatchedAndRestartFromClosestLaterSibling
+                KleeneValue::True => SelectorMatchingResult::Matched,
+                KleeneValue::Unknown => SelectorMatchingResult::Unknown,
+                KleeneValue::False => {
+                    SelectorMatchingResult::NotMatchedAndRestartFromClosestLaterSibling
+                },
             },
-        });
+        );
     };
     let (next_fail_cache_prefix_id, remaining_fail_cache_prefix_ids) =
         split_first_fail_cache_prefix_id(remaining_fail_cache_prefix_ids);
