@@ -435,8 +435,7 @@ where
     }
     let start = Start::now();
     let does_match = matches_complex_selector(
-        selector,
-        offset,
+        selector.iter_from(offset),
         selector_fail_cache_prefix_ids,
         element,
         context,
@@ -601,9 +600,8 @@ where
 /// Matches a complex selector.
 #[cfg_attr(not(feature = "debug_element"), inline(always))]
 fn matches_complex_selector<E>(
-    selector: &Selector<E::Impl>,
-    mut offset: usize,
-    selector_fail_cache_prefix_ids: Option<&[u16]>,
+    mut iter: SelectorIter<E::Impl>,
+    mut remaining_fail_cache_prefix_ids: Option<&[u16]>,
     element: &E,
     context: &mut MatchingContext<E::Impl>,
     rightmost: SubjectOrPseudoElement,
@@ -611,7 +609,7 @@ fn matches_complex_selector<E>(
 where
     E: Element,
 {
-    let mut iter = selector.iter_from(offset);
+    let mut fail_cache_prefix_id = None;
     // If this is the special pseudo-element mode, consume the ::pseudo-element
     // before proceeding, since the caller has already handled that part.
     if context.matching_mode() == MatchingMode::ForStatelessPseudoElement && !context.is_nested() {
@@ -642,32 +640,9 @@ where
         // Advance to the non-pseudo-element part of the selector.
         let next_sequence = iter.next_sequence().unwrap();
         debug_assert_eq!(next_sequence, Combinator::PseudoElement);
-        offset = next_selector_offset(selector, offset)
-            .map(|(next_offset, combinator)| {
-                debug_assert_eq!(combinator, Combinator::PseudoElement);
-                next_offset
-            })
-            .unwrap();
+        (fail_cache_prefix_id, remaining_fail_cache_prefix_ids) =
+            split_first_fail_cache_prefix_id(remaining_fail_cache_prefix_ids);
     }
-
-    let matched_combinators = if offset == 0 {
-        0
-    } else {
-        selector_fail_cache_prefix_ids.map_or(0, |_| {
-            selector.iter_raw_match_order().as_slice()[..offset]
-                .iter()
-                .filter(|component| component.is_combinator())
-                .count()
-        })
-    };
-    let (fail_cache_prefix_id, remaining_fail_cache_prefix_ids) = if matched_combinators == 0 {
-        (None, selector_fail_cache_prefix_ids)
-    } else {
-        split_first_fail_cache_prefix_id(
-            selector_fail_cache_prefix_ids
-                .and_then(|prefix_ids| prefix_ids.get(matched_combinators - 1..)),
-        )
-    };
 
     matches_complex_selector_internal(
         iter,
@@ -689,7 +664,7 @@ fn matches_complex_selector_list<E: Element>(
     rightmost: SubjectOrPseudoElement,
 ) -> KleeneValue {
     KleeneValue::any(list.iter(), |selector| {
-        matches_complex_selector(selector, 0, None, element, context, rightmost)
+        matches_complex_selector(selector.iter(), None, element, context, rightmost)
     })
 }
 
@@ -715,8 +690,7 @@ fn matches_relative_selector<E: Element>(
                 );
             }
             let mut matched = matches_complex_selector(
-                &relative_selector.selector,
-                0,
+                relative_selector.selector.iter(),
                 None,
                 &el,
                 context,
@@ -770,8 +744,14 @@ fn matches_relative_selector<E: Element>(
                     rightmost,
                 )
             } else {
-                matches_complex_selector(&relative_selector.selector, 0, None, &el, context, rightmost)
-                    .to_bool(true)
+                matches_complex_selector(
+                    relative_selector.selector.iter(),
+                    None,
+                    &el,
+                    context,
+                    rightmost,
+                )
+                .to_bool(true)
             };
             if matched {
                 return true;
@@ -908,7 +888,7 @@ fn matches_relative_selector_subtree<E: Element>(
                 ElementSelectorFlags::RELATIVE_SELECTOR_SEARCH_DIRECTION_ANCESTOR,
             );
         }
-        if matches_complex_selector(selector, 0, None, &el, context, rightmost).to_bool(true) {
+        if matches_complex_selector(selector.iter(), None, &el, context, rightmost).to_bool(true) {
             return true;
         }
 
@@ -1329,7 +1309,7 @@ where
     };
     context.nest(|context| {
         context.with_featureless(false, |context| {
-            matches_complex_selector(selector, 0, None, element, context, rightmost)
+            matches_complex_selector(selector.iter(), None, element, context, rightmost)
         })
     })
 }
@@ -1347,7 +1327,9 @@ where
     if element.is_html_slot_element() {
         return KleeneValue::False;
     }
-    context.nest(|context| matches_complex_selector(selector, 0, None, element, context, rightmost))
+    context.nest(|context| {
+        matches_complex_selector(selector.iter(), None, element, context, rightmost)
+    })
 }
 
 fn matches_rare_attribute_selector<E>(
