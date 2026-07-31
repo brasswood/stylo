@@ -1022,7 +1022,7 @@ where
             return SelectorMatchingResult::NotMatchedGlobally;
         }
     }
-    let fail_cache_target = active_fail_cache_prefix_id.map(|_| element.clone());
+    let fail_cache_target = active_fail_cache_prefix_id.map(|_| element);
 
     debug!(
         "Matching complex selector {:?} for {:?}",
@@ -1034,7 +1034,7 @@ where
 
     let Some(combinator) = selector_iter.next_sequence() else {
         return finish_with_fail_cache(
-            fail_cache_target.as_ref(),
+            fail_cache_target,
             active_fail_cache_prefix_id,
             match matches_compound_selector {
                 KleeneValue::True => SelectorMatchingResult::Matched,
@@ -1053,7 +1053,7 @@ where
         // A featureless element shouldn't match any further combinator.
         // TODO(emilio): Maybe we could avoid the compound matching more eagerly.
         return finish_with_fail_cache(
-            fail_cache_target.as_ref(),
+            fail_cache_target,
             active_fail_cache_prefix_id,
             SelectorMatchingResult::NotMatchedGlobally,
         );
@@ -1069,7 +1069,7 @@ where
         // We don't short circuit unknown here, since the rest of the selector
         // to the left of this compound may still return false.
         return finish_with_fail_cache(
-            fail_cache_target.as_ref(),
+            fail_cache_target,
             active_fail_cache_prefix_id,
             SelectorMatchingResult::NotMatchedAndRestartFromClosestLaterSibling,
         );
@@ -1107,7 +1107,7 @@ where
         element = match next_element {
             None => {
                 return finish_with_fail_cache(
-                    fail_cache_target.as_ref(),
+                    fail_cache_target,
                     active_fail_cache_prefix_id,
                     candidate_not_found,
                 )
@@ -1138,20 +1138,20 @@ where
                 );
                 if !matches_compound_selector.to_bool(false) {
                     return finish_with_fail_cache(
-                        fail_cache_target.as_ref(),
+                        fail_cache_target,
                         active_fail_cache_prefix_id,
                         SelectorMatchingResult::Unknown,
                     );
                 }
                 return finish_with_fail_cache(
-                    fail_cache_target.as_ref(),
+                    fail_cache_target,
                     active_fail_cache_prefix_id,
                     result,
                 );
             },
             SelectorMatchingResult::Unknown | SelectorMatchingResult::NotMatchedGlobally => {
                 return finish_with_fail_cache(
-                    fail_cache_target.as_ref(),
+                    fail_cache_target,
                     active_fail_cache_prefix_id,
                     result,
                 )
@@ -1170,7 +1170,7 @@ where
             Combinator::Child => {
                 // Upgrade the failure status to NotMatchedAndRestartFromClosestDescendant.
                 return finish_with_fail_cache(
-                    fail_cache_target.as_ref(),
+                    fail_cache_target,
                     active_fail_cache_prefix_id,
                     SelectorMatchingResult::NotMatchedAndRestartFromClosestDescendant,
                 );
@@ -1184,7 +1184,7 @@ where
                     SelectorMatchingResult::NotMatchedAndRestartFromClosestDescendant
                 ) {
                     return finish_with_fail_cache(
-                        fail_cache_target.as_ref(),
+                        fail_cache_target,
                         active_fail_cache_prefix_id,
                         result,
                     );
@@ -1199,7 +1199,7 @@ where
                 // sibling / descendant combinators to the right of them. This hopefully saves one
                 // branch.
                 return finish_with_fail_cache(
-                    fail_cache_target.as_ref(),
+                    fail_cache_target,
                     active_fail_cache_prefix_id,
                     result,
                 );
@@ -1210,7 +1210,7 @@ where
             // A featureless element didn't match the selector, we can stop matching now rather
             // than looking at following elements for our combinator.
             return finish_with_fail_cache(
-                fail_cache_target.as_ref(),
+                fail_cache_target,
                 active_fail_cache_prefix_id,
                 candidate_not_found,
             );
