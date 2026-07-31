@@ -492,6 +492,14 @@ where
     result
 }
 
+#[inline]
+fn split_first_fail_cache_prefix_id(prefix_ids: Option<&[u16]>) -> (Option<u16>, Option<&[u16]>) {
+    match prefix_ids.and_then(<[u16]>::split_first) {
+        Some((prefix_id, remaining_prefix_ids)) => (Some(*prefix_id), Some(remaining_prefix_ids)),
+        None => (None, None),
+    }
+}
+
 /// Whether a compound selector matched, and whether it was the rightmost
 /// selector inside the complex selector.
 pub enum CompoundSelectorMatchingResult {
@@ -652,11 +660,19 @@ where
                 .count()
         })
     };
+    let (fail_cache_prefix_id, remaining_fail_cache_prefix_ids) = if matched_combinators == 0 {
+        (None, selector_fail_cache_prefix_ids)
+    } else {
+        split_first_fail_cache_prefix_id(
+            selector_fail_cache_prefix_ids
+                .and_then(|prefix_ids| prefix_ids.get(matched_combinators - 1..)),
+        )
+    };
 
     matches_complex_selector_internal(
         iter,
-        selector_fail_cache_prefix_ids,
-        matched_combinators,
+        fail_cache_prefix_id,
+        remaining_fail_cache_prefix_ids,
         element,
         context,
         rightmost,
@@ -1023,8 +1039,8 @@ where
 
 fn matches_complex_selector_internal<E>(
     mut selector_iter: SelectorIter<E::Impl>,
-    selector_fail_cache_prefix_ids: Option<&[u16]>,
-    matched_combinators: usize,
+    fail_cache_prefix_id: Option<u16>,
+    remaining_fail_cache_prefix_ids: Option<&[u16]>,
     element: &E,
     context: &mut MatchingContext<E::Impl>,
     mut rightmost: SubjectOrPseudoElement,
@@ -1033,20 +1049,16 @@ fn matches_complex_selector_internal<E>(
 where
     E: Element,
 {
-    let fail_cache_prefix_id = context
+    let active_fail_cache_prefix_id = context
         .use_fail_caches()
-        .then(|| {
-            selector_fail_cache_prefix_ids?
-                .get(matched_combinators.checked_sub(1)?)
-                .copied()
-        })
+        .then_some(fail_cache_prefix_id)
         .flatten();
-    if let Some(prefix_id) = fail_cache_prefix_id {
+    if let Some(prefix_id) = active_fail_cache_prefix_id {
         if element.fail_cache_contains(prefix_id) {
             return SelectorMatchingResult::NotMatchedGlobally;
         }
     }
-    let fail_cache_target = fail_cache_prefix_id.map(|_| element.clone());
+    let fail_cache_target = active_fail_cache_prefix_id.map(|_| element.clone());
 
     debug!(
         "Matching complex selector {:?} for {:?}",
@@ -1059,7 +1071,7 @@ where
     let Some(combinator) = selector_iter.next_sequence() else {
         return finish_with_fail_cache(
             fail_cache_target.as_ref(),
-            fail_cache_prefix_id,
+            active_fail_cache_prefix_id,
             match matches_compound_selector {
             KleeneValue::True => SelectorMatchingResult::Matched,
             KleeneValue::Unknown => SelectorMatchingResult::Unknown,
@@ -1068,6 +1080,8 @@ where
             },
         });
     };
+    let (next_fail_cache_prefix_id, remaining_fail_cache_prefix_ids) =
+        split_first_fail_cache_prefix_id(remaining_fail_cache_prefix_ids);
 
     let is_pseudo_combinator = combinator.is_pseudo_element();
     if context.featureless() && !is_pseudo_combinator {
@@ -1075,7 +1089,7 @@ where
         // TODO(emilio): Maybe we could avoid the compound matching more eagerly.
         return finish_with_fail_cache(
             fail_cache_target.as_ref(),
-            fail_cache_prefix_id,
+            active_fail_cache_prefix_id,
             SelectorMatchingResult::NotMatchedGlobally,
         );
     }
@@ -1091,7 +1105,7 @@ where
         // to the left of this compound may still return false.
         return finish_with_fail_cache(
             fail_cache_target.as_ref(),
-            fail_cache_prefix_id,
+            active_fail_cache_prefix_id,
             SelectorMatchingResult::NotMatchedAndRestartFromClosestLaterSibling,
         );
     }
@@ -1129,7 +1143,7 @@ where
             None => {
                 return finish_with_fail_cache(
                     fail_cache_target.as_ref(),
-                    fail_cache_prefix_id,
+                    active_fail_cache_prefix_id,
                     candidate_not_found,
                 )
             },
@@ -1140,8 +1154,8 @@ where
             context.with_featureless(featureless, |context| {
                 matches_complex_selector_internal(
                     selector_iter.clone(),
-                    selector_fail_cache_prefix_ids,
-                    matched_combinators + 1,
+                    next_fail_cache_prefix_id,
+                    remaining_fail_cache_prefix_ids,
                     &element,
                     context,
                     rightmost,
@@ -1160,20 +1174,20 @@ where
                 if !matches_compound_selector.to_bool(false) {
                     return finish_with_fail_cache(
                         fail_cache_target.as_ref(),
-                        fail_cache_prefix_id,
+                        active_fail_cache_prefix_id,
                         SelectorMatchingResult::Unknown,
                     );
                 }
                 return finish_with_fail_cache(
                     fail_cache_target.as_ref(),
-                    fail_cache_prefix_id,
+                    active_fail_cache_prefix_id,
                     result,
                 );
             },
             SelectorMatchingResult::Unknown | SelectorMatchingResult::NotMatchedGlobally => {
                 return finish_with_fail_cache(
                     fail_cache_target.as_ref(),
-                    fail_cache_prefix_id,
+                    active_fail_cache_prefix_id,
                     result,
                 )
             },
@@ -1192,7 +1206,7 @@ where
                 // Upgrade the failure status to NotMatchedAndRestartFromClosestDescendant.
                 return finish_with_fail_cache(
                     fail_cache_target.as_ref(),
-                    fail_cache_prefix_id,
+                    active_fail_cache_prefix_id,
                     SelectorMatchingResult::NotMatchedAndRestartFromClosestDescendant,
                 );
             },
@@ -1206,7 +1220,7 @@ where
                 ) {
                     return finish_with_fail_cache(
                         fail_cache_target.as_ref(),
-                        fail_cache_prefix_id,
+                        active_fail_cache_prefix_id,
                         result,
                     );
                 }
@@ -1221,7 +1235,7 @@ where
                 // branch.
                 return finish_with_fail_cache(
                     fail_cache_target.as_ref(),
-                    fail_cache_prefix_id,
+                    active_fail_cache_prefix_id,
                     result,
                 );
             },
@@ -1232,7 +1246,7 @@ where
             // than looking at following elements for our combinator.
             return finish_with_fail_cache(
                 fail_cache_target.as_ref(),
-                fail_cache_prefix_id,
+                active_fail_cache_prefix_id,
                 candidate_not_found,
             );
         }
