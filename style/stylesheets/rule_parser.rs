@@ -470,7 +470,7 @@ impl<'a, 'i> AtRuleParser<'i> for TopLevelRuleParser<'a, 'i> {
 }
 
 impl<'a, 'i> QualifiedRuleParser<'i> for TopLevelRuleParser<'a, 'i> {
-    type Prelude = SelectorList<SelectorImpl>;
+    type Prelude = (SelectorList<SelectorImpl>, Box<[String]>);
     type QualifiedRule = SourcePosition;
     type Error = StyleParseErrorKind<'i>;
 
@@ -997,7 +997,7 @@ impl<'a, 'i> AtRuleParser<'i> for NestedRuleParser<'a, 'i> {
 }
 
 impl<'a, 'i> QualifiedRuleParser<'i> for NestedRuleParser<'a, 'i> {
-    type Prelude = SelectorList<SelectorImpl>;
+    type Prelude = (SelectorList<SelectorImpl>, Box<[String]>);
     type QualifiedRule = ();
     type Error = StyleParseErrorKind<'i>;
 
@@ -1011,12 +1011,12 @@ impl<'a, 'i> QualifiedRuleParser<'i> for NestedRuleParser<'a, 'i> {
             url_data: self.context.url_data,
             for_supports_rule: false,
         };
-        SelectorList::parse(&selector_parser, input, self.parse_relative())
+        SelectorList::parse_with_css(&selector_parser, input, self.parse_relative())
     }
 
     fn parse_block<'t>(
         &mut self,
-        selectors: Self::Prelude,
+        (selectors, selector_css): Self::Prelude,
         start: &ParserState,
         input: &mut Parser<'i, 't>,
     ) -> Result<(), ParseError<'i>> {
@@ -1035,6 +1035,7 @@ impl<'a, 'i> QualifiedRuleParser<'i> for NestedRuleParser<'a, 'i> {
         top.rules
             .push(CssRule::Style(Arc::new(top.shared_lock.wrap(StyleRule {
                 selectors,
+                selector_css,
                 block,
                 rules: if result.rules.is_empty() {
                     None

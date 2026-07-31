@@ -25,6 +25,8 @@ use style_traits::CssStringWriter;
 pub struct StyleRule {
     /// The list of selectors in this rule.
     pub selectors: SelectorList<SelectorImpl>,
+    /// The CSS source for each selector in this rule.
+    pub selector_css: Box<[String]>,
     /// The declaration block with the properties it contains.
     pub block: Arc<Locked<PropertyDeclarationBlock>>,
     /// The nested rules to this style rule. Only non-`None` when nesting is enabled.
@@ -42,6 +44,7 @@ impl DeepCloneWithLock for StyleRule {
     ) -> StyleRule {
         StyleRule {
             selectors: self.selectors.clone(),
+            selector_css: self.selector_css.clone(),
             block: Arc::new(lock.wrap(self.block.read_with(guard).clone())),
             rules: self.rules.as_ref().map(|rules| {
                 let rules = rules.read_with(guard);
