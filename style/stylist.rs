@@ -80,6 +80,7 @@ use selectors::parser::{
 use selectors::visitor::{SelectorListKind, SelectorVisitor};
 use servo_arc::{Arc, ArcBorrow, ThinArc};
 use smallvec::SmallVec;
+use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::hash::{Hash, Hasher};
 use std::sync::Mutex;
@@ -3741,12 +3742,19 @@ impl CascadeData {
         &mut self,
         selector: &Selector<SelectorImpl>,
         offset: usize,
+        selector_css: Option<&str>,
     ) -> Option<u16> {
-        let mut selector_css = InlineCssString::default();
-        selector
-            .suffix_to_css(offset, &mut selector_css)
-            .expect("writing CSS to an inline buffer should be infallible");
-        if let Some(id) = self.fail_cache_prefix_ids.get(selector_css.as_str()) {
+        let selector_css = match selector_css {
+            Some(css) => Cow::Borrowed(css),
+            None => {
+                let mut css = InlineCssString::default();
+                selector
+                    .suffix_to_css(offset, &mut css)
+                    .expect("writing CSS to an inline buffer should be infallible");
+                Cow::Owned(css.into_string())
+            },
+        };
+        if let Some(id) = self.fail_cache_prefix_ids.get(&*selector_css) {
             return Some(*id);
         }
         if self.next_fail_cache_prefix_id == 0 {
@@ -3757,7 +3765,7 @@ impl CascadeData {
         if self.next_fail_cache_prefix_id == 0 {
             log::warn!("Ran out of fail-cache prefix ids; later prefixes will not be cached");
         }
-        self.fail_cache_prefix_ids.insert(selector_css.into_string(), id);
+        self.fail_cache_prefix_ids.insert(selector_css.into_owned(), id);
         Some(id)
     }
 
@@ -3780,7 +3788,7 @@ impl CascadeData {
             {
                 break;
             }
-            let Some(prefix_id) = self.fail_cache_prefix_id(selector, next_offset) else {
+            let Some(prefix_id) = self.fail_cache_prefix_id(selector, next_offset, None) else {
                 break;
             };
             prefix_ids.push(prefix_id);
