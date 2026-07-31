@@ -3764,6 +3764,7 @@ impl CascadeData {
     fn fail_cache_prefix_ids_for_selector(
         &mut self,
         selector: &Selector<SelectorImpl>,
+        _selector_css: Option<&str>,
     ) -> Option<Box<[u16]>> {
         let start = tsc_timer::Start::now();
         let mut prefix_ids = Vec::new();
@@ -3793,6 +3794,7 @@ impl CascadeData {
     fn add_styles(
         &mut self,
         selectors: &SelectorList<SelectorImpl>,
+        selector_css: Option<&[String]>,
         declarations: &Arc<Locked<PropertyDeclarationBlock>>,
         ancestor_selectors: Option<&SelectorList<SelectorImpl>>,
         containing_rule_state: &ContainingRuleState,
@@ -3804,7 +3806,7 @@ impl CascadeData {
         mut collected_scope_dependencies: Option<&mut Vec<Dependency>>,
     ) -> Result<(), AllocErr> {
         self.num_declarations += declarations.read_with(guard).len();
-        for selector in selectors.slice() {
+        for (index, selector) in selectors.slice().iter().enumerate() {
             self.num_selectors += 1;
 
             let pseudo_elements = selector.pseudo_elements();
@@ -3846,6 +3848,10 @@ impl CascadeData {
                 Some(ref s) => selector.replace_parent_selector(&s),
                 None => selector.clone(),
             };
+            let selector_css = ancestor_selectors
+                .is_none()
+                .then(|| selector_css.and_then(|css| css.get(index).map(String::as_str)))
+                .flatten();
 
             let hashes = AncestorHashes::new(
                 &selector,
@@ -3853,7 +3859,7 @@ impl CascadeData {
                 self.use_edge_selector_optimization,
             );
             let fail_cache_prefix_ids = if self.build_fail_cache_entries {
-                self.fail_cache_prefix_ids_for_selector(&selector)
+                self.fail_cache_prefix_ids_for_selector(&selector, selector_css)
             } else {
                 None
             };
@@ -4016,6 +4022,7 @@ impl CascadeData {
                         containing_rule_state.scope_is_effective().then(|| Vec::new());
                     self.add_styles(
                         &style_rule.selectors,
+                        Some(&style_rule.selector_css),
                         &style_rule.block,
                         ancestor_selectors,
                         containing_rule_state,
@@ -4058,6 +4065,7 @@ impl CascadeData {
                             containing_rule_state.scope_is_effective().then(|| Vec::new());
                         self.add_styles(
                             selectors,
+                            None,
                             decls,
                             /* ancestor_selectors = */ None,
                             containing_rule_state,
