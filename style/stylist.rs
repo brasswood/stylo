@@ -62,6 +62,7 @@ use crate::values::specified::position::PositionTryFallbacksTryTactic;
 use crate::values::{computed, AtomIdent};
 use crate::AllocErr;
 use crate::{Atom, LocalName, Namespace, ShrinkIfNeeded, WeakAtom};
+use cssparser::{Parser, ParserInput, Token};
 use dom::{DocumentState, ElementState};
 #[cfg(feature = "gecko")]
 use malloc_size_of::MallocUnconditionalShallowSizeOf;
@@ -3307,6 +3308,36 @@ fn next_selector_offset(selector: &Selector<SelectorImpl>, offset: usize) -> Opt
     None
 }
 
+fn selector_css_suffixes(css: &str) -> Vec<&str> {
+    let css = css.trim();
+    let mut input = ParserInput::new(css);
+    let mut input = Parser::new(&mut input);
+    let mut suffixes = Vec::new();
+    let mut whitespace = false;
+    let mut combinator = false;
+    loop {
+        let start = input.position();
+        let Ok(token) = input.next_including_whitespace() else {
+            break;
+        };
+        match *token {
+            Token::WhiteSpace(_) => whitespace = true,
+            Token::Delim('>') | Token::Delim('+') | Token::Delim('~') => {
+                whitespace = false;
+                combinator = true;
+            },
+            _ => {
+                if whitespace || combinator {
+                    suffixes.push(&css[start.byte_index()..]);
+                }
+                whitespace = false;
+                combinator = false;
+            },
+        }
+    }
+    suffixes
+}
+
 fn scope_start_matches_shadow_host(start: &SelectorList<SelectorImpl>) -> bool {
     // TODO(emilio): Should we carry a MatchesFeaturelessHost rather than a bool around?
     // Pre-existing behavior with multiple selectors matches this tho.
@@ -3772,9 +3803,10 @@ impl CascadeData {
     fn fail_cache_prefix_ids_for_selector(
         &mut self,
         selector: &Selector<SelectorImpl>,
-        _selector_css: Option<&str>,
+        selector_css: Option<&str>,
     ) -> Option<Box<[u16]>> {
         let start = tsc_timer::Start::now();
+        let css_suffixes = selector_css.map(selector_css_suffixes);
         let mut prefix_ids = Vec::new();
         let mut offset = 0usize;
         while let Some((next_offset, combinator)) = next_selector_offset(selector, offset) {
@@ -3788,7 +3820,10 @@ impl CascadeData {
             {
                 break;
             }
-            let Some(prefix_id) = self.fail_cache_prefix_id(selector, next_offset, None) else {
+            let selector_css = css_suffixes
+                .as_ref()
+                .and_then(|suffixes| suffixes.iter().rev().nth(prefix_ids.len() + 1).copied());
+            let Some(prefix_id) = self.fail_cache_prefix_id(selector, next_offset, selector_css) else {
                 break;
             };
             prefix_ids.push(prefix_id);
