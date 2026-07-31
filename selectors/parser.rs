@@ -573,6 +573,27 @@ impl<Impl: SelectorImpl> SelectorList<Impl> {
         )
     }
 
+    /// Parses selectors and returns the corresponding CSS source strings.
+    pub fn parse_with_css<'i, 't, P>(
+        parser: &P,
+        input: &mut CssParser<'i, 't>,
+        parse_relative: ParseRelative,
+    ) -> Result<(Self, Box<[String]>), ParseError<'i, P::Error>>
+    where
+        P: Parser<'i, Impl = Impl>,
+    {
+        let mut css = Vec::new();
+        let selectors = Self::parse_with_state_and_css(
+            parser,
+            input,
+            SelectorParsingState::empty(),
+            ForgivingParsing::No,
+            parse_relative,
+            Some(&mut css),
+        )?;
+        Ok((selectors, css.into_boxed_slice()))
+}
+
     #[inline]
     fn parse_with_state<'i, 't, P>(
         parser: &P,
@@ -580,6 +601,20 @@ impl<Impl: SelectorImpl> SelectorList<Impl> {
         state: SelectorParsingState,
         recovery: ForgivingParsing,
         parse_relative: ParseRelative,
+    ) -> Result<Self, ParseError<'i, P::Error>>
+    where
+        P: Parser<'i, Impl = Impl>,
+    {
+        Self::parse_with_state_and_css(parser, input, state, recovery, parse_relative, None)
+    }
+
+    fn parse_with_state_and_css<'i, 't, P>(
+        parser: &P,
+        input: &mut CssParser<'i, 't>,
+        state: SelectorParsingState,
+        recovery: ForgivingParsing,
+        parse_relative: ParseRelative,
+        mut css: Option<&mut Vec<String>>,
     ) -> Result<Self, ParseError<'i, P::Error>>
     where
         P: Parser<'i, Impl = Impl>,
@@ -593,6 +628,11 @@ impl<Impl: SelectorImpl> SelectorList<Impl> {
                 if forgiving && (selector.is_err() || input.expect_exhausted().is_err()) {
                     input.expect_no_error_token()?;
                     selector = Ok(Selector::new_invalid(input.slice_from(start)));
+                }
+                if selector.is_ok() {
+                    if let Some(css) = css.as_deref_mut() {
+                        css.push(input.slice_from(start).to_owned());
+                    }
                 }
                 selector
             })?;
