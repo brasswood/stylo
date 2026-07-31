@@ -654,8 +654,7 @@ where
     };
 
     matches_complex_selector_internal(
-        selector,
-        offset,
+        iter,
         selector_fail_cache_prefix_ids,
         matched_combinators,
         element,
@@ -1023,8 +1022,7 @@ where
 }
 
 fn matches_complex_selector_internal<E>(
-    selector: &Selector<E::Impl>,
-    offset: usize,
+    mut selector_iter: SelectorIter<E::Impl>,
     selector_fail_cache_prefix_ids: Option<&[u16]>,
     matched_combinators: usize,
     element: &E,
@@ -1049,7 +1047,6 @@ where
         }
     }
     let fail_cache_target = fail_cache_prefix_id.map(|_| element.clone());
-    let mut selector_iter = selector.iter_from(offset);
 
     debug!(
         "Matching complex selector {:?} for {:?}",
@@ -1059,7 +1056,7 @@ where
     let matches_compound_selector =
         matches_compound_selector(&mut selector_iter, element, context, rightmost);
 
-    let Some((next_offset, combinator)) = next_selector_offset(selector, offset) else {
+    let Some(combinator) = selector_iter.next_sequence() else {
         return finish_with_fail_cache(
             fail_cache_target.as_ref(),
             fail_cache_prefix_id,
@@ -1142,8 +1139,7 @@ where
         let result = context.with_visited_handling_mode(visited_handling, |context| {
             context.with_featureless(featureless, |context| {
                 matches_complex_selector_internal(
-                    selector,
-                    next_offset,
+                    selector_iter.clone(),
                     selector_fail_cache_prefix_ids,
                     matched_combinators + 1,
                     &element,
