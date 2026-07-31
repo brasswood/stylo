@@ -3266,12 +3266,6 @@ lazy_static! {
 struct InlineCssString(SmallVec<[u8; 256]>);
 
 impl InlineCssString {
-    fn as_str(&self) -> &str {
-        // SAFETY: The buffer is private and is only extended with valid UTF-8
-        // through the fmt::Write implementation below.
-        unsafe { std::str::from_utf8_unchecked(&self.0) }
-    }
-
     fn into_string(self) -> String {
         // SAFETY: See as_str().
         unsafe { String::from_utf8_unchecked(self.0.into_vec()) }
