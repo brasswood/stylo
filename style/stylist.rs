@@ -3295,6 +3295,68 @@ impl fmt::Write for InlineCssString {
     }
 }
 
+#[derive(Clone, Debug, MallocSizeOf)]
+struct InternedCompoundSelector {
+    #[ignore_malloc_size_of = "Selector is reference-counted"]
+    selector: Selector<SelectorImpl>,
+    start: usize,
+    end: usize,
+    id: u32,
+}
+
+impl InternedCompoundSelector {
+    fn components(&self) -> &[Component<SelectorImpl>] {
+        &self.selector.iter_raw_match_order().as_slice()[self.start..self.end]
+    }
+}
+
+#[derive(Clone, Debug, Default, MallocSizeOf)]
+struct CompoundSelectorInterner {
+    buckets: FxHashMap<u64, Vec<InternedCompoundSelector>>,
+    next_id: u32,
+}
+
+impl CompoundSelectorInterner {
+    fn intern(
+        &mut self,
+        selector: &Selector<SelectorImpl>,
+        start: usize,
+        end: usize,
+    ) -> u32 {
+        let components = &selector.iter_raw_match_order().as_slice()[start..end];
+        self.intern_with_hash(selector, start, end, hash_compound_selector(components))
+    }
+
+    fn intern_with_hash(
+        &mut self,
+        selector: &Selector<SelectorImpl>,
+        start: usize,
+        end: usize,
+        hash: u64,
+    ) -> u32 {
+        let components = &selector.iter_raw_match_order().as_slice()[start..end];
+        let bucket = self.buckets.entry(hash).or_default();
+        if let Some(entry) = bucket
+            .iter()
+            .find(|entry| entry.components() == components)
+        {
+            return entry.id;
+        }
+        let id = self.next_id;
+        self.next_id = self
+            .next_id
+            .checked_add(1)
+            .expect("ran out of compound selector ids");
+        bucket.push(InternedCompoundSelector {
+            selector: selector.clone(),
+            start,
+            end,
+            id,
+        });
+        id
+    }
+}
+
 fn hash_compound_selector(components: &[Component<SelectorImpl>]) -> u64 {
     let mut hasher = FxHasher::default();
     components.len().hash(&mut hasher);
