@@ -66,7 +66,8 @@ use dom::{DocumentState, ElementState};
 #[cfg(feature = "gecko")]
 use malloc_size_of::MallocUnconditionalShallowSizeOf;
 use malloc_size_of::{MallocShallowSizeOf, MallocSizeOf, MallocSizeOfOps};
-use rustc_hash::FxHashMap;
+use precomputed_hash::PrecomputedHash;
+use rustc_hash::{FxHashMap, FxHasher};
 use selectors::attr::{CaseSensitivity, NamespaceConstraint};
 use selectors::bloom::BloomFilter;
 use selectors::matching::{
@@ -3292,6 +3293,35 @@ impl fmt::Write for InlineCssString {
         }
         Ok(())
     }
+}
+
+fn hash_compound_selector(components: &[Component<SelectorImpl>]) -> u64 {
+    let mut hasher = FxHasher::default();
+    components.len().hash(&mut hasher);
+    for component in components {
+        std::mem::discriminant(component).hash(&mut hasher);
+        match component {
+            Component::LocalName(name) => name.name.precomputed_hash().hash(&mut hasher),
+            Component::ID(identifier) | Component::Class(identifier) => {
+                identifier.precomputed_hash().hash(&mut hasher);
+            },
+            Component::AttributeInNoNamespaceExists {
+                local_name, ..
+            }
+            | Component::AttributeInNoNamespace { local_name, .. } => {
+                local_name.precomputed_hash().hash(&mut hasher)
+            },
+            Component::AttributeOther(attr) => attr.local_name.precomputed_hash().hash(&mut hasher),
+            Component::DefaultNamespace(url) | Component::Namespace(_, url) => {
+                url.precomputed_hash().hash(&mut hasher);
+            },
+            Component::Combinator(_) => {
+                debug_assert!(false, "compound selector contains a combinator");
+            },
+            _ => {},
+        }
+    }
+    hasher.finish()
 }
 
 fn next_selector_offset(selector: &Selector<SelectorImpl>, offset: usize) -> Option<(usize, Combinator)> {
