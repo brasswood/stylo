@@ -3386,6 +3386,28 @@ fn hash_compound_selector(components: &[Component<SelectorImpl>]) -> u64 {
     hasher.finish()
 }
 
+#[cfg(test)]
+mod compound_selector_interner_tests {
+    use super::*;
+
+    #[test]
+    fn resolves_hash_collisions_with_structural_equality() {
+        let mut interner = CompoundSelectorInterner::default();
+        let first = Selector::<SelectorImpl>::new_invalid(".first");
+        let second = Selector::<SelectorImpl>::new_invalid(".second");
+
+        let first_id = interner.intern_with_hash(&first, 0, first.len(), 0);
+        assert_ne!(
+            first_id,
+            interner.intern_with_hash(&second, 0, second.len(), 0)
+        );
+        assert_eq!(
+            first_id,
+            interner.intern_with_hash(&first, 0, first.len(), 0)
+        );
+    }
+}
+
 fn next_selector_offset(selector: &Selector<SelectorImpl>, offset: usize) -> Option<(usize, Combinator)> {
     let slice = selector.iter_raw_match_order().as_slice();
     let mut index = offset;
