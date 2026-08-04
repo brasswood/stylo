@@ -3386,6 +3386,28 @@ fn hash_compound_selector(components: &[Component<SelectorImpl>]) -> u64 {
     hasher.finish()
 }
 
+#[derive(Clone, Copy, Debug, Eq, Hash, MallocSizeOf, PartialEq)]
+enum FailCachePrefixToken {
+    Compound(u32),
+    Combinator(FailCachePrefixCombinator),
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, MallocSizeOf, PartialEq)]
+enum FailCachePrefixCombinator {
+    Child,
+    Descendant,
+}
+
+impl From<Combinator> for FailCachePrefixCombinator {
+    fn from(combinator: Combinator) -> Self {
+        match combinator {
+            Combinator::Child => Self::Child,
+            Combinator::Descendant => Self::Descendant,
+            _ => unreachable!("unsupported fail-cache prefix combinator"),
+        }
+    }
+}
+
 #[cfg(test)]
 mod compound_selector_interner_tests {
     use super::*;
@@ -3405,6 +3427,21 @@ mod compound_selector_interner_tests {
             first_id,
             interner.intern_with_hash(&first, 0, first.len(), 0)
         );
+    }
+
+    #[test]
+    fn distinguishes_child_and_descendant_prefixes() {
+        let compound = FailCachePrefixToken::Compound(7);
+        let child = [
+            compound,
+            FailCachePrefixToken::Combinator(Combinator::Child.into()),
+        ];
+        let descendant = [
+            compound,
+            FailCachePrefixToken::Combinator(Combinator::Descendant.into()),
+        ];
+
+        assert_ne!(child, descendant);
     }
 }
 
