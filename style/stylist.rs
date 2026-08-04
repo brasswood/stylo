@@ -3365,6 +3365,11 @@ enum FailCachePrefixToken {
 enum FailCachePrefixCombinator {
     Child,
     Descendant,
+    NextSibling,
+    LaterSibling,
+    PseudoElement,
+    SlotAssignment,
+    Part,
 }
 
 impl From<Combinator> for FailCachePrefixCombinator {
@@ -3372,7 +3377,11 @@ impl From<Combinator> for FailCachePrefixCombinator {
         match combinator {
             Combinator::Child => Self::Child,
             Combinator::Descendant => Self::Descendant,
-            _ => unreachable!("unsupported fail-cache prefix combinator"),
+            Combinator::NextSibling => Self::NextSibling,
+            Combinator::LaterSibling => Self::LaterSibling,
+            Combinator::PseudoElement => Self::PseudoElement,
+            Combinator::SlotAssignment => Self::SlotAssignment,
+            Combinator::Part => Self::Part,
         }
     }
 }
@@ -3399,18 +3408,23 @@ mod compound_selector_interner_tests {
     }
 
     #[test]
-    fn distinguishes_child_and_descendant_prefixes() {
-        let compound = FailCachePrefixToken::Compound(7);
-        let child = [
-            compound,
-            FailCachePrefixToken::Combinator(Combinator::Child.into()),
+    fn preserves_all_combinator_identities() {
+        let combinators = [
+            Combinator::Child,
+            Combinator::Descendant,
+            Combinator::NextSibling,
+            Combinator::LaterSibling,
+            Combinator::PseudoElement,
+            Combinator::SlotAssignment,
+            Combinator::Part,
         ];
-        let descendant = [
-            compound,
-            FailCachePrefixToken::Combinator(Combinator::Descendant.into()),
-        ];
+        let tokens = combinators.map(|combinator| {
+            FailCachePrefixToken::Combinator(combinator.into())
+        });
 
-        assert_ne!(child, descendant);
+        for (index, token) in tokens.iter().enumerate() {
+            assert!(!tokens[..index].contains(token));
+        }
     }
 }
 
