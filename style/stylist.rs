@@ -84,7 +84,7 @@ use smallvec::SmallVec;
 use std::cmp::Ordering;
 use std::hash::{Hash, Hasher};
 use std::sync::Mutex;
-use std::{fmt, mem, ops};
+use std::{mem, ops};
 
 /// The type of the stylesheets that the stylist contains.
 #[cfg(feature = "servo")]
@@ -3262,40 +3262,6 @@ lazy_static! {
         list.mark_as_intentionally_leaked();
         list
     };
-}
-
-#[derive(Default)]
-struct InlineCssString(SmallVec<[u8; 256]>);
-
-impl InlineCssString {
-    fn as_str(&self) -> &str {
-        // SAFETY: The buffer is private and is only extended with valid UTF-8
-        // through the fmt::Write implementation below.
-        unsafe { std::str::from_utf8_unchecked(&self.0) }
-    }
-
-    fn into_string(self) -> String {
-        // SAFETY: See as_str().
-        unsafe { String::from_utf8_unchecked(self.0.into_vec()) }
-    }
-}
-
-impl fmt::Write for InlineCssString {
-    fn write_str(&mut self, value: &str) -> fmt::Result {
-        self.0.extend_from_slice(value.as_bytes());
-        Ok(())
-    }
-
-    fn write_char(&mut self, value: char) -> fmt::Result {
-        if value.is_ascii() {
-            self.0.push(value as u8);
-        } else {
-            let mut buffer = [0; 4];
-            self.0
-                .extend_from_slice(value.encode_utf8(&mut buffer).as_bytes());
-        }
-        Ok(())
-    }
 }
 
 #[derive(Clone, Debug, MallocSizeOf)]
