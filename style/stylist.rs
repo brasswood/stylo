@@ -3288,6 +3288,20 @@ impl Hash for FailCachePrefix {
             match component {
                 Component::LocalName(name) => Some(name.name.precomputed_hash()),
                 Component::ID(name) | Component::Class(name) => Some(name.precomputed_hash()),
+                Component::AttributeInNoNamespaceExists { local_name, .. }
+                | Component::AttributeInNoNamespace { local_name, .. } => {
+                    Some(local_name.precomputed_hash())
+                },
+                Component::AttributeOther(selector) => {
+                    Some(selector.local_name.precomputed_hash())
+                },
+                Component::DefaultNamespace(url) | Component::Namespace(_, url) => {
+                    Some(url.precomputed_hash())
+                },
+                Component::Combinator(combinator) => {
+                    mem::discriminant(combinator).hash(state);
+                    None
+                },
                 _ => None,
             }
             .hash(state);
