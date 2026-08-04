@@ -3230,8 +3230,11 @@ pub struct CascadeData {
     /// Effective media query results cached from the last rebuild.
     effective_media_query_results: EffectiveMediaQueryResults,
 
+    /// Stable ids assigned to compound selectors used in fail-cache prefixes.
+    fail_cache_compound_selector_ids: CompoundSelectorInterner,
+
     /// Stable ids assigned to selector prefixes used by the fail cache.
-    fail_cache_prefix_ids: FxHashMap<String, u16>,
+    fail_cache_prefix_ids: FxHashMap<Box<[FailCachePrefixToken]>, u16>,
 
     /// The next fail-cache prefix id to assign. Zero is reserved as vacant.
     next_fail_cache_prefix_id: u16,
@@ -3508,6 +3511,7 @@ impl CascadeData {
             scope_subject_map: Default::default(),
             extra_data: ExtraStyleData::default(),
             effective_media_query_results: EffectiveMediaQueryResults::new(),
+            fail_cache_compound_selector_ids: CompoundSelectorInterner::default(),
             fail_cache_prefix_ids: FxHashMap::default(),
             next_fail_cache_prefix_id: 1,
             rules_source_order: 0,
@@ -3893,11 +3897,29 @@ impl CascadeData {
         selector: &Selector<SelectorImpl>,
         offset: usize,
     ) -> Option<u16> {
-        let mut selector_css = InlineCssString::default();
-        selector
-            .suffix_to_css(offset, &mut selector_css)
-            .expect("writing CSS to an inline buffer should be infallible");
-        if let Some(id) = self.fail_cache_prefix_ids.get(selector_css.as_str()) {
+        let end = selector.len() - offset;
+        let components = &selector.iter_raw_match_order().as_slice()[..end];
+        let mut prefix = SmallVec::<[FailCachePrefixToken; 8]>::new();
+        let mut compound_start = 0;
+        for (index, component) in components.iter().enumerate() {
+            let Some(combinator) = component.as_combinator() else {
+                continue;
+            };
+            let compound_id = self.fail_cache_compound_selector_ids.intern(
+                selector,
+                compound_start,
+                index,
+            );
+            prefix.push(FailCachePrefixToken::Compound(compound_id));
+            prefix.push(FailCachePrefixToken::Combinator(combinator.into()));
+            compound_start = index + 1;
+        }
+        let compound_id = self
+            .fail_cache_compound_selector_ids
+            .intern(selector, compound_start, end);
+        prefix.push(FailCachePrefixToken::Compound(compound_id));
+
+        if let Some(id) = self.fail_cache_prefix_ids.get(prefix.as_slice()) {
             return Some(*id);
         }
         if self.next_fail_cache_prefix_id == 0 {
@@ -3908,7 +3930,8 @@ impl CascadeData {
         if self.next_fail_cache_prefix_id == 0 {
             log::warn!("Ran out of fail-cache prefix ids; later prefixes will not be cached");
         }
-        self.fail_cache_prefix_ids.insert(selector_css.into_string(), id);
+        self.fail_cache_prefix_ids
+            .insert(prefix.into_vec().into_boxed_slice(), id);
         Some(id)
     }
 
