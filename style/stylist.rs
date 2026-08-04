@@ -66,6 +66,7 @@ use dom::{DocumentState, ElementState};
 #[cfg(feature = "gecko")]
 use malloc_size_of::MallocUnconditionalShallowSizeOf;
 use malloc_size_of::{MallocShallowSizeOf, MallocSizeOf, MallocSizeOfOps};
+use precomputed_hash::PrecomputedHash;
 use rustc_hash::FxHashMap;
 use selectors::attr::{CaseSensitivity, NamespaceConstraint};
 use selectors::bloom::BloomFilter;
@@ -3230,7 +3231,7 @@ pub struct CascadeData {
     effective_media_query_results: EffectiveMediaQueryResults,
 
     /// Stable ids assigned to selector prefixes used by the fail cache.
-    fail_cache_prefix_ids: FxHashMap<String, u16>,
+    fail_cache_prefix_ids: FxHashMap<FailCachePrefix, u16>,
 
     /// The next fail-cache prefix id to assign. Zero is reserved as vacant.
     next_fail_cache_prefix_id: u16,
@@ -3258,6 +3259,40 @@ lazy_static! {
         list.mark_as_intentionally_leaked();
         list
     };
+}
+
+#[derive(Clone, Debug, MallocSizeOf)]
+struct FailCachePrefix(
+    #[ignore_malloc_size_of = "selector storage is shared"] Selector<SelectorImpl>,
+    usize,
+);
+
+impl Eq for FailCachePrefix {}
+
+impl FailCachePrefix {
+    fn components(&self) -> &[Component<SelectorImpl>] {
+        &self.0.iter_raw_match_order().as_slice()[..self.1]
+    }
+}
+
+impl PartialEq for FailCachePrefix {
+    fn eq(&self, other: &Self) -> bool {
+        self.components() == other.components()
+    }
+}
+
+impl Hash for FailCachePrefix {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        for component in self.components() {
+            mem::discriminant(component).hash(state);
+            match component {
+                Component::LocalName(name) => Some(name.name.precomputed_hash()),
+                Component::ID(name) | Component::Class(name) => Some(name.precomputed_hash()),
+                _ => None,
+            }
+            .hash(state);
+        }
+    }
 }
 
 #[derive(Default)]
@@ -3742,11 +3777,8 @@ impl CascadeData {
         selector: &Selector<SelectorImpl>,
         offset: usize,
     ) -> Option<u16> {
-        let mut selector_css = InlineCssString::default();
-        selector
-            .suffix_to_css(offset, &mut selector_css)
-            .expect("writing CSS to an inline buffer should be infallible");
-        if let Some(id) = self.fail_cache_prefix_ids.get(selector_css.as_str()) {
+        let prefix = FailCachePrefix(selector.clone(), selector.len() - offset);
+        if let Some(id) = self.fail_cache_prefix_ids.get(&prefix) {
             return Some(*id);
         }
         if self.next_fail_cache_prefix_id == 0 {
@@ -3757,7 +3789,7 @@ impl CascadeData {
         if self.next_fail_cache_prefix_id == 0 {
             log::warn!("Ran out of fail-cache prefix ids; later prefixes will not be cached");
         }
-        self.fail_cache_prefix_ids.insert(selector_css.into_string(), id);
+        self.fail_cache_prefix_ids.insert(prefix, id);
         Some(id)
     }
 
