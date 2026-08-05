@@ -3776,7 +3776,7 @@ impl CascadeData {
     fn fail_cache_prefix_ids_for_selector(
         &mut self,
         selector: &Selector<SelectorImpl>,
-    ) -> Option<Box<[u16]>> {
+    ) -> Option<Vec<u16>> {
         let start = tsc_timer::Start::now();
         let mut prefix_ids = Vec::new();
         let mut offset = 0usize;
@@ -3797,7 +3797,7 @@ impl CascadeData {
             prefix_ids.push(prefix_id);
             offset = next_offset;
         }
-        let result = (!prefix_ids.is_empty()).then(|| prefix_ids.into_boxed_slice());
+        let result = (!prefix_ids.is_empty()).then_some(prefix_ids);
         self.fail_cache_entry_build_time += start.elapsed();
         result
     }
@@ -4848,7 +4848,7 @@ pub struct Rule {
     pub hashes: AncestorHashes,
 
     /// Website-wide fail-cache prefix ids in combinator match order.
-    pub fail_cache_prefix_ids: Option<Box<[u16]>>,
+    pub fail_cache_prefix_ids: Option<Vec<u16>>,
 
     /// The source order this style rule appears in. Note that we only use
     /// three bytes to store this value in ApplicableDeclarationsBlock, so
@@ -4906,7 +4906,7 @@ impl Rule {
     pub fn new(
         selector: Selector<SelectorImpl>,
         hashes: AncestorHashes,
-        fail_cache_prefix_ids: Option<Box<[u16]>>,
+        fail_cache_prefix_ids: Option<Vec<u16>>,
         style_source: StyleSource,
         source_order: u32,
         layer_id: LayerId,
@@ -4932,7 +4932,7 @@ impl Rule {
 // microbenchmark.
 // When iterating over a large Rule array, we want to be able to fast-reject
 // selectors (with the inline hashes) with as few cache misses as possible.
-size_of_test!(Rule, 56);
+size_of_test!(Rule, 64);
 
 /// A function to be able to test the revalidation stuff.
 pub fn needs_revalidation_for_testing(s: &Selector<SelectorImpl>) -> bool {
