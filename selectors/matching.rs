@@ -483,6 +483,42 @@ fn split_first_fail_cache_prefix_id(prefix_ids: Option<&[u16]>) -> (Option<u16>,
     }
 }
 
+#[inline]
+fn any_fail_cache_prefix(
+    prefix_id: Option<u16>,
+    remaining_prefix_ids: Option<&[u16]>,
+    mut contains: impl FnMut(u16) -> bool,
+) -> bool {
+    prefix_id.is_some_and(&mut contains)
+        || remaining_prefix_ids
+            .is_some_and(|prefix_ids| prefix_ids.iter().copied().any(contains))
+}
+
+#[cfg(test)]
+mod fail_cache_prefix_tests {
+    use super::any_fail_cache_prefix;
+
+    #[test]
+    fn finds_cached_current_or_shorter_prefix() {
+        let shorter_prefixes = [2, 3];
+        assert!(any_fail_cache_prefix(
+            Some(1),
+            Some(&shorter_prefixes),
+            |id| id == 1
+        ));
+        assert!(any_fail_cache_prefix(
+            None,
+            Some(&shorter_prefixes),
+            |id| id == 3
+        ));
+        assert!(!any_fail_cache_prefix(
+            None,
+            Some(&shorter_prefixes),
+            |_| false
+        ));
+    }
+}
+
 /// Whether a compound selector matched, and whether it was the rightmost
 /// selector inside the complex selector.
 pub enum CompoundSelectorMatchingResult {
