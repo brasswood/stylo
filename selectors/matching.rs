@@ -1053,10 +1053,14 @@ where
         .use_fail_caches()
         .then_some(fail_cache_prefix_id)
         .flatten();
-    if let Some(prefix_id) = active_fail_cache_prefix_id {
-        if element.fail_cache_contains(prefix_id) {
-            return SelectorMatchingResult::NotMatchedGlobally;
-        }
+    if context.use_fail_caches()
+        && any_fail_cache_prefix(
+            active_fail_cache_prefix_id,
+            remaining_fail_cache_prefix_ids,
+            |prefix_id| element.fail_cache_contains(prefix_id),
+        )
+    {
+        return SelectorMatchingResult::NotMatchedGlobally;
     }
     let fail_cache_target = active_fail_cache_prefix_id.map(|_| element);
 
