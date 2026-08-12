@@ -3120,6 +3120,9 @@ pub struct CascadeData {
     /// cascade level.
     normal_rules: ElementAndPseudoRules,
 
+    /// Rules with descendant-universal tails, indexed by their activator.
+    universal_tail_rules: SelectorMap<UniversalTailRule>,
+
     /// The `:host` pseudo rules that are the rightmost selector (without
     /// accounting for pseudo-elements), or `:scope` rules that may match
     /// the featureless host.
@@ -3345,6 +3348,7 @@ impl CascadeData {
             build_fail_cache_entries: false,
             fail_cache_entry_build_time: tsc_timer::Duration::from_cycles(0),
             normal_rules: ElementAndPseudoRules::default(),
+            universal_tail_rules: SelectorMap::new(),
             featureless_host_rules: None,
             slotted_rules: None,
             part_rules: None,
@@ -3501,6 +3505,12 @@ impl CascadeData {
         self.normal_rules.rules(pseudo_elements)
     }
 
+    /// Returns descendant-universal rules indexed by their activating compound.
+    #[inline]
+    pub fn universal_tail_rules(&self) -> &SelectorMap<UniversalTailRule> {
+        &self.universal_tail_rules
+    }
+
     /// Returns the featureless pseudo rule map for a given pseudo-element.
     #[inline]
     pub fn featureless_host_rules(
@@ -3628,6 +3638,7 @@ impl CascadeData {
 
     fn shrink_maps_if_needed(&mut self) {
         self.normal_rules.shrink_if_needed();
+        self.universal_tail_rules.shrink_if_needed();
         if let Some(ref mut host_rules) = self.featureless_host_rules {
             host_rules.shrink_if_needed();
         }
@@ -3989,6 +4000,21 @@ impl CascadeData {
                     &mut self.normal_rules
                 }
                 .for_insertion(&pseudo_elements);
+
+                if !matches_featureless_host_only
+                    && !rule.selector.is_slotted()
+                    && pseudo_elements.is_empty()
+                    && rule.container_condition_id == ContainerConditionId::none()
+                    && rule.scope_condition_id == ScopeConditionId::none()
+                    && !rule.is_starting_style
+                {
+                    if let Some(offset) = rule.universal_tail_activation_offset() {
+                        self.universal_tail_rules.insert(
+                            UniversalTailRule::new(rule.clone(), offset),
+                            quirks_mode,
+                        )?;
+                    }
+                }
                 rules.insert(rule, quirks_mode)?;
             }
         }
@@ -4658,6 +4684,7 @@ impl CascadeData {
     /// Clears the cascade data, but not the invalidation data.
     fn clear_cascade_data(&mut self) {
         self.normal_rules.clear();
+        self.universal_tail_rules.clear();
         if let Some(ref mut slotted_rules) = self.slotted_rules {
             slotted_rules.clear();
         }
@@ -4810,6 +4837,7 @@ impl CascadeDataCacheEntry for CascadeData {
     #[cfg(feature = "gecko")]
     fn add_size_of(&self, ops: &mut MallocSizeOfOps, sizes: &mut ServoStyleSetSizes) {
         self.normal_rules.add_size_of(ops, sizes);
+        sizes.mOther += self.universal_tail_rules.size_of(ops);
         if let Some(ref slotted_rules) = self.slotted_rules {
             slotted_rules.add_size_of(ops, sizes);
         }
@@ -4946,7 +4974,7 @@ impl Rule {
 /// A rule indexed by the compound that activates its universal descendant
 /// tail, rather than by its rightmost universal compound.
 #[derive(Clone, Debug, MallocSizeOf)]
-pub(crate) struct UniversalTailRule {
+pub struct UniversalTailRule {
     pub(crate) rule: Rule,
     pub(crate) activation_offset: usize,
 }
