@@ -404,6 +404,41 @@ where
     (result.to_bool(true), stats)
 }
 
+/// Matches a selector from an interior offset while treating that compound as
+/// the subject of the selector.
+///
+/// This is useful when an optimization has already established the semantics
+/// of the removed right-hand portion. Ancestor hashes and fail caches cannot be
+/// reused because both are computed relative to the original subject.
+pub fn matches_selector_at_offset_as_subject<E>(
+    selector: &Selector<E::Impl>,
+    offset: usize,
+    element: &E,
+    context: &mut MatchingContext<E::Impl>,
+) -> (bool, BloomQueryStats)
+where
+    E: Element,
+{
+    let start = Start::now();
+    let does_match = matches_complex_selector(
+        selector.iter_from(offset),
+        None,
+        element,
+        context,
+        SubjectOrPseudoElement::Yes,
+    );
+    let duration = start.elapsed();
+    let matched = does_match == KleeneValue::True;
+    (
+        does_match.to_bool(true),
+        BloomQueryStats {
+            time_fast_rejecting: None,
+            time_slow_rejecting: (!matched).then_some(duration),
+            time_slow_accepting: matched.then_some(duration),
+        },
+    )
+}
+
 /// Same as matches_selector, but returns the Kleene value as-is.
 /// Also returns whether we fast-rejected.
 #[cfg_attr(not(feature = "debug_element"), inline(always))]
