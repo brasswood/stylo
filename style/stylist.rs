@@ -4909,6 +4909,9 @@ impl Rule {
     /// descendant-universal tail.
     pub(crate) fn universal_tail_activation_offset(&self) -> Option<usize> {
         let mut iter = self.selector.iter();
+        if !matches!(iter.next(), Some(Component::ExplicitUniversalType)) {
+            return None;
+        }
         if iter.next().is_some() {
             return None;
         }
@@ -4927,6 +4930,10 @@ impl Rule {
             && !self.is_starting_style
             && !self.selector.has_pseudo_element()
             && !self.selector.is_slotted()
+            && matches!(
+                self.selector.matches_featureless_host(false),
+                MatchesFeaturelessHost::Never
+            )
     }
 
     /// Returns the specificity of the rule.
