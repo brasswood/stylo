@@ -76,6 +76,11 @@ impl Hasher for PrecomputedHasher {
 pub trait SelectorMapEntry: Sized + Clone {
     /// Gets the selector we should use to index in the selector map.
     fn selector(&self) -> SelectorIter<'_, SelectorImpl>;
+
+    /// Whether this entry should be held out of ordinary universal lookups.
+    fn is_universal_tail(&self) -> bool {
+        false
+    }
 }
 
 /// Map element data to selector-providing objects for which the last simple
@@ -175,6 +180,8 @@ pub struct SelectorMap<T: 'static> {
     pub rare_pseudo_classes: SmallVec<[T; 1]>,
     /// All other rules.
     pub other: SmallVec<[T; 1]>,
+    /// Universal-tail rules that callers may handle through a separate index.
+    pub universal_tails: SmallVec<[T; 1]>,
     /// The number of entries in this map.
     pub count: usize,
 }
@@ -199,6 +206,7 @@ impl<T> SelectorMap<T> {
             namespace_hash: HashMap::default(),
             rare_pseudo_classes: SmallVec::new(),
             other: SmallVec::new(),
+            universal_tails: SmallVec::new(),
             count: 0,
         }
     }
@@ -222,6 +230,7 @@ impl<T> SelectorMap<T> {
         self.namespace_hash.clear();
         self.rare_pseudo_classes.clear();
         self.other.clear();
+        self.universal_tails.clear();
         self.count = 0;
     }
 
