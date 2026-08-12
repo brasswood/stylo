@@ -255,7 +255,6 @@ where
             cascade_level,
             cascade_data,
             &self.stylist,
-            false,
             None,
         );
     }

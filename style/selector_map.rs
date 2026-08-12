@@ -246,12 +246,44 @@ impl<T> SelectorMap<T> {
 }
 
 impl SelectorMap<Rule> {
+    /// Appends all rules in this map that match the element.
+    pub fn get_all_matching_rules<'selectormap, E>(
+        &'selectormap self,
+        element: E,
+        rule_hash_target: E,
+        matching_rules_list: &mut ApplicableDeclarationList,
+        matching_selectors: Option<&mut SmallVec<[&'selectormap Selector<SelectorImpl>; 16]>>,
+        selector_stats: Option<&mut SmallVec<[(&'selectormap Selector<SelectorImpl>, SelectorStats); 16]>>,
+        matching_context: &mut MatchingContext<E::Impl>,
+        cascade_level: CascadeLevel,
+        cascade_data: &CascadeData,
+        stylist: &Stylist,
+        debug_html_str: Option<&str>,
+    ) -> Statistics
+    where
+        E: SelectorMapElement,
+    {
+        self.get_all_matching_rules_with_universal_tails(
+            element,
+            rule_hash_target,
+            matching_rules_list,
+            matching_selectors,
+            selector_stats,
+            matching_context,
+            cascade_level,
+            cascade_data,
+            stylist,
+            false,
+            debug_html_str,
+        )
+    }
+
     /// Append to `rule_list` all Rules in `self` that match element.
     ///
     /// Extract matching rules as per element's ID, classes, tag name, etc..
     /// Sort the Rules at the end to maintain cascading order.
     /// Return statistics
-    pub fn get_all_matching_rules<'selectormap, E>(
+    pub fn get_all_matching_rules_with_universal_tails<'selectormap, E>(
         &'selectormap self,
         element: E,
         rule_hash_target: E,
