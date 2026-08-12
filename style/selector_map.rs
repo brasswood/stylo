@@ -253,6 +253,7 @@ impl SelectorMap<Rule> {
         cascade_level: CascadeLevel,
         cascade_data: &CascadeData,
         stylist: &Stylist,
+        skip_universal_tails: bool,
         debug_html_str: Option<&str>,
     ) -> Statistics
     where
@@ -280,6 +281,7 @@ impl SelectorMap<Rule> {
                 cascade_level,
                 cascade_data,
                 stylist,
+                skip_universal_tails,
                 debug_html_str,
             );
         }
@@ -297,6 +299,7 @@ impl SelectorMap<Rule> {
                     cascade_level,
                     cascade_data,
                     stylist,
+                    skip_universal_tails,
                     debug_html_str,
                 )
             }
@@ -315,6 +318,7 @@ impl SelectorMap<Rule> {
                 cascade_level,
                 cascade_data,
                 stylist,
+                skip_universal_tails,
                 debug_html_str,
             );
         }
@@ -332,6 +336,7 @@ impl SelectorMap<Rule> {
                     cascade_level,
                     cascade_data,
                     stylist,
+                    skip_universal_tails,
                     debug_html_str,
                 )
             }
@@ -350,6 +355,7 @@ impl SelectorMap<Rule> {
                     cascade_level,
                     cascade_data,
                     stylist,
+                    skip_universal_tails,
                     debug_html_str,
                 )
             }
@@ -367,6 +373,7 @@ impl SelectorMap<Rule> {
                 cascade_level,
                 cascade_data,
                 stylist,
+                skip_universal_tails,
                 debug_html_str,
             )
         }
@@ -386,6 +393,7 @@ impl SelectorMap<Rule> {
                 cascade_level,
                 cascade_data,
                 stylist,
+                skip_universal_tails,
                 debug_html_str,
             );
         }
@@ -402,6 +410,7 @@ impl SelectorMap<Rule> {
                 cascade_level,
                 cascade_data,
                 stylist,
+                skip_universal_tails,
                 debug_html_str,
             )
         }
@@ -417,6 +426,7 @@ impl SelectorMap<Rule> {
             cascade_level,
             cascade_data,
             stylist,
+            skip_universal_tails,
             debug_html_str,
         );
         let duration = start.elapsed();
@@ -437,6 +447,7 @@ impl SelectorMap<Rule> {
         cascade_level: CascadeLevel,
         cascade_data: &CascadeData,
         stylist: &Stylist,
+        skip_universal_tails: bool,
         debug_html_str: Option<&str>,
     ) -> Statistics
     where
@@ -451,6 +462,9 @@ impl SelectorMap<Rule> {
         );
         let mut acc_stats = Statistics::default();
         for rule in rules {
+            if skip_universal_tails && rule.universal_tail_activation_offset().is_some() {
+                continue;
+            }
             #[cfg(feature = "debug_element")]
             if let Some(html_str) = debug_html_str {
                 debug_element_selector(element, html_str, &rule.selector);
