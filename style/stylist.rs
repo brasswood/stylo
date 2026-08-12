@@ -4001,13 +4001,7 @@ impl CascadeData {
                 }
                 .for_insertion(&pseudo_elements);
 
-                if !matches_featureless_host_only
-                    && !rule.selector.is_slotted()
-                    && pseudo_elements.is_empty()
-                    && rule.container_condition_id == ContainerConditionId::none()
-                    && rule.scope_condition_id == ScopeConditionId::none()
-                    && !rule.is_starting_style
-                {
+                if !matches_featureless_host_only && rule.is_blessable_universal_tail() {
                     if let Some(offset) = rule.universal_tail_activation_offset() {
                         self.universal_tail_rules.insert(
                             UniversalTailRule::new(rule.clone(), offset),
@@ -4904,6 +4898,10 @@ impl SelectorMapEntry for Rule {
     fn selector(&self) -> SelectorIter<'_, SelectorImpl> {
         self.selector.iter()
     }
+
+    fn is_universal_tail(&self) -> bool {
+        self.is_blessable_universal_tail()
+    }
 }
 
 impl Rule {
@@ -4920,6 +4918,15 @@ impl Rule {
         let offset = self.selector.len() - iter.selector_length();
         iter.next()?;
         Some(offset)
+    }
+
+    pub(crate) fn is_blessable_universal_tail(&self) -> bool {
+        self.universal_tail_activation_offset().is_some()
+            && self.container_condition_id == ContainerConditionId::none()
+            && self.scope_condition_id == ScopeConditionId::none()
+            && !self.is_starting_style
+            && !self.selector.has_pseudo_element()
+            && !self.selector.is_slotted()
     }
 
     /// Returns the specificity of the rule.

@@ -438,6 +438,22 @@ impl SelectorMap<Rule> {
             skip_universal_tails,
             debug_html_str,
         );
+        if !skip_universal_tails {
+            hits += self.universal_tails.len();
+            stats += SelectorMap::get_matching_rules(
+                element,
+                &self.universal_tails,
+                matching_rules_list,
+                matching_selectors.as_deref_mut(),
+                selector_stats.as_deref_mut(),
+                matching_context,
+                cascade_level,
+                cascade_data,
+                stylist,
+                false,
+                debug_html_str,
+            );
+        }
         let duration = start.elapsed();
         stats.times.querying_selector_map = duration - stats.times._time_inside_buckets;
         stats.counts.selector_map_hits = hits;
@@ -456,7 +472,7 @@ impl SelectorMap<Rule> {
         cascade_level: CascadeLevel,
         cascade_data: &CascadeData,
         stylist: &Stylist,
-        skip_universal_tails: bool,
+        _skip_universal_tails: bool,
         debug_html_str: Option<&str>,
     ) -> Statistics
     where
@@ -471,9 +487,6 @@ impl SelectorMap<Rule> {
         );
         let mut acc_stats = Statistics::default();
         for rule in rules {
-            if skip_universal_tails && rule.universal_tail_activation_offset().is_some() {
-                continue;
-            }
             #[cfg(feature = "debug_element")]
             if let Some(html_str) = debug_html_str {
                 debug_element_selector(element, html_str, &rule.selector);
@@ -646,6 +659,9 @@ impl<T: SelectorMapEntry> SelectorMap<T> {
                         Some(self.namespace_hash.entry(url.clone()).or_default())
                     },
                     Bucket::RarePseudoClasses => Some(&mut self.rare_pseudo_classes),
+                    Bucket::Universal if $entry.is_universal_tail() => {
+                        Some(&mut self.universal_tails)
+                    },
                     Bucket::Universal => Some(&mut self.other),
                     Bucket::None => None,
                 } {
