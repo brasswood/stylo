@@ -13,7 +13,7 @@ use crate::sharing::StyleSharingElement;
 use crate::rule_tree::CascadeLevel;
 use crate::selector_parser::SelectorImpl;
 use crate::stylesheets::scope_rule::ImplicitScopeRoot;
-use crate::stylist::{CascadeData, ContainerConditionId, Rule, ScopeConditionId, Stylist};
+use crate::stylist::{CascadeData, ContainerConditionId, Rule, ScopeConditionId, Stylist, UniversalTailRule};
 use crate::AllocErr;
 use crate::values::AtomIdent;
 use crate::values::computed::Display;
@@ -22,7 +22,7 @@ use atomic_refcell::AtomicRef;
 use dom::ElementState;
 use precomputed_hash::PrecomputedHash;
 use selectors::{Element, OpaqueElement};
-use selectors::matching::{MatchingContext, SelectorStats, Statistics, matches_selector};
+use selectors::matching::{MatchingContext, SelectorStats, Statistics, matches_selector, matches_selector_at_offset_as_subject};
 use selectors::parser::{Combinator, Component, Selector, SelectorIter};
 use smallvec::SmallVec;
 use std::collections::hash_map;
@@ -520,6 +520,45 @@ impl SelectorMap<Rule> {
         }
         acc_stats.times._time_inside_buckets = start.elapsed();
         acc_stats
+    }
+}
+
+impl SelectorMap<UniversalTailRule> {
+    /// Finds rules whose stripped selector matches this element, so that their
+    /// original selectors can be accepted for its descendants.
+    pub fn get_matching_universal_tails<'selectormap, E>(
+        &'selectormap self,
+        element: E,
+        matching_selectors: &mut SmallVec<[&'selectormap Selector<SelectorImpl>; 16]>,
+        matching_context: &mut MatchingContext<E::Impl>,
+    ) -> Statistics
+    where
+        E: SelectorMapElement + StyleSharingElement,
+    {
+        let start = Start::now();
+        let mut matching_time = tsc_timer::Duration::from_cycles(0);
+        let mut hits = 0;
+        let mut stats = Statistics::default();
+        self.lookup(element, matching_context.quirks_mode(), None, |entry| {
+            hits += 1;
+            let match_start = Start::now();
+            let (matched, match_stats) = matches_selector_at_offset_as_subject(
+                &entry.rule.selector,
+                entry.activation_offset,
+                &element,
+                matching_context,
+            );
+            matching_time += match_start.elapsed();
+            stats += match_stats;
+            if matched && !matching_selectors.contains(&&entry.rule.selector) {
+                matching_selectors.push(&entry.rule.selector);
+            }
+            true
+        });
+        stats.times._time_inside_buckets = matching_time;
+        stats.times.querying_selector_map = start.elapsed() - matching_time;
+        stats.counts.selector_map_hits = hits;
+        stats
     }
 }
 
