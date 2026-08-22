@@ -783,12 +783,25 @@ fn insert_selector_hash<'a, Impl: SelectorImpl>(
     buckets: &mut [Bucket<'a, Impl::Identifier, Impl::LocalName, Impl::NamespaceUrl>; 4],
     len: &mut usize,
 ) {
-    if *len == hashes.len() {
+    if *len < hashes.len() {
+        hashes[*len] = hash & BLOOM_HASH_MASK;
+        buckets[*len] = bucket;
+        *len += 1;
         return;
     }
-    hashes[*len] = hash & BLOOM_HASH_MASK;
-    buckets[*len] = bucket;
-    *len += 1;
+
+    // Keep the four most specific hashes. Strict comparison preserves the
+    // earlier component when two components have the same specificity.
+    let mut least_specific = 0;
+    for index in 1..*len {
+        if buckets[least_specific].more_specific_than(&buckets[index]) {
+            least_specific = index;
+        }
+    }
+    if bucket.more_specific_than(&buckets[least_specific]) {
+        hashes[least_specific] = hash & BLOOM_HASH_MASK;
+        buckets[least_specific] = bucket;
+    }
 }
 
 pub(crate) fn collect_selector_hashes<'a, Impl: SelectorImpl, Iter>(
@@ -799,8 +812,7 @@ pub(crate) fn collect_selector_hashes<'a, Impl: SelectorImpl, Iter>(
     buckets: &mut [Bucket<'a, Impl::Identifier, Impl::LocalName, Impl::NamespaceUrl>; 4],
     len: &mut usize,
     create_inner_iterator: fn(&'a Selector<Impl>) -> Iter,
-) -> bool
-where
+) where
     Iter: Iterator<Item = &'a Component<Impl>>,
 {
     for component in iter {
@@ -859,8 +871,8 @@ where
                 // in the filter if there's more than one selector, as that'd
                 // exclude elements that may match one of the other selectors.
                 let slice = list.slice();
-                if slice.len() == 1
-                    && !collect_selector_hashes(
+                if slice.len() == 1 {
+                    collect_selector_hashes(
                         create_inner_iterator(&slice[0]),
                         quirks_mode,
                         use_edge_selector_optimization,
@@ -868,9 +880,7 @@ where
                         buckets,
                         len,
                         create_inner_iterator,
-                    )
-                {
-                    return false;
+                    );
                 }
                 continue;
             },
@@ -896,11 +906,7 @@ where
             buckets,
             len,
         );
-        if *len == hashes.len() {
-            return false;
-        }
     }
-    true
 }
 
 fn collect_ancestor_hashes<'a, Impl: SelectorImpl>(
