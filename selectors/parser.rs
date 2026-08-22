@@ -4380,6 +4380,31 @@ pub mod tests {
     }
 
     #[test]
+    fn ancestor_hashes_keep_most_specific_components() {
+        let selectors = parse("#old .class-old #middle .class-new div #new .subject").unwrap();
+        let selector = &selectors.slice()[0];
+        let mut hashes = [0; 4];
+        let mut buckets = [Bucket::Universal; 4];
+        let mut len = 0;
+
+        collect_ancestor_hashes(
+            selector.iter(),
+            QuirksMode::NoQuirks,
+            false,
+            &mut hashes,
+            &mut buckets,
+            &mut len,
+        );
+
+        assert_eq!(len, 4);
+        let specificities: Vec<_> = buckets[..len]
+            .iter()
+            .map(|bucket| bucket.specificity())
+            .collect();
+        assert_eq!(specificities, vec![7, 7, 5, 7]);
+    }
+
+    #[test]
     fn test_empty() {
         let mut input = ParserInput::new(":empty");
         let list = SelectorList::parse(
