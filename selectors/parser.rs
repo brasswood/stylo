@@ -642,6 +642,85 @@ where
     )
 }
 
+/// A selector-map bucket's specificity category.
+pub enum Bucket<'a, Identifier, LocalName, NamespaceUrl> {
+    /// A universal selector.
+    Universal,
+    /// A namespace selector.
+    Namespace(&'a NamespaceUrl),
+    /// A rare pseudo-class.
+    RarePseudoClasses,
+    /// A local-name selector.
+    LocalName {
+        /// The selector's local name.
+        name: &'a LocalName,
+        /// The selector's ASCII-lowercase local name.
+        lower_name: &'a LocalName,
+    },
+    /// An attribute selector.
+    Attribute {
+        /// The selector's local name.
+        name: &'a LocalName,
+        /// The selector's ASCII-lowercase local name.
+        lower_name: &'a LocalName,
+    },
+    /// A class selector.
+    Class(&'a Identifier),
+    /// A common pseudo-class.
+    CommonPseudoClasses,
+    /// An ID selector.
+    ID(&'a Identifier),
+    /// The `:root` pseudo-class.
+    Root,
+    /// A selector that does not have a more specific bucket.
+    None,
+}
+
+impl<'a, Identifier, LocalName, NamespaceUrl> Clone
+    for Bucket<'a, Identifier, LocalName, NamespaceUrl>
+{
+    #[inline]
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<'a, Identifier, LocalName, NamespaceUrl> Copy
+    for Bucket<'a, Identifier, LocalName, NamespaceUrl>
+{
+}
+
+impl<'a, Identifier, LocalName, NamespaceUrl> Bucket<'a, Identifier, LocalName, NamespaceUrl> {
+    /// Returns this bucket's specificity rank.
+    #[inline]
+    fn specificity(&self) -> usize {
+        match *self {
+            Bucket::Universal => 0,
+            Bucket::Namespace(..) => 1,
+            Bucket::RarePseudoClasses => 2,
+            Bucket::LocalName { .. } => 3,
+            Bucket::Attribute { .. } => 4,
+            Bucket::Class(..) => 5,
+            Bucket::CommonPseudoClasses => 6,
+            Bucket::ID(..) => 7,
+            Bucket::Root => 8,
+            Bucket::None => 9,
+        }
+    }
+
+    /// Returns whether this bucket is at least as specific as another bucket.
+    #[inline]
+    pub fn more_or_equally_specific_than(&self, other: &Self) -> bool {
+        self.specificity() >= other.specificity()
+    }
+
+    /// Returns whether this bucket is more specific than another bucket.
+    #[inline]
+    pub fn more_specific_than(&self, other: &Self) -> bool {
+        self.specificity() > other.specificity()
+    }
+}
+
 /// Ancestor hashes for the bloom filter. We precompute these and store them
 /// inline with selectors to optimize cache performance during matching.
 /// This matters a lot.

@@ -23,7 +23,7 @@ use dom::ElementState;
 use precomputed_hash::PrecomputedHash;
 use selectors::{Element, OpaqueElement};
 use selectors::matching::{MatchingContext, SelectorStats, Statistics, matches_selector, matches_selector_at_offset_as_subject};
-use selectors::parser::{Combinator, Component, Selector, SelectorIter};
+use selectors::parser::{Bucket as SelectorBucket, Combinator, Component, Selector, SelectorIter};
 use smallvec::SmallVec;
 use std::collections::hash_map;
 use std::collections::{HashMap, HashSet};
@@ -932,54 +932,7 @@ impl<T: SelectorMapEntry> SelectorMap<T> {
     }
 }
 
-enum Bucket<'a> {
-    Universal,
-    Namespace(&'a Namespace),
-    RarePseudoClasses,
-    LocalName {
-        name: &'a LocalName,
-        lower_name: &'a LocalName,
-    },
-    Attribute {
-        name: &'a LocalName,
-        lower_name: &'a LocalName,
-    },
-    Class(&'a Atom),
-    CommonPseudoClasses,
-    ID(&'a Atom),
-    Root,
-    None,
-}
-
-impl<'a> Bucket<'a> {
-    /// root > id > class > local name > namespace > pseudo-classes > universal.
-    #[inline]
-    fn specificity(&self) -> usize {
-        match *self {
-            Bucket::Universal => 0,
-            Bucket::Namespace(..) => 1,
-            Bucket::RarePseudoClasses => 2,
-            Bucket::LocalName { .. } => 3,
-            Bucket::Attribute { .. } => 4,
-            Bucket::Class(..) => 5,
-            Bucket::CommonPseudoClasses => 6, // TODO: :hover should be more specific than class and less specific than ID, since it can match up to one element and its ancestor chain. What about the other non-rare pseudo-classes?
-            Bucket::ID(..) => 7,
-            Bucket::Root => 8,
-            Bucket::None => 9,
-        }
-    }
-
-    #[inline]
-    fn more_or_equally_specific_than(&self, other: &Self) -> bool {
-        self.specificity() >= other.specificity()
-    }
-
-    #[inline]
-    fn more_specific_than(&self, other: &Self) -> bool {
-        self.specificity() > other.specificity()
-    }
-}
-
+type Bucket<'a> = SelectorBucket<'a, Atom, LocalName, Namespace>;
 type DisjointBuckets<'a> = SmallVec<[Bucket<'a>; 5]>;
 
 fn specific_bucket_for<'a>(
