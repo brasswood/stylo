@@ -741,11 +741,62 @@ pub struct AncestorHashes {
     pub packed_hashes: [u32; 3],
 }
 
+fn bucket_for_component<Impl: SelectorImpl>(
+    component: &Component<Impl>,
+) -> Bucket<'_, Impl::Identifier, Impl::LocalName, Impl::NamespaceUrl> {
+    match *component {
+        Component::LocalName(ref selector) => Bucket::LocalName {
+            name: &selector.name,
+            lower_name: &selector.lower_name,
+        },
+        Component::DefaultNamespace(ref url) | Component::Namespace(_, ref url) => {
+            Bucket::Namespace(url)
+        },
+        Component::ID(ref id) => Bucket::ID(id),
+        Component::Class(ref class) => Bucket::Class(class),
+        Component::AttributeInNoNamespace { ref local_name, .. } => Bucket::Attribute {
+            name: local_name,
+            lower_name: local_name,
+        },
+        Component::AttributeInNoNamespaceExists {
+            ref local_name,
+            ref local_name_lower,
+            ..
+        } => Bucket::Attribute {
+            name: local_name,
+            lower_name: local_name_lower,
+        },
+        Component::AttributeOther(ref selector) => Bucket::Attribute {
+            name: &selector.local_name,
+            lower_name: &selector.local_name_lower,
+        },
+        Component::NonTSPseudoClass(..) => Bucket::CommonPseudoClasses,
+        _ => Bucket::Universal,
+    }
+}
+
+#[inline]
+fn insert_selector_hash<'a, Impl: SelectorImpl>(
+    hash: u32,
+    bucket: Bucket<'a, Impl::Identifier, Impl::LocalName, Impl::NamespaceUrl>,
+    hashes: &mut [u32; 4],
+    buckets: &mut [Bucket<'a, Impl::Identifier, Impl::LocalName, Impl::NamespaceUrl>; 4],
+    len: &mut usize,
+) {
+    if *len == hashes.len() {
+        return;
+    }
+    hashes[*len] = hash & BLOOM_HASH_MASK;
+    buckets[*len] = bucket;
+    *len += 1;
+}
+
 pub(crate) fn collect_selector_hashes<'a, Impl: SelectorImpl, Iter>(
     iter: Iter,
     quirks_mode: QuirksMode,
     use_edge_selector_optimization: bool,
     hashes: &mut [u32; 4],
+    buckets: &mut [Bucket<'a, Impl::Identifier, Impl::LocalName, Impl::NamespaceUrl>; 4],
     len: &mut usize,
     create_inner_iterator: fn(&'a Selector<Impl>) -> Iter,
 ) -> bool
@@ -814,6 +865,7 @@ where
                         quirks_mode,
                         use_edge_selector_optimization,
                         hashes,
+                        buckets,
                         len,
                         create_inner_iterator,
                     )
@@ -837,8 +889,13 @@ where
             _ => continue,
         };
 
-        hashes[*len] = hash & BLOOM_HASH_MASK;
-        *len += 1;
+        insert_selector_hash::<Impl>(
+            hash,
+            bucket_for_component(component),
+            hashes,
+            buckets,
+            len,
+        );
         if *len == hashes.len() {
             return false;
         }
@@ -846,11 +903,12 @@ where
     true
 }
 
-fn collect_ancestor_hashes<Impl: SelectorImpl>(
-    iter: SelectorIter<Impl>,
+fn collect_ancestor_hashes<'a, Impl: SelectorImpl>(
+    iter: SelectorIter<'a, Impl>,
     quirks_mode: QuirksMode,
     use_edge_selector_optimization: bool,
     hashes: &mut [u32; 4],
+    buckets: &mut [Bucket<'a, Impl::Identifier, Impl::LocalName, Impl::NamespaceUrl>; 4],
     len: &mut usize,
 ) {
     collect_selector_hashes(
@@ -858,6 +916,7 @@ fn collect_ancestor_hashes<Impl: SelectorImpl>(
         quirks_mode,
         use_edge_selector_optimization,
         hashes,
+        buckets,
         len,
         |s| {
         AncestorIter(s.iter())
@@ -872,12 +931,14 @@ impl AncestorHashes {
     ) -> Self {
         // Compute ancestor hashes for the bloom filter.
         let mut hashes = [0u32; 4];
+        let mut buckets = [Bucket::Universal; 4];
         let mut len = 0;
         collect_ancestor_hashes(
             selector.iter(),
             quirks_mode,
             use_edge_selector_optimization,
             &mut hashes,
+            &mut buckets,
             &mut len,
         );
         debug_assert!(len <= 4);

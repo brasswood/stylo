@@ -7,7 +7,7 @@ use rustc_hash::FxHashMap;
 
 use crate::bloom::BloomFilter;
 use crate::context::QuirksMode;
-use crate::parser::{collect_selector_hashes, RelativeSelector, RelativeSelectorMatchHint};
+use crate::parser::{collect_selector_hashes, Bucket, RelativeSelector, RelativeSelectorMatchHint};
 use crate::tree::{Element, OpaqueElement};
 use crate::SelectorImpl;
 
@@ -58,6 +58,7 @@ fn fast_reject<Impl: SelectorImpl>(
     filter: &BloomFilter,
 ) -> bool {
     let mut hashes = [0u32; 4];
+    let mut buckets = [Bucket::Universal; 4];
     let mut len = 0;
     // For inner selectors, we only collect from the single rightmost compound.
     // This is because inner selectors can cause breakouts: e.g. `.anchor:has(:is(.a .b) .c)`
@@ -72,6 +73,7 @@ fn fast_reject<Impl: SelectorImpl>(
         quirks_mode,
         false,
         &mut hashes,
+        &mut buckets,
         &mut len,
         |s| s.iter(),
     );
