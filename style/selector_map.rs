@@ -593,11 +593,11 @@ impl SelectorMap<Rule> {
 
 impl SelectorMap<UniversalTailRule> {
     /// Finds rules whose stripped selector matches this element, so that their
-    /// original selectors can be accepted for its descendants.
+    /// original rules can be matched against its descendants.
     pub fn get_matching_universal_tails<'selectormap, E>(
         &'selectormap self,
         element: E,
-        matching_selectors: &mut SmallVec<[&'selectormap Selector<SelectorImpl>; 16]>,
+        matching_rules: &mut SmallVec<[&'selectormap Rule; 16]>,
         matching_context: &mut MatchingContext<E::Impl>,
     ) -> Statistics
     where
@@ -618,8 +618,12 @@ impl SelectorMap<UniversalTailRule> {
             );
             matching_time += match_start.elapsed();
             stats += match_stats;
-            if matched && !matching_selectors.contains(&&entry.rule.selector) {
-                matching_selectors.push(&entry.rule.selector);
+            if matched
+                && matching_rules
+                    .iter()
+                    .all(|rule| !std::ptr::eq(*rule, &entry.rule))
+            {
+                matching_rules.push(&entry.rule);
             }
             true
         });
