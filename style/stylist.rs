@@ -75,15 +75,15 @@ use selectors::matching::{
 };
 use selectors::matching::{MatchingForInvalidation, VisitedHandlingMode};
 use selectors::parser::{
-    AncestorHashes, Combinator, Component, MatchesFeaturelessHost, Selector, SelectorIter,
-    SelectorList,
+    AncestorHashes, Combinator, Component, FailCachePrefixIdGenerator, FailCachePrefixIds,
+    MatchesFeaturelessHost, Selector, SelectorIter, SelectorList,
 };
 use selectors::visitor::{SelectorListKind, SelectorVisitor};
 use servo_arc::{Arc, ArcBorrow, ThinArc};
 use smallvec::SmallVec;
 use std::cmp::Ordering;
 use std::hash::{Hash, Hasher};
-use std::sync::Mutex;
+use std::sync::{Arc as StdArc, Mutex};
 use std::{mem, ops};
 
 /// The type of the stylesheets that the stylist contains.
@@ -3233,11 +3233,9 @@ pub struct CascadeData {
     /// Effective media query results cached from the last rebuild.
     effective_media_query_results: EffectiveMediaQueryResults,
 
-    /// Stable ids assigned to selector prefixes used by the fail cache.
-    fail_cache_prefix_ids: FxHashMap<FailCachePrefix, u16>,
-
-    /// The next fail-cache prefix id to assign. Zero is reserved as vacant.
-    next_fail_cache_prefix_id: u16,
+    /// Lazily assigns ids to selector prefixes used by the fail cache.
+    #[ignore_malloc_size_of = "shared by rules"]
+    fail_cache_prefix_ids: StdArc<FailCachePrefixInterner>,
 
     /// Extra data, like different kinds of rules, etc.
     extra_data: ExtraStyleData,
@@ -3269,6 +3267,23 @@ struct FailCachePrefix(
     #[ignore_malloc_size_of = "selector storage is shared"] Selector<SelectorImpl>,
     usize,
 );
+
+#[derive(Debug, Default)]
+struct FailCachePrefixInterner {
+    entries: Mutex<FailCachePrefixInternerEntries>,
+}
+
+#[derive(Debug)]
+struct FailCachePrefixInternerEntries {
+    ids: FxHashMap<FailCachePrefix, u16>,
+    next_id: u16,
+}
+
+impl Default for FailCachePrefixInternerEntries {
+    fn default() -> Self {
+        Self { ids: FxHashMap::default(), next_id: 1 }
+    }
+}
 
 impl Eq for FailCachePrefix {}
 
@@ -3309,6 +3324,26 @@ impl Hash for FailCachePrefix {
             }
             .hash(state);
         }
+    }
+}
+
+impl FailCachePrefixIdGenerator<SelectorImpl> for FailCachePrefixInterner {
+    fn get_or_intern(&self, selector: &Selector<SelectorImpl>, prefix_length: usize) -> Option<u16> {
+        let mut entries = self.entries.lock().unwrap();
+        let prefix = FailCachePrefix(selector.clone(), prefix_length);
+        if let Some(id) = entries.ids.get(&prefix) {
+            return Some(*id);
+        }
+        if entries.next_id == 0 {
+            return None;
+        }
+        let id = entries.next_id;
+        entries.next_id = entries.next_id.wrapping_add(1);
+        if entries.next_id == 0 {
+            log::warn!("Ran out of fail-cache prefix ids; later prefixes will not be cached");
+        }
+        entries.ids.insert(prefix, id);
+        Some(id)
     }
 }
 
@@ -3376,8 +3411,7 @@ impl CascadeData {
             scope_subject_map: Default::default(),
             extra_data: ExtraStyleData::default(),
             effective_media_query_results: EffectiveMediaQueryResults::new(),
-            fail_cache_prefix_ids: FxHashMap::default(),
-            next_fail_cache_prefix_id: 1,
+            fail_cache_prefix_ids: StdArc::default(),
             rules_source_order: 0,
             num_selectors: 0,
             num_declarations: 0,
@@ -3618,7 +3652,7 @@ impl CascadeData {
                     &rule.selector,
                     0,
                     Some(&rule.hashes),
-                    rule.fail_cache_prefix_ids.as_deref(),
+                    rule.fail_cache_prefix_ids(),
                     &element,
                     context,
                 )
@@ -3763,33 +3797,12 @@ impl CascadeData {
         }
     }
 
-    fn fail_cache_prefix_id(
-        &mut self,
-        selector: &Selector<SelectorImpl>,
-        offset: usize,
-    ) -> Option<u16> {
-        let prefix = FailCachePrefix(selector.clone(), selector.len() - offset);
-        if let Some(id) = self.fail_cache_prefix_ids.get(&prefix) {
-            return Some(*id);
-        }
-        if self.next_fail_cache_prefix_id == 0 {
-            return None;
-        }
-        let id = self.next_fail_cache_prefix_id;
-        self.next_fail_cache_prefix_id = self.next_fail_cache_prefix_id.wrapping_add(1);
-        if self.next_fail_cache_prefix_id == 0 {
-            log::warn!("Ran out of fail-cache prefix ids; later prefixes will not be cached");
-        }
-        self.fail_cache_prefix_ids.insert(prefix, id);
-        Some(id)
-    }
-
     fn fail_cache_prefix_ids_for_selector(
         &mut self,
         selector: &Selector<SelectorImpl>,
-    ) -> Option<Box<[u16]>> {
+    ) -> Option<Box<[FailCachePrefixIds<SelectorImpl>]>> {
         let start = tsc_timer::Start::now();
-        let mut prefix_ids = Vec::new();
+        let mut prefix_lengths = Vec::new();
         let mut offset = 0usize;
         while let Some((next_offset, combinator)) = next_selector_offset(selector, offset) {
             if !matches!(combinator, Combinator::Child | Combinator::Descendant) {
@@ -3802,13 +3815,16 @@ impl CascadeData {
             {
                 break;
             }
-            let Some(prefix_id) = self.fail_cache_prefix_id(selector, next_offset) else {
-                break;
-            };
-            prefix_ids.push(prefix_id);
+            prefix_lengths.push((selector.len() - next_offset).try_into().unwrap());
             offset = next_offset;
         }
-        let result = (!prefix_ids.is_empty()).then(|| prefix_ids.into_boxed_slice());
+        let result = (!prefix_lengths.is_empty()).then(|| {
+            vec![FailCachePrefixIds::new(
+                selector.clone(),
+                prefix_lengths.into_boxed_slice(),
+                self.fail_cache_prefix_ids.clone(),
+            )].into_boxed_slice()
+        });
         self.fail_cache_entry_build_time += start.elapsed();
         result
     }
@@ -4869,8 +4885,9 @@ pub struct Rule {
     /// The ancestor hashes associated with the selector.
     pub hashes: AncestorHashes,
 
-    /// Website-wide fail-cache prefix ids in combinator match order.
-    pub fail_cache_prefix_ids: Option<Box<[u16]>>,
+    /// Lazily assigned fail-cache prefix ids in combinator match order.
+    #[ignore_malloc_size_of = "selector storage is shared"]
+    pub fail_cache_prefix_ids: Option<Box<[FailCachePrefixIds<SelectorImpl>]>>,
 
     /// The source order this style rule appears in. Note that we only use
     /// three bytes to store this value in ApplicableDeclarationsBlock, so
@@ -4905,6 +4922,12 @@ impl SelectorMapEntry for Rule {
 }
 
 impl Rule {
+    /// Returns the lazy prefix ids stored for this rule.
+    #[inline]
+    pub fn fail_cache_prefix_ids(&self) -> Option<&FailCachePrefixIds<SelectorImpl>> {
+        self.fail_cache_prefix_ids.as_deref().and_then(<[FailCachePrefixIds<SelectorImpl>]>::first)
+    }
+
     /// Returns the offset of the compound that can activate this rule's
     /// descendant-universal tail.
     pub(crate) fn universal_tail_activation_offset(&self) -> Option<usize> {
@@ -4963,7 +4986,7 @@ impl Rule {
     pub fn new(
         selector: Selector<SelectorImpl>,
         hashes: AncestorHashes,
-        fail_cache_prefix_ids: Option<Box<[u16]>>,
+        fail_cache_prefix_ids: Option<Box<[FailCachePrefixIds<SelectorImpl>]>>,
         style_source: StyleSource,
         source_order: u32,
         layer_id: LayerId,
