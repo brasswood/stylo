@@ -27,6 +27,8 @@ use std::borrow::{Borrow, Cow};
 use std::fmt::{self, Debug};
 use std::iter::Rev;
 use std::slice;
+use std::sync::atomic::{AtomicU16, Ordering};
+use std::sync::Arc as StdArc;
 
 #[cfg(feature = "to_shmem")]
 use to_shmem_derive::ToShmem;
@@ -1531,6 +1533,81 @@ impl<Impl: SelectorImpl> Selector<Impl> {
 pub struct SelectorIter<'a, Impl: 'a + SelectorImpl> {
     iter: slice::Iter<'a, Component<Impl>>,
     next_combinator: Option<Combinator>,
+}
+
+/// Allocates stable ids for selector prefixes used by the fail cache.
+pub trait FailCachePrefixIdGenerator<Impl>: Debug + Send + Sync
+where
+    Impl: SelectorImpl,
+{
+    /// Returns the id for a prefix with `prefix_length` match-order components.
+    fn get_or_intern(&self, selector: &Selector<Impl>, prefix_length: usize) -> Option<u16>;
+}
+
+#[derive(Debug)]
+struct FailCachePrefixId {
+    prefix_length: u16,
+    id: AtomicU16,
+}
+
+/// Lazily assigned fail-cache prefix ids in combinator match order.
+#[derive(Debug)]
+pub struct FailCachePrefixIds<Impl: SelectorImpl> {
+    selector: Selector<Impl>,
+    entries: Box<[FailCachePrefixId]>,
+    generator: StdArc<dyn FailCachePrefixIdGenerator<Impl>>,
+}
+
+impl<Impl: SelectorImpl> Clone for FailCachePrefixIds<Impl> {
+    fn clone(&self) -> Self {
+        Self {
+            selector: self.selector.clone(),
+            entries: self.entries.iter().map(|entry| FailCachePrefixId {
+                prefix_length: entry.prefix_length,
+                id: AtomicU16::new(entry.id.load(Ordering::Relaxed)),
+            }).collect(),
+            generator: self.generator.clone(),
+        }
+    }
+}
+
+impl<Impl: SelectorImpl> FailCachePrefixIds<Impl> {
+    /// Creates lazy ids for the given prefix lengths.
+    pub fn new(
+        selector: Selector<Impl>,
+        prefix_lengths: Box<[u16]>,
+        generator: StdArc<dyn FailCachePrefixIdGenerator<Impl>>,
+    ) -> Self {
+        Self {
+            selector,
+            entries: IntoIterator::into_iter(prefix_lengths).map(|prefix_length| FailCachePrefixId {
+                prefix_length,
+                id: AtomicU16::new(0),
+            }).collect(),
+            generator,
+        }
+    }
+
+    /// Returns an already-assigned prefix id without hashing the prefix.
+    #[inline]
+    pub fn get(&self, index: usize) -> Option<u16> {
+        let id = self.entries[index].id.load(Ordering::Relaxed);
+        (id != 0).then_some(id)
+    }
+
+    /// Assigns an id only when a failed match is about to populate the cache.
+    #[inline]
+    pub fn get_or_intern(&self, index: usize) -> Option<u16> {
+        if let Some(id) = self.get(index) {
+            return Some(id);
+        }
+        let entry = &self.entries[index];
+        let id = self.generator.get_or_intern(&self.selector, entry.prefix_length.into())?;
+        match entry.id.compare_exchange(0, id, Ordering::Relaxed, Ordering::Relaxed) {
+            Ok(_) => Some(id),
+            Err(existing) => Some(existing),
+        }
+    }
 }
 
 impl<'a, Impl: 'a + SelectorImpl> SelectorIter<'a, Impl> {
