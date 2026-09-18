@@ -1595,6 +1595,13 @@ impl<Impl: SelectorImpl> FailCachePrefixIds<Impl> {
         (id != 0).then_some(id)
     }
 
+    /// Returns the next prefix index, if this selector has another prefix.
+    #[inline]
+    pub fn next_index(&self, current: Option<usize>) -> Option<usize> {
+        let next = current.map_or(0, |index| index + 1);
+        (next < self.entries.len()).then_some(next)
+    }
+
     /// Assigns an id only when a failed match is about to populate the cache.
     #[inline]
     pub fn get_or_intern(&self, index: usize) -> Option<u16> {

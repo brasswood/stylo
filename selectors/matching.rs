@@ -1075,7 +1075,8 @@ where
             },
         );
     };
-    let next_fail_cache_prefix_index = fail_cache_prefix_index.map(|index| index + 1);
+    let next_fail_cache_prefix_index = fail_cache_prefix_ids
+        .and_then(|prefixes| prefixes.next_index(fail_cache_prefix_index));
 
     let is_pseudo_combinator = combinator.is_pseudo_element();
     if context.featureless() && !is_pseudo_combinator {
