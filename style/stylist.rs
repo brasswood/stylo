@@ -3291,6 +3291,15 @@ fn fail_cache_prefix_components<T>(components: &[T], prefix_length: usize) -> &[
     &components[components.len() - prefix_length..]
 }
 
+fn cacheable_prefix_combinators(
+    mut combinators: impl Iterator<Item = Combinator> + Clone,
+) -> bool {
+    combinators.clone().next().is_some()
+        && combinators.all(|combinator| {
+            matches!(combinator, Combinator::Child | Combinator::Descendant)
+        })
+}
+
 impl FailCachePrefix {
     fn components(&self) -> &[Component<SelectorImpl>] {
         fail_cache_prefix_components(self.0.iter_raw_match_order().as_slice(), self.1)
@@ -3812,14 +3821,17 @@ impl CascadeData {
             if !matches!(combinator, Combinator::Child | Combinator::Descendant) {
                 break;
             }
-            let suffix_end = selector.len() - next_offset;
-            if !selector.iter_raw_match_order().as_slice()[..suffix_end]
+            let prefix_length = selector.len() - next_offset;
+            let prefix = fail_cache_prefix_components(
+                selector.iter_raw_match_order().as_slice(),
+                prefix_length,
+            );
+            if !cacheable_prefix_combinators(prefix
                 .iter()
-                .any(Component::is_combinator) // TODO: red flag, isn't this already verified by `next_selector_offset`?
-            {
+                .filter_map(Component::as_combinator)) {
                 break;
             }
-            prefix_lengths.push((selector.len() - next_offset).try_into().unwrap());
+            prefix_lengths.push(prefix_length.try_into().unwrap());
             offset = next_offset;
         }
         let result = (!prefix_lengths.is_empty()).then(|| {
@@ -5073,7 +5085,8 @@ pub fn needs_revalidation_for_testing(s: &Selector<SelectorImpl>) -> bool {
 
 #[cfg(test)]
 mod fail_cache_tests {
-    use super::fail_cache_prefix_components;
+    use super::{cacheable_prefix_combinators, fail_cache_prefix_components};
+    use selectors::parser::Combinator;
 
     #[test]
     fn prefix_components_select_the_left_hand_tail() {
@@ -5082,5 +5095,11 @@ mod fail_cache_tests {
             fail_cache_prefix_components(&match_order, 2),
             ["ancestor", "class"],
         );
+        assert!(cacheable_prefix_combinators(
+            [Combinator::Child, Combinator::Descendant].into_iter(),
+        ));
+        assert!(!cacheable_prefix_combinators(
+            [Combinator::NextSibling].into_iter(),
+        ));
     }
 }
