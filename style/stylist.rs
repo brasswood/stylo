@@ -69,6 +69,7 @@ use dom::{DocumentState, ElementState};
 #[cfg(feature = "gecko")]
 use malloc_size_of::MallocUnconditionalShallowSizeOf;
 use malloc_size_of::{MallocShallowSizeOf, MallocSizeOf, MallocSizeOfOps};
+use precomputed_hash::PrecomputedHash;
 use rustc_hash::FxHashMap;
 use selectors::attr::{CaseSensitivity, NamespaceConstraint};
 use selectors::bloom::BloomFilter;
@@ -77,15 +78,15 @@ use selectors::matching::{
 };
 use selectors::matching::{MatchingForInvalidation, VisitedHandlingMode};
 use selectors::parser::{
-    AncestorHashes, BloomHashOptions, Combinator, Component, MatchesFeaturelessHost, Selector,
-    SelectorIter, SelectorList,
+    AncestorHashes, BloomHashOptions, Combinator, Component, FailCachePrefixIdGenerator,
+    FailCachePrefixIds, MatchesFeaturelessHost, Selector, SelectorIter, SelectorList,
 };
 use selectors::visitor::{SelectorListKind, SelectorVisitor};
 use servo_arc::{Arc, ArcBorrow, ThinArc};
 use smallvec::SmallVec;
 use std::cmp::Ordering;
 use std::hash::{Hash, Hasher};
-use std::sync::Mutex;
+use std::sync::{Arc as StdArc, Mutex};
 use std::{mem, ops};
 
 /// The type of the stylesheets that the stylist contains.
@@ -793,10 +794,16 @@ impl Stylist {
         device: Device,
         quirks_mode: QuirksMode,
         bloom_hash_options: BloomHashOptions,
+        build_fail_cache_entries: bool,
+        lazy_fail_cache_prefixes: bool,
     ) -> Self {
         let mut cascade_data = DocumentCascadeData::default();
         cascade_data.user.bloom_hash_options = bloom_hash_options;
         cascade_data.author.bloom_hash_options = bloom_hash_options;
+        cascade_data.user.build_fail_cache_entries = build_fail_cache_entries;
+        cascade_data.author.build_fail_cache_entries = build_fail_cache_entries;
+        cascade_data.user.lazy_fail_cache_prefixes = lazy_fail_cache_prefixes;
+        cascade_data.author.lazy_fail_cache_prefixes = lazy_fail_cache_prefixes;
         Self {
             device,
             quirks_mode,
@@ -3096,6 +3103,10 @@ impl Default for StylistImplicitScopeRoot {
 pub struct CascadeData {
     #[ignore_malloc_size_of = "contains only booleans"]
     bloom_hash_options: BloomHashOptions,
+    build_fail_cache_entries: bool,
+    lazy_fail_cache_prefixes: bool,
+    #[ignore_malloc_size_of = "benchmark-only timing counter"]
+    fail_cache_entry_build_time: tsc_timer::Duration,
 
     /// The data coming from normal style rules that apply to elements at this
     /// cascade level.
@@ -3211,6 +3222,10 @@ pub struct CascadeData {
     /// Effective media query results cached from the last rebuild.
     effective_media_query_results: EffectiveMediaQueryResults,
 
+    /// Lazily assigns ids to selector prefixes used by the fail cache.
+    #[ignore_malloc_size_of = "shared by rules"]
+    fail_cache_prefix_ids: StdArc<FailCachePrefixInterner>,
+
     /// Extra data, like different kinds of rules, etc.
     extra_data: ExtraStyleData,
 
@@ -3262,6 +3277,9 @@ impl CascadeData {
     pub fn new() -> Self {
         Self {
             bloom_hash_options: BloomHashOptions::default(),
+            build_fail_cache_entries: false,
+            lazy_fail_cache_prefixes: false,
+            fail_cache_entry_build_time: tsc_timer::Duration::from_cycles(0),
             normal_rules: ElementAndPseudoRules::default(),
             featureless_host_rules: None,
             slotted_rules: None,
@@ -3290,6 +3308,7 @@ impl CascadeData {
             scope_subject_map: Default::default(),
             extra_data: ExtraStyleData::default(),
             effective_media_query_results: EffectiveMediaQueryResults::new(),
+            fail_cache_prefix_ids: StdArc::default(),
             rules_source_order: 0,
             num_selectors: 0,
             num_declarations: 0,
