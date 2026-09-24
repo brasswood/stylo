@@ -4850,6 +4850,39 @@ pub mod tests {
     }
 
     #[test]
+    fn ancestor_bloom_hash_extensions_are_optional() {
+        fn hashes(selector: &str, options: BloomHashOptions) -> Vec<u32> {
+            let selector = &parse(selector).unwrap().slice()[0];
+            let hashes = AncestorHashes::new(selector, QuirksMode::NoQuirks, options);
+            hashes
+                .packed_hashes
+                .iter()
+                .map(|hash| hash & BLOOM_HASH_MASK)
+                .chain(std::iter::once(hashes.fourth_hash()))
+                .filter(|hash| *hash != 0)
+                .collect()
+        }
+
+        let disabled = BloomHashOptions {
+            common_pseudo_class: false,
+            edge_children: false,
+        };
+        let common = BloomHashOptions {
+            common_pseudo_class: true,
+            ..disabled
+        };
+        let edges = BloomHashOptions {
+            edge_children: true,
+            ..disabled
+        };
+        assert!(!hashes("body:hover > span", disabled).contains(&COMMON_PSEUDO_CLASS_HASH));
+        assert!(hashes("body:hover > span", common).contains(&COMMON_PSEUDO_CLASS_HASH));
+        assert!(!hashes("li:first-child > span", disabled).contains(&FIRST_EDGE_CHILD_HASH));
+        assert!(hashes("li:first-child > span", edges).contains(&FIRST_EDGE_CHILD_HASH));
+        assert!(hashes("li:last-child > span", edges).contains(&LAST_EDGE_CHILD_HASH));
+    }
+
+    #[test]
     fn test_parse_implicit_scope() {
         assert_eq!(
             parse_relative_expected(".foo", ParseRelative::ForScope, None).unwrap(),
