@@ -1826,6 +1826,7 @@ impl Stylist {
                                 &selector_and_hashes.selector,
                                 selector_and_hashes.selector_offset,
                                 Some(&selector_and_hashes.hashes),
+                                None,
                                 &element,
                                 matching_context,
                             ).0);
@@ -1850,6 +1851,7 @@ impl Stylist {
                         &selector_and_hashes.selector,
                         selector_and_hashes.selector_offset,
                         Some(&selector_and_hashes.hashes),
+                        None,
                         &element,
                         &mut matching_context,
                     ).0);
@@ -3636,7 +3638,14 @@ impl CascadeData {
         let mut acc_stats = ScopeProximityStats::default();
         for candidate in result.candidates {
             let (res, bloom_stats) = context.nest_for_scope(Some(candidate.root), |context| {
-                matches_selector(&rule.selector, 0, Some(&rule.hashes), &element, context)
+                selectors::matching::matches_selector(
+                    &rule.selector,
+                    0,
+                    Some(&rule.hashes),
+                    rule.fail_cache_prefix_ids(),
+                    &element,
+                    context,
+                )
             });
             acc_stats += bloom_stats;
             if res {
@@ -3868,10 +3877,16 @@ impl CascadeData {
             };
 
             let hashes = AncestorHashes::new(&selector, quirks_mode, self.bloom_hash_options);
+            let fail_cache_prefix_ids = if self.build_fail_cache_entries {
+                self.fail_cache_prefix_ids_for_selector(&selector)
+            } else {
+                None
+            };
 
             let rule = Rule::new(
                 selector,
                 hashes,
+                fail_cache_prefix_ids,
                 StyleSource::from_declarations(declarations.clone()),
                 self.rules_source_order,
                 containing_rule_state.layer_id,
@@ -4844,6 +4859,10 @@ pub struct Rule {
     /// The ancestor hashes associated with the selector.
     pub hashes: AncestorHashes,
 
+    /// Lazily assigned fail-cache prefix ids in combinator match order.
+    #[ignore_malloc_size_of = "selector storage is shared"]
+    pub fail_cache_prefix_ids: Option<Box<[FailCachePrefixIds<SelectorImpl>]>>,
+
     /// The source order this style rule appears in. Note that we only use
     /// three bytes to store this value in ApplicableDeclarationsBlock, so
     /// we could repurpose that storage here if we needed to.
@@ -4873,6 +4892,12 @@ impl SelectorMapEntry for Rule {
 }
 
 impl Rule {
+    /// Returns the lazy prefix ids stored for this rule.
+    #[inline]
+    pub fn fail_cache_prefix_ids(&self) -> Option<&FailCachePrefixIds<SelectorImpl>> {
+        self.fail_cache_prefix_ids.as_deref().and_then(<[FailCachePrefixIds<SelectorImpl>]>::first)
+    }
+
     /// Returns the specificity of the rule.
     pub fn specificity(&self) -> u32 {
         self.selector.specificity()
@@ -4900,6 +4925,7 @@ impl Rule {
     pub fn new(
         selector: Selector<SelectorImpl>,
         hashes: AncestorHashes,
+        fail_cache_prefix_ids: Option<Box<[FailCachePrefixIds<SelectorImpl>]>>,
         style_source: StyleSource,
         source_order: u32,
         layer_id: LayerId,
@@ -4910,6 +4936,7 @@ impl Rule {
         Self {
             selector,
             hashes,
+            fail_cache_prefix_ids,
             style_source,
             source_order,
             layer_id,
@@ -4924,7 +4951,7 @@ impl Rule {
 // microbenchmark.
 // When iterating over a large Rule array, we want to be able to fast-reject
 // selectors (with the inline hashes) with as few cache misses as possible.
-size_of_test!(Rule, 40);
+size_of_test!(Rule, 56);
 
 /// A function to be able to test the revalidation stuff.
 pub fn needs_revalidation_for_testing(s: &Selector<SelectorImpl>) -> bool {

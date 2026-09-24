@@ -488,6 +488,7 @@ impl SelectorMap<Rule> {
                     &rule.selector,
                     0,
                     Some(&rule.hashes),
+                    rule.fail_cache_prefix_ids(),
                     &element,
                     matching_context,
                 );
