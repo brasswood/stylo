@@ -30,7 +30,10 @@ use crate::properties_and_values::registry::{
 use crate::rule_cache::{RuleCache, RuleCacheConditions};
 use crate::rule_collector::RuleCollector;
 use crate::rule_tree::{CascadeLevel, RuleTree, StrongRuleNode, StyleSource};
-use crate::selector_map::{PrecomputedHashMap, PrecomputedHashSet, SelectorMap, SelectorMapElement, SelectorMapEntry};
+use crate::selector_map::{
+    PrecomputedHashMap, PrecomputedHashSet, SelectorMap, SelectorMapElement, SelectorMapEntry,
+    SelectorMapOptions,
+};
 use crate::selector_parser::{
     NonTSPseudoClass, PerPseudoElementMap, PseudoElement, SelectorImpl, SnapshotMap,
 };
@@ -800,6 +803,10 @@ impl Stylist {
             initial_values_for_custom_properties_flags: Default::default(),
             num_rebuilds: 0,
         }
+    }
+
+    pub fn set_selector_map_options(&mut self, options: SelectorMapOptions) {
+        self.cascade_data.author.set_selector_map_options(options);
     }
 
     /// Returns the document cascade data.
@@ -2626,6 +2633,13 @@ type PartMap = PrecomputedHashMap<Atom, SmallVec<[Rule; 1]>>;
 type PartElementAndPseudoRules = GenericElementAndPseudoRules<PartMap>;
 
 impl ElementAndPseudoRules {
+    fn set_selector_map_options(&mut self, options: SelectorMapOptions) {
+        self.element_map.set_options(options);
+        for pseudo in self.pseudos_map.iter_mut() {
+            pseudo.set_selector_map_options(options);
+        }
+    }
+
     // TODO(emilio): Should we retain storage of these?
     fn clear(&mut self) {
         self.element_map.clear();
@@ -3215,6 +3229,10 @@ pub fn replace_parent_selector_with_implicit_scope(
 }
 
 impl CascadeData {
+    pub fn set_selector_map_options(&mut self, options: SelectorMapOptions) {
+        self.normal_rules.set_selector_map_options(options);
+    }
+
     /// Creates an empty `CascadeData`.
     pub fn new() -> Self {
         Self {
