@@ -31,6 +31,7 @@ use euclid::Scale;
 #[cfg(feature = "servo")]
 use rustc_hash::FxHashMap;
 use selectors::context::SelectorCaches;
+use selectors::parser::BloomHashOptions;
 #[cfg(feature = "gecko")]
 use servo_arc::Arc;
 use std::fmt;
@@ -617,11 +618,11 @@ pub struct ThreadLocalStyleContext<E: StyleSharingElement> {
 
 impl<E: StyleSharingElement> ThreadLocalStyleContext<E> {
     /// Creates a new `ThreadLocalStyleContext`
-    pub fn new() -> Self {
+    pub fn new(bloom_hash_options: BloomHashOptions) -> Self {
         ThreadLocalStyleContext {
             sharing_cache: StyleSharingCache::new(),
             rule_cache: RuleCache::new(),
-            bloom_filter: StyleBloom::new(Default::default()),
+            bloom_filter: StyleBloom::new(bloom_hash_options),
             tasks: SequentialTaskList(Vec::new()),
             statistics: PerThreadTraversalStatistics::default(),
             stack_limit_checker: StackLimitChecker::new(
