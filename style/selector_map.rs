@@ -155,6 +155,21 @@ pub trait SelectorMapElement: Element<Impl = SelectorImpl> + Copy + std::fmt::De
     ) -> euclid::default::Size2D<Option<app_units::Au>>;
 }
 /// TODO: Tune the initial capacity of the HashMap
+#[derive(Clone, Copy, Debug)]
+pub struct SelectorMapOptions {
+    pub none_bucket: bool,
+    pub common_pseudo_class_bucket: bool,
+}
+
+impl Default for SelectorMapOptions {
+    fn default() -> Self {
+        Self {
+            none_bucket: true,
+            common_pseudo_class_bucket: true,
+        }
+    }
+}
+
 #[derive(Clone, Debug, MallocSizeOf)]
 pub struct SelectorMap<T: 'static> {
     /// Rules that have `:root` selectors.
@@ -177,6 +192,7 @@ pub struct SelectorMap<T: 'static> {
     pub other: SmallVec<[T; 1]>,
     /// The number of entries in this map.
     pub count: usize,
+    options: SelectorMapOptions,
 }
 
 impl<T: 'static> Default for SelectorMap<T> {
@@ -200,7 +216,12 @@ impl<T> SelectorMap<T> {
             rare_pseudo_classes: SmallVec::new(),
             other: SmallVec::new(),
             count: 0,
+            options: Default::default(),
         }
+    }
+
+    pub fn set_options(&mut self, options: SelectorMapOptions) {
+        self.options = options;
     }
 
     /// Shrink the capacity of the map if needed.
@@ -303,7 +324,9 @@ impl SelectorMap<Rule> {
         }
 
         // TODO: this is my best guess at how to determine if an element is eligible to be matched against all the selectors that have common pseudo-classes such as :hover.
-        if rule_hash_target.state().intersects(ElementState::RARE_PSEUDO_CLASS_STATES.complement()) {
+        if self.options.common_pseudo_class_bucket
+            && rule_hash_target.state().intersects(ElementState::RARE_PSEUDO_CLASS_STATES.complement())
+        {
             hits += self.common_pseudo_classes.len();
             stats += SelectorMap::get_matching_rules(
                 element,
@@ -541,7 +564,15 @@ impl<T: SelectorMapEntry> SelectorMap<T> {
                             .try_entry(id.clone(), quirks_mode)?
                             .or_default()
                     ),
-                    Bucket::CommonPseudoClasses => Some(&mut self.common_pseudo_classes),
+                    Bucket::CommonPseudoClasses => {
+                        if self.options.common_pseudo_class_bucket {
+                            Some(&mut self.common_pseudo_classes)
+                        } else if self.options.none_bucket {
+                            None
+                        } else {
+                            Some(&mut self.other)
+                        }
+                    },
                     Bucket::Class(class) => Some(
                         self
                             .class_hash
@@ -584,7 +615,13 @@ impl<T: SelectorMapEntry> SelectorMap<T> {
                     },
                     Bucket::RarePseudoClasses => Some(&mut self.rare_pseudo_classes),
                     Bucket::Universal => Some(&mut self.other),
-                    Bucket::None => None,
+                    Bucket::None => {
+                        if self.options.none_bucket {
+                            None
+                        } else {
+                            Some(&mut self.other)
+                        }
+                    },
                 } {
                     vec.try_reserve(1)?;
                     vec.push($entry);
