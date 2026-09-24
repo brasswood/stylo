@@ -789,13 +789,20 @@ impl Stylist {
     /// If more members are added here, think about whether they should
     /// be reset in clear().
     #[inline]
-    pub fn new(device: Device, quirks_mode: QuirksMode) -> Self {
+    pub fn new(
+        device: Device,
+        quirks_mode: QuirksMode,
+        bloom_hash_options: BloomHashOptions,
+    ) -> Self {
+        let mut cascade_data = DocumentCascadeData::default();
+        cascade_data.user.bloom_hash_options = bloom_hash_options;
+        cascade_data.author.bloom_hash_options = bloom_hash_options;
         Self {
             device,
             quirks_mode,
             stylesheets: StylistStylesheetSet::new(),
             author_data_cache: CascadeDataCache::new(),
-            cascade_data: Default::default(),
+            cascade_data,
             author_styles_enabled: AuthorStylesEnabled::Yes,
             rule_tree: RuleTree::new(),
             script_custom_properties: Default::default(),
