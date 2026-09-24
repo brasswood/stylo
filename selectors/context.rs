@@ -10,6 +10,29 @@ use crate::relative_selector::cache::RelativeSelectorCache;
 use crate::relative_selector::filter::RelativeSelectorFilterMap;
 use crate::tree::{Element, OpaqueElement};
 
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct FailCache {
+    entries: [u16; 8],
+    next_insert_index: u8,
+    #[cfg(feature = "fail_cache_fill_stats")]
+    filled_once: bool,
+}
+
+impl FailCache {
+    #[inline]
+    pub fn contains(&self, id: u16) -> bool {
+        debug_assert_ne!(id, 0, "0 is reserved as the vacant fail-cache entry");
+        // This for-loop vectorizes better than `Slice::contains` for my small fixed-size slice
+        for entry in self.entries {
+            if entry == id {
+                return true;
+            }
+        }
+        false
+    }
+
+}
+
 /// What kind of selector matching mode we should use.
 ///
 /// There are two modes of selector matching. The difference is only noticeable
