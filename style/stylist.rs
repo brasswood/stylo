@@ -3094,6 +3094,7 @@ impl Default for StylistImplicitScopeRoot {
 /// `InvalidationData`? That'd make `clear_cascade_data()` clearer.
 #[derive(Debug, Clone, MallocSizeOf)]
 pub struct CascadeData {
+    #[ignore_malloc_size_of = "contains only booleans"]
     bloom_hash_options: BloomHashOptions,
 
     /// The data coming from normal style rules that apply to elements at this
