@@ -4914,6 +4914,21 @@ impl Rule {
         self.fail_cache_prefix_ids.as_deref().and_then(<[FailCachePrefixIds<SelectorImpl>]>::first)
     }
 
+    /// Returns the offset of the compound that can activate this rule's
+    /// descendant-universal tail.
+    pub(crate) fn universal_tail_activation_offset(&self) -> Option<usize> {
+        let mut iter = self.selector.iter();
+        if iter.next().is_some() {
+            return None;
+        }
+        if iter.next_sequence() != Some(Combinator::Descendant) {
+            return None;
+        }
+        let offset = self.selector.len() - iter.selector_length();
+        iter.next()?;
+        Some(offset)
+    }
+
     /// Returns the specificity of the rule.
     pub fn specificity(&self) -> u32 {
         self.selector.specificity()
@@ -4960,6 +4975,29 @@ impl Rule {
             is_starting_style,
             scope_condition_id,
         }
+    }
+}
+
+/// A rule indexed by the compound that activates its universal descendant
+/// tail, rather than by its rightmost universal compound.
+#[derive(Clone, Debug, MallocSizeOf)]
+pub(crate) struct UniversalTailRule {
+    pub(crate) rule: Rule,
+    pub(crate) activation_offset: usize,
+}
+
+impl UniversalTailRule {
+    fn new(rule: Rule, activation_offset: usize) -> Self {
+        Self {
+            rule,
+            activation_offset,
+        }
+    }
+}
+
+impl SelectorMapEntry for UniversalTailRule {
+    fn selector(&self) -> SelectorIter<'_, SelectorImpl> {
+        self.rule.selector.iter_from(self.activation_offset)
     }
 }
 
