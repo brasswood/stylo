@@ -3784,11 +3784,14 @@ impl CascadeData {
             if !matches!(combinator, Combinator::Child | Combinator::Descendant) {
                 break;
             }
-            let suffix_end = selector.len() - next_offset;
-            if !selector.iter_raw_match_order().as_slice()[..suffix_end]
+            let prefix_length = selector.len() - next_offset;
+            let prefix = fail_cache_prefix_components(
+                selector.iter_raw_match_order().as_slice(),
+                prefix_length,
+            );
+            if !cacheable_prefix_combinators(prefix
                 .iter()
-                .any(Component::is_combinator) // TODO: red flag, isn't this already verified by `next_selector_offset`?
-            {
+                .filter_map(Component::as_combinator)) {
                 break;
             }
             let Some(prefix_id) = self.fail_cache_prefix_id(selector, next_offset) else {
