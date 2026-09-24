@@ -1028,20 +1028,30 @@ where
         matches_compound_selector(&mut selector_iter, element, context, rightmost);
 
     let Some(combinator) = selector_iter.next_sequence() else {
-        return match matches_compound_selector {
-            KleeneValue::True => SelectorMatchingResult::Matched,
-            KleeneValue::Unknown => SelectorMatchingResult::Unknown,
-            KleeneValue::False => {
-                SelectorMatchingResult::NotMatchedAndRestartFromClosestLaterSibling
+        return finish_with_fail_cache(
+            fail_cache_target,
+            active_fail_cache_prefix,
+            match matches_compound_selector {
+                KleeneValue::True => SelectorMatchingResult::Matched,
+                KleeneValue::Unknown => SelectorMatchingResult::Unknown,
+                KleeneValue::False => {
+                    SelectorMatchingResult::NotMatchedAndRestartFromClosestLaterSibling
+                },
             },
-        };
+        );
     };
+    let next_fail_cache_prefix_index = fail_cache_prefix_ids
+        .and_then(|prefixes| prefixes.next_index(fail_cache_prefix_index));
 
     let is_pseudo_combinator = combinator.is_pseudo_element();
     if context.featureless() && !is_pseudo_combinator {
         // A featureless element shouldn't match any further combinator.
         // TODO(emilio): Maybe we could avoid the compound matching more eagerly.
-        return SelectorMatchingResult::NotMatchedGlobally;
+        return finish_with_fail_cache(
+            fail_cache_target,
+            active_fail_cache_prefix,
+            SelectorMatchingResult::NotMatchedGlobally,
+        );
     }
 
     let is_sibling_combinator = combinator.is_sibling();
@@ -1053,7 +1063,11 @@ where
     if matches_compound_selector == KleeneValue::False {
         // We don't short circuit unknown here, since the rest of the selector
         // to the left of this compound may still return false.
-        return SelectorMatchingResult::NotMatchedAndRestartFromClosestLaterSibling;
+        return finish_with_fail_cache(
+            fail_cache_target,
+            active_fail_cache_prefix,
+            SelectorMatchingResult::NotMatchedAndRestartFromClosestLaterSibling,
+        );
     }
 
     if !is_pseudo_combinator {
@@ -1086,7 +1100,13 @@ where
             featureless,
         } = next_element_for_combinator(&element, combinator, &context);
         element = match next_element {
-            None => return candidate_not_found,
+            None => {
+                return finish_with_fail_cache(
+                    fail_cache_target,
+                    active_fail_cache_prefix,
+                    candidate_not_found,
+                )
+            },
             Some(e) => e,
         };
 
@@ -1094,6 +1114,8 @@ where
             context.with_featureless(featureless, |context| {
                 matches_complex_selector_internal(
                     selector_iter.clone(),
+                    fail_cache_prefix_ids,
+                    next_fail_cache_prefix_index,
                     &element,
                     context,
                     rightmost,
