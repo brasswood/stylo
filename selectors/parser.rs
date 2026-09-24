@@ -1592,6 +1592,34 @@ impl<Impl: SelectorImpl> FailCachePrefixIds<Impl> {
         }
         result
     }
+
+    /// Returns an already-assigned prefix id without hashing the prefix.
+    #[inline]
+    pub fn get(&self, index: usize) -> Option<u16> {
+        let id = self.entries[index].id.load(Ordering::Relaxed);
+        (id != 0).then_some(id)
+    }
+
+    /// Returns the next prefix index, if this selector has another prefix.
+    #[inline]
+    pub fn next_index(&self, current: Option<usize>) -> Option<usize> {
+        let next = current.map_or(0, |index| index + 1);
+        (next < self.entries.len()).then_some(next)
+    }
+
+    /// Assigns an id only when a failed match is about to populate the cache.
+    #[inline]
+    pub fn get_or_intern(&self, index: usize) -> Option<u16> {
+        if let Some(id) = self.get(index) {
+            return Some(id);
+        }
+        let entry = &self.entries[index];
+        let id = self.generator.get_or_intern(&self.selector, entry.prefix_length.into())?;
+        match entry.id.compare_exchange(0, id, Ordering::Relaxed, Ordering::Relaxed) {
+            Ok(_) => Some(id),
+            Err(existing) => Some(existing),
+        }
+    }
 }
 
 impl<'a, Impl: 'a + SelectorImpl> SelectorIter<'a, Impl> {
