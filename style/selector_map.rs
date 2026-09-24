@@ -154,10 +154,12 @@ pub trait SelectorMapElement: Element<Impl = SelectorImpl> + Copy + std::fmt::De
         display: &Display,
     ) -> euclid::default::Size2D<Option<app_units::Au>>;
 }
-/// TODO: Tune the initial capacity of the HashMap
+/// Controls optional selector-map buckets.
 #[derive(Clone, Copy, Debug)]
 pub struct SelectorMapOptions {
+    /// Omit selectors that cannot match from the map.
     pub none_bucket: bool,
+    /// Store common pseudo-class selectors in their dedicated bucket.
     pub common_pseudo_class_bucket: bool,
 }
 
@@ -170,6 +172,7 @@ impl Default for SelectorMapOptions {
     }
 }
 
+/// TODO: Tune the initial capacity of the HashMap
 #[derive(Clone, Debug, MallocSizeOf)]
 pub struct SelectorMap<T: 'static> {
     /// Rules that have `:root` selectors.
@@ -221,6 +224,7 @@ impl<T> SelectorMap<T> {
         }
     }
 
+    /// Set optional bucket behavior before inserting entries.
     pub fn set_options(&mut self, options: SelectorMapOptions) {
         self.options = options;
     }

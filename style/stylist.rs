@@ -805,6 +805,7 @@ impl Stylist {
         }
     }
 
+    /// Configure selector-map buckets for subsequently indexed author rules.
     pub fn set_selector_map_options(&mut self, options: SelectorMapOptions) {
         self.cascade_data.author.set_selector_map_options(options);
     }
@@ -3229,6 +3230,7 @@ pub fn replace_parent_selector_with_implicit_scope(
 }
 
 impl CascadeData {
+    /// Configure selector-map buckets for normal rules in this cascade data.
     pub fn set_selector_map_options(&mut self, options: SelectorMapOptions) {
         self.normal_rules.set_selector_map_options(options);
     }
