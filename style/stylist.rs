@@ -3288,6 +3288,34 @@ impl PartialEq for FailCachePrefix {
     }
 }
 
+impl Hash for FailCachePrefix {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        for component in self.components() {
+            mem::discriminant(component).hash(state);
+            match component {
+                Component::LocalName(name) => Some(name.name.precomputed_hash()),
+                Component::ID(name) | Component::Class(name) => Some(name.precomputed_hash()),
+                Component::AttributeInNoNamespaceExists { local_name, .. }
+                | Component::AttributeInNoNamespace { local_name, .. } => {
+                    Some(local_name.precomputed_hash())
+                },
+                Component::AttributeOther(selector) => {
+                    Some(selector.local_name.precomputed_hash())
+                },
+                Component::DefaultNamespace(url) | Component::Namespace(_, url) => {
+                    Some(url.precomputed_hash())
+                },
+                Component::Combinator(combinator) => {
+                    mem::discriminant(combinator).hash(state);
+                    None
+                },
+                _ => None,
+            }
+            .hash(state);
+        }
+    }
+}
+
 fn scope_start_matches_shadow_host(start: &SelectorList<SelectorImpl>) -> bool {
     // TODO(emilio): Should we carry a MatchesFeaturelessHost rather than a bool around?
     // Pre-existing behavior with multiple selectors matches this tho.
