@@ -3287,9 +3287,13 @@ impl Default for FailCachePrefixInternerEntries {
 
 impl Eq for FailCachePrefix {}
 
+fn fail_cache_prefix_components<T>(components: &[T], prefix_length: usize) -> &[T] {
+    &components[components.len() - prefix_length..]
+}
+
 impl FailCachePrefix {
     fn components(&self) -> &[Component<SelectorImpl>] {
-        &self.0.iter_raw_match_order().as_slice()[..self.1]
+        fail_cache_prefix_components(self.0.iter_raw_match_order().as_slice(), self.1)
     }
 }
 
@@ -5065,4 +5069,18 @@ pub fn needs_revalidation_for_testing(s: &Selector<SelectorImpl>) -> bool {
     };
     s.visit(&mut visitor);
     needs_revalidation
+}
+
+#[cfg(test)]
+mod fail_cache_tests {
+    use super::fail_cache_prefix_components;
+
+    #[test]
+    fn prefix_components_select_the_left_hand_tail() {
+        let match_order = ["subject", "combinator", "ancestor", "class"];
+        assert_eq!(
+            fail_cache_prefix_components(&match_order, 2),
+            ["ancestor", "class"],
+        );
+    }
 }
