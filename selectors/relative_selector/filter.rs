@@ -7,7 +7,9 @@ use rustc_hash::FxHashMap;
 
 use crate::bloom::BloomFilter;
 use crate::context::QuirksMode;
-use crate::parser::{collect_selector_hashes, RelativeSelector, RelativeSelectorMatchHint};
+use crate::parser::{
+    collect_selector_hashes, BloomHashOptions, RelativeSelector, RelativeSelectorMatchHint,
+};
 use crate::tree::{Element, OpaqueElement};
 use crate::SelectorImpl;
 
@@ -70,6 +72,7 @@ fn fast_reject<Impl: SelectorImpl>(
     collect_selector_hashes(
         selector.selector.iter(),
         quirks_mode,
+        BloomHashOptions::default(),
         &mut hashes,
         &mut len,
         |s| s.iter(),

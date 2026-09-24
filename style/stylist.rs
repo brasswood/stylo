@@ -77,7 +77,7 @@ use selectors::matching::{
 };
 use selectors::matching::{MatchingForInvalidation, VisitedHandlingMode};
 use selectors::parser::{
-    AncestorHashes, Combinator, Component, MatchesFeaturelessHost, Selector, SelectorIter,
+    AncestorHashes, BloomHashOptions, Combinator, Component, MatchesFeaturelessHost, Selector, SelectorIter,
     SelectorList,
 };
 use selectors::visitor::{SelectorListKind, SelectorVisitor};
@@ -2817,7 +2817,11 @@ impl ScopeBoundWithHashes {
     fn new(quirks_mode: QuirksMode, selectors: SelectorList<SelectorImpl>) -> Self {
         let mut hashes = SmallVec::with_capacity(selectors.len());
         for selector in selectors.slice() {
-            hashes.push(AncestorHashes::new(selector, quirks_mode));
+            hashes.push(AncestorHashes::new(
+                selector,
+                quirks_mode,
+                BloomHashOptions::default(),
+            ));
         }
         Self { selectors, hashes }
     }
@@ -3694,7 +3698,11 @@ impl CascadeData {
                 None => selector.clone(),
             };
 
-            let hashes = AncestorHashes::new(&selector, quirks_mode);
+            let hashes = AncestorHashes::new(
+                &selector,
+                quirks_mode,
+                BloomHashOptions::default(),
+            );
 
             let rule = Rule::new(
                 selector,
