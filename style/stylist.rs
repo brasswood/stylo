@@ -77,8 +77,8 @@ use selectors::matching::{
 };
 use selectors::matching::{MatchingForInvalidation, VisitedHandlingMode};
 use selectors::parser::{
-    AncestorHashes, BloomHashOptions, Combinator, Component, MatchesFeaturelessHost, Selector, SelectorIter,
-    SelectorList,
+    AncestorHashes, BloomHashOptions, Combinator, Component, MatchesFeaturelessHost, Selector,
+    SelectorIter, SelectorList,
 };
 use selectors::visitor::{SelectorListKind, SelectorVisitor};
 use servo_arc::{Arc, ArcBorrow, ThinArc};
@@ -3718,11 +3718,7 @@ impl CascadeData {
                 None => selector.clone(),
             };
 
-            let hashes = AncestorHashes::new(
-                &selector,
-                quirks_mode,
-                self.bloom_hash_options,
-            );
+            let hashes = AncestorHashes::new(&selector, quirks_mode, self.bloom_hash_options);
 
             let rule = Rule::new(
                 selector,

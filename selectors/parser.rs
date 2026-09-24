@@ -790,9 +790,14 @@ fn collect_ancestor_hashes<Impl: SelectorImpl>(
     hashes: &mut [u32; 4],
     len: &mut usize,
 ) {
-    collect_selector_hashes(AncestorIter::new(iter), quirks_mode, options, hashes, len, |s| {
-        AncestorIter(s.iter())
-    });
+    collect_selector_hashes(
+        AncestorIter::new(iter),
+        quirks_mode,
+        options,
+        hashes,
+        len,
+        |s| AncestorIter(s.iter()),
+    );
 }
 
 impl AncestorHashes {

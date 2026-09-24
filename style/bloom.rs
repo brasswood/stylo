@@ -142,7 +142,9 @@ where
     });
 
     if options.common_pseudo_class
-        && element.state().intersects(ElementState::RARE_PSEUDO_CLASS_STATES.complement())
+        && element
+            .state()
+            .intersects(ElementState::RARE_PSEUDO_CLASS_STATES.complement())
     {
         f(COMMON_PSEUDO_CLASS_HASH);
     }
