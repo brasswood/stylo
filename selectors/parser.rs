@@ -4852,7 +4852,8 @@ pub mod tests {
     #[test]
     fn ancestor_bloom_hash_extensions_are_optional() {
         fn hashes(selector: &str, options: BloomHashOptions) -> Vec<u32> {
-            let selector = &parse(selector).unwrap().slice()[0];
+            let selectors = parse(selector).unwrap();
+            let selector = &selectors.slice()[0];
             let hashes = AncestorHashes::new(selector, QuirksMode::NoQuirks, options);
             hashes
                 .packed_hashes
