@@ -3251,6 +3251,43 @@ lazy_static! {
     };
 }
 
+#[derive(Clone, Debug, MallocSizeOf)]
+struct FailCachePrefix(
+    #[ignore_malloc_size_of = "selector storage is shared"] Selector<SelectorImpl>,
+    usize,
+);
+
+#[derive(Debug, Default)]
+struct FailCachePrefixInterner {
+    entries: Mutex<FailCachePrefixInternerEntries>,
+}
+
+#[derive(Debug)]
+struct FailCachePrefixInternerEntries {
+    ids: FxHashMap<FailCachePrefix, u16>,
+    next_id: u16,
+}
+
+impl Default for FailCachePrefixInternerEntries {
+    fn default() -> Self {
+        Self { ids: FxHashMap::default(), next_id: 1 }
+    }
+}
+
+impl Eq for FailCachePrefix {}
+
+impl FailCachePrefix {
+    fn components(&self) -> &[Component<SelectorImpl>] {
+        &self.0.iter_raw_match_order().as_slice()[..self.1]
+    }
+}
+
+impl PartialEq for FailCachePrefix {
+    fn eq(&self, other: &Self) -> bool {
+        self.components() == other.components()
+    }
+}
+
 fn scope_start_matches_shadow_host(start: &SelectorList<SelectorImpl>) -> bool {
     // TODO(emilio): Should we carry a MatchesFeaturelessHost rather than a bool around?
     // Pre-existing behavior with multiple selectors matches this tho.
