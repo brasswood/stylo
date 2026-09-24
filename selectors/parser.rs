@@ -764,6 +764,13 @@ where
             {
                 COMMON_PSEUDO_CLASS_HASH
             },
+            Component::Nth(ref nth) if options.edge_children && nth.is_simple_edge() => {
+                if nth.ty.is_from_end() {
+                    LAST_EDGE_CHILD_HASH
+                } else {
+                    FIRST_EDGE_CHILD_HASH
+                }
+            },
             _ => continue,
         };
 
