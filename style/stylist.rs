@@ -3316,6 +3316,38 @@ impl Hash for FailCachePrefix {
     }
 }
 
+impl FailCachePrefixIdGenerator<SelectorImpl> for FailCachePrefixInterner {
+    fn get_or_intern(&self, selector: &Selector<SelectorImpl>, prefix_length: usize) -> Option<u16> {
+        let mut entries = self.entries.lock().unwrap();
+        let prefix = FailCachePrefix(selector.clone(), prefix_length);
+        if let Some(id) = entries.ids.get(&prefix) {
+            return Some(*id);
+        }
+        if entries.next_id == 0 {
+            return None;
+        }
+        let id = entries.next_id;
+        entries.next_id = entries.next_id.wrapping_add(1);
+        if entries.next_id == 0 {
+            log::warn!("Ran out of fail-cache prefix ids; later prefixes will not be cached");
+        }
+        entries.ids.insert(prefix, id);
+        Some(id)
+    }
+}
+
+fn next_selector_offset(selector: &Selector<SelectorImpl>, offset: usize) -> Option<(usize, Combinator)> {
+    let slice = selector.iter_raw_match_order().as_slice();
+    let mut index = offset;
+    while index < slice.len() {
+        if let Some(combinator) = slice[index].as_combinator() {
+            return Some((index + 1, combinator));
+        }
+        index += 1;
+    }
+    None
+}
+
 fn scope_start_matches_shadow_host(start: &SelectorList<SelectorImpl>) -> bool {
     // TODO(emilio): Should we carry a MatchesFeaturelessHost rather than a bool around?
     // Pre-existing behavior with multiple selectors matches this tho.
