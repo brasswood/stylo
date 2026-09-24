@@ -284,6 +284,13 @@ lazy_static! {
         Mutex::new(UserAgentCascadeDataCache::new());
 }
 
+/// Fine-grained timings for fail-cache metadata construction.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct FailCacheBuildTimings {
+    /// Time spent constructing per-selector fail-cache entry lists.
+    pub entry_build: tsc_timer::Duration,
+}
+
 impl CascadeDataCacheEntry for UserAgentCascadeData {
     fn rebuild<S>(
         device: &Device,
@@ -1149,6 +1156,14 @@ impl Stylist {
         }
 
         /* TODO: shadow DOM. doc_author_rules_apply && */ f(&self.cascade_data.author)
+    }
+
+    /// Returns accumulated timings for fail-cache metadata construction.
+    pub fn fail_cache_build_timings(&self) -> FailCacheBuildTimings {
+        FailCacheBuildTimings {
+            entry_build: self.cascade_data.author.fail_cache_entry_build_time +
+                self.cascade_data.user.fail_cache_entry_build_time,
+        }
     }
 
     /// Execute callback for all applicable style rule data.
@@ -4693,6 +4708,7 @@ impl CascadeData {
         self.scope_conditions.push(ScopeConditionReference::none());
         #[cfg(feature = "gecko")]
         self.extra_data.clear();
+        self.fail_cache_entry_build_time = tsc_timer::Duration::from_cycles(0);
         self.rules_source_order = 0;
         self.num_selectors = 0;
         self.num_declarations = 0;
