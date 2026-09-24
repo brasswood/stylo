@@ -494,6 +494,16 @@ where
 }
 
 #[inline]
+fn fail_cache_hit_result() -> SelectorMatchingResult {
+    SelectorMatchingResult::NotMatchedAndRestartFromClosestLaterSibling
+}
+
+#[inline]
+fn is_cacheable_failure(result: SelectorMatchingResult) -> bool {
+    result == fail_cache_hit_result()
+}
+
+#[inline]
 fn finish_with_fail_cache<E>(
     element: Option<&E>,
     prefix: Option<(&FailCachePrefixIds<E::Impl>, usize)>,
@@ -503,7 +513,7 @@ where
     E: Element,
 {
     if let (Some(element), Some((prefixes, index))) = (element, prefix) {
-        if !matches!(result, SelectorMatchingResult::Matched | SelectorMatchingResult::Unknown) {
+        if is_cacheable_failure(result) {
             if let Some(prefix_id) = prefixes.get_or_intern(index) {
                 element.insert_into_fail_cache(prefix_id);
             }
@@ -1049,7 +1059,7 @@ where
         .and_then(|(prefixes, index)| prefixes.get(index));
     if let Some(prefix_id) = active_fail_cache_prefix_id {
         if element.fail_cache_contains(prefix_id) {
-            return SelectorMatchingResult::NotMatchedGlobally;
+            return fail_cache_hit_result();
         }
     }
     let fail_cache_target = active_fail_cache_prefix.map(|_| element);
@@ -1860,4 +1870,26 @@ where
     }
 
     index
+}
+
+#[cfg(test)]
+mod fail_cache_tests {
+    use super::{fail_cache_hit_result, is_cacheable_failure, SelectorMatchingResult};
+
+    #[test]
+    fn cache_hits_restart_ancestor_search() {
+        assert!(matches!(
+            fail_cache_hit_result(),
+            SelectorMatchingResult::NotMatchedAndRestartFromClosestLaterSibling,
+        ));
+        assert!(!matches!(
+            fail_cache_hit_result(),
+            SelectorMatchingResult::NotMatchedGlobally,
+        ));
+        assert!(is_cacheable_failure(fail_cache_hit_result()));
+        assert!(!is_cacheable_failure(SelectorMatchingResult::NotMatchedGlobally));
+        assert!(!is_cacheable_failure(
+            SelectorMatchingResult::NotMatchedAndRestartFromClosestDescendant,
+        ));
+    }
 }
