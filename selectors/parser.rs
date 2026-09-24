@@ -658,6 +658,26 @@ pub struct AncestorHashes {
     pub packed_hashes: [u32; 3],
 }
 
+/// Optional hashes added to ancestor Bloom filters.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct BloomHashOptions {
+    pub common_pseudo_class: bool,
+    pub edge_children: bool,
+}
+
+impl Default for BloomHashOptions {
+    fn default() -> Self {
+        Self {
+            common_pseudo_class: true,
+            edge_children: false,
+        }
+    }
+}
+
+pub const COMMON_PSEUDO_CLASS_HASH: u32 = 1;
+pub const FIRST_EDGE_CHILD_HASH: u32 = 2;
+pub const LAST_EDGE_CHILD_HASH: u32 = 3;
+
 pub(crate) fn collect_selector_hashes<'a, Impl: SelectorImpl, Iter>(
     iter: Iter,
     quirks_mode: QuirksMode,
