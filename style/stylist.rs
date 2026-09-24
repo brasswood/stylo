@@ -3777,6 +3777,39 @@ impl CascadeData {
         }
     }
 
+    fn fail_cache_prefix_ids_for_selector(
+        &mut self,
+        selector: &Selector<SelectorImpl>,
+    ) -> Option<Box<[FailCachePrefixIds<SelectorImpl>]>> {
+        let start = tsc_timer::Start::now();
+        let mut prefix_lengths = Vec::new();
+        let mut offset = 0usize;
+        while let Some((next_offset, combinator)) = next_selector_offset(selector, offset) {
+            if !matches!(combinator, Combinator::Child | Combinator::Descendant) {
+                break;
+            }
+            let suffix_end = selector.len() - next_offset;
+            if !selector.iter_raw_match_order().as_slice()[..suffix_end]
+                .iter()
+                .any(Component::is_combinator) // TODO: red flag, isn't this already verified by `next_selector_offset`?
+            {
+                break;
+            }
+            prefix_lengths.push((selector.len() - next_offset).try_into().unwrap());
+            offset = next_offset;
+        }
+        let result = (!prefix_lengths.is_empty()).then(|| {
+            vec![FailCachePrefixIds::new(
+                selector.clone(),
+                prefix_lengths.into_boxed_slice(),
+                self.fail_cache_prefix_ids.clone(),
+                !self.lazy_fail_cache_prefixes,
+            )].into_boxed_slice()
+        });
+        self.fail_cache_entry_build_time += start.elapsed();
+        result
+    }
+
     fn add_styles(
         &mut self,
         selectors: &SelectorList<SelectorImpl>,
