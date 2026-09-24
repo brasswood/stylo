@@ -1006,6 +1006,19 @@ fn matches_complex_selector_internal<E>(
 where
     E: Element,
 {
+    let active_fail_cache_prefix = context
+        .use_fail_caches()
+        .then(|| fail_cache_prefix_ids.zip(fail_cache_prefix_index))
+        .flatten();
+    let active_fail_cache_prefix_id = active_fail_cache_prefix
+        .and_then(|(prefixes, index)| prefixes.get(index));
+    if let Some(prefix_id) = active_fail_cache_prefix_id {
+        if element.fail_cache_contains(prefix_id) {
+            return SelectorMatchingResult::NotMatchedGlobally;
+        }
+    }
+    let fail_cache_target = active_fail_cache_prefix.map(|_| element);
+
     debug!(
         "Matching complex selector {:?} for {:?}",
         selector_iter, element
