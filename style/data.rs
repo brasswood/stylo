@@ -14,7 +14,7 @@ use crate::selector_parser::{PseudoElement, RestyleDamage, EAGER_PSEUDO_COUNT};
 use crate::style_resolver::{PrimaryStyle, ResolvedElementStyles, ResolvedStyle};
 #[cfg(feature = "gecko")]
 use malloc_size_of::MallocSizeOfOps;
-use selectors::matching::SelectorCaches;
+use selectors::matching::{FailCache, SelectorCaches};
 use servo_arc::Arc;
 use std::fmt;
 use std::mem;
@@ -263,10 +263,13 @@ pub struct ElementData {
 
     /// Flags.
     pub flags: ElementDataFlags,
+
+    /// Small per-element cache of selector prefixes known to fail here.
+    pub fail_cache: FailCache,
 }
 
 // There's one of these per rendered elements so it better be small.
-size_of_test!(ElementData, 24);
+size_of_test!(ElementData, 40);
 
 /// The kind of restyle that a single element should do.
 #[derive(Debug)]

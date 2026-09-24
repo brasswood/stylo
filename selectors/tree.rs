@@ -181,4 +181,12 @@ pub trait Element: Sized + Clone + Debug {
     /// Add hashes unique to this element to the given filter, returning true
     /// if any got added.
     fn add_element_unique_hashes(&self, filter: &mut BloomFilter) -> bool;
+
+    /// Returns whether the per-element fail cache contains `id`.
+    fn fail_cache_contains(&self, _id: u16) -> bool {
+        false
+    }
+
+    /// Inserts `id` into the per-element fail cache.
+    fn insert_into_fail_cache(&self, _id: u16) {}
 }

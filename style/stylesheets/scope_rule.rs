@@ -247,7 +247,7 @@ impl<'a> ScopeTarget<'a> {
                     return false;
                 }
                 for selector in list.slice().iter() {
-                    if matches_selector(selector, 0, None, &element, context).0 {
+                    if matches_selector(selector, 0, None, None, &element, context).0 {
                         return true;
                     }
                 }
@@ -340,7 +340,7 @@ where
     let mut parent = Some(element);
     context.nest_for_scope_condition(Some(root), |context| {
         while let Some(p) = parent {
-            if matches_selector(selector, 0, None, &p, context).0 {
+            if matches_selector(selector, 0, None, None, &p, context).0 {
                 return true;
             }
             if p.opaque() == root {

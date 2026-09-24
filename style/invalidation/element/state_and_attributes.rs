@@ -111,6 +111,7 @@ where
                 &dependency.selector,
                 dependency.selector_offset,
                 None,
+                None,
                 element,
                 context,
             ).0;
@@ -126,6 +127,7 @@ where
             let matched_then = matches_selector_kleene(
                 &dependency.selector,
                 dependency.selector_offset,
+                None,
                 None,
                 wrapper,
                 context,
