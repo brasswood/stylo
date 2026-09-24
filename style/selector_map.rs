@@ -192,6 +192,7 @@ pub struct SelectorMap<T: 'static> {
     pub other: SmallVec<[T; 1]>,
     /// The number of entries in this map.
     pub count: usize,
+    #[ignore_malloc_size_of = "configuration"]
     options: SelectorMapOptions,
 }
 
