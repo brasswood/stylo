@@ -2814,13 +2814,17 @@ pub struct ScopeBoundWithHashes {
 }
 
 impl ScopeBoundWithHashes {
-    fn new(quirks_mode: QuirksMode, selectors: SelectorList<SelectorImpl>) -> Self {
+    fn new(
+        quirks_mode: QuirksMode,
+        bloom_hash_options: BloomHashOptions,
+        selectors: SelectorList<SelectorImpl>,
+    ) -> Self {
         let mut hashes = SmallVec::with_capacity(selectors.len());
         for selector in selectors.slice() {
             hashes.push(AncestorHashes::new(
                 selector,
                 quirks_mode,
-                BloomHashOptions::default(),
+                bloom_hash_options,
             ));
         }
         Self { selectors, hashes }
@@ -2851,12 +2855,17 @@ impl ScopeBoundsWithHashes {
     /// Create a new scope bound, hashing selectors for fast rejection.
     fn new(
         quirks_mode: QuirksMode,
+        bloom_hash_options: BloomHashOptions,
         start: Option<SelectorList<SelectorImpl>>,
         end: Option<SelectorList<SelectorImpl>>,
     ) -> Self {
         Self {
-            start: start.map(|selectors| ScopeBoundWithHashes::new(quirks_mode, selectors)),
-            end: end.map(|selectors| ScopeBoundWithHashes::new(quirks_mode, selectors)),
+            start: start.map(|selectors| {
+                ScopeBoundWithHashes::new(quirks_mode, bloom_hash_options, selectors)
+            }),
+            end: end.map(|selectors| {
+                ScopeBoundWithHashes::new(quirks_mode, bloom_hash_options, selectors)
+            }),
         }
     }
 
@@ -3078,6 +3087,8 @@ impl Default for StylistImplicitScopeRoot {
 /// `InvalidationData`? That'd make `clear_cascade_data()` clearer.
 #[derive(Debug, Clone, MallocSizeOf)]
 pub struct CascadeData {
+    bloom_hash_options: BloomHashOptions,
+
     /// The data coming from normal style rules that apply to elements at this
     /// cascade level.
     normal_rules: ElementAndPseudoRules,
@@ -3242,6 +3253,7 @@ impl CascadeData {
     /// Creates an empty `CascadeData`.
     pub fn new() -> Self {
         Self {
+            bloom_hash_options: BloomHashOptions::default(),
             normal_rules: ElementAndPseudoRules::default(),
             featureless_host_rules: None,
             slotted_rules: None,
@@ -3701,7 +3713,7 @@ impl CascadeData {
             let hashes = AncestorHashes::new(
                 &selector,
                 quirks_mode,
-                BloomHashOptions::default(),
+                self.bloom_hash_options,
             );
 
             let rule = Rule::new(
@@ -4194,7 +4206,12 @@ impl CascadeData {
                             containing_rule_state
                                 .ancestor_selector_lists
                                 .push(implicit_scope_selector.clone());
-                            ScopeBoundsWithHashes::new(quirks_mode, start, end)
+                            ScopeBoundsWithHashes::new(
+                                quirks_mode,
+                                self.bloom_hash_options,
+                                start,
+                                end,
+                            )
                         };
 
                     if let Some(selectors) = replaced.start.as_ref() {
