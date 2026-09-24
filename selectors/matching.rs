@@ -13,7 +13,7 @@ use crate::parser::{
     RelativeSelectorMatchHint,
 };
 use crate::parser::{
-    NonTSPseudoClass, RelativeSelector, Selector, SelectorImpl, SelectorIter, SelectorList,
+    FailCachePrefixIds, NonTSPseudoClass, RelativeSelector, Selector, SelectorImpl, SelectorIter, SelectorList,
 };
 use crate::relative_selector::cache::RelativeSelectorCachedMatch;
 use crate::tree::Element;
@@ -245,7 +245,7 @@ where
     // This is pretty much any(..) but manually inlined because the compiler
     // refuses to do so from querySelector / querySelectorAll.
     for selector in selector_list.slice() {
-        let matches = matches_selector(selector, 0, None, element, context).0;
+        let matches = matches_selector(selector, 0, None, None, element, context).0;
         if matches {
             return true;
         }
@@ -378,13 +378,21 @@ pub fn matches_selector<E>(
     selector: &Selector<E::Impl>,
     offset: usize,
     hashes: Option<&AncestorHashes>,
+    selector_fail_cache_prefix_ids: Option<&FailCachePrefixIds<E::Impl>>,
     element: &E,
     context: &mut MatchingContext<E::Impl>,
 ) -> (bool, BloomQueryStats)
 where
     E: Element,
 {
-    let (result, stats) = matches_selector_kleene(selector, offset, hashes, element, context);
+    let (result, stats) = matches_selector_kleene(
+        selector,
+        offset,
+        hashes,
+        selector_fail_cache_prefix_ids,
+        element,
+        context,
+    );
     if cfg!(debug_assertions) && result == KleeneValue::Unknown {
         debug_assert!(
             context
@@ -403,6 +411,7 @@ pub fn matches_selector_kleene<E>(
     selector: &Selector<E::Impl>,
     offset: usize,
     hashes: Option<&AncestorHashes>,
+    selector_fail_cache_prefix_ids: Option<&FailCachePrefixIds<E::Impl>>,
     element: &E,
     context: &mut MatchingContext<E::Impl>,
 ) -> (KleeneValue, BloomQueryStats)
@@ -427,6 +436,7 @@ where
     let start = Start::now();
     let does_match = matches_complex_selector(
         selector.iter_from(offset),
+        selector_fail_cache_prefix_ids,
         element,
         context,
         if selector.is_rightmost(offset) {
@@ -446,6 +456,25 @@ where
             time_slow_accepting: is_slow_accept.then_some(slow_match_duration),
         }
     )
+}
+
+#[inline]
+fn finish_with_fail_cache<E>(
+    element: Option<&E>,
+    prefix: Option<(&FailCachePrefixIds<E::Impl>, usize)>,
+    result: SelectorMatchingResult,
+) -> SelectorMatchingResult
+where
+    E: Element,
+{
+    if let (Some(element), Some((prefixes, index))) = (element, prefix) {
+        if !matches!(result, SelectorMatchingResult::Matched | SelectorMatchingResult::Unknown) {
+            if let Some(prefix_id) = prefixes.get_or_intern(index) {
+                element.insert_into_fail_cache(prefix_id);
+            }
+        }
+    }
+    result
 }
 
 /// Whether a compound selector matched, and whether it was the rightmost
