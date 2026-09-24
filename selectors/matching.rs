@@ -579,6 +579,7 @@ where
 #[cfg_attr(not(feature = "debug_element"), inline(always))]
 fn matches_complex_selector<E>(
     mut iter: SelectorIter<E::Impl>,
+    fail_cache_prefix_ids: Option<&FailCachePrefixIds<E::Impl>>,
     element: &E,
     context: &mut MatchingContext<E::Impl>,
     rightmost: SubjectOrPseudoElement,
@@ -586,6 +587,7 @@ fn matches_complex_selector<E>(
 where
     E: Element,
 {
+    let mut fail_cache_prefix_index = None;
     // If this is the special pseudo-element mode, consume the ::pseudo-element
     // before proceeding, since the caller has already handled that part.
     if context.matching_mode() == MatchingMode::ForStatelessPseudoElement && !context.is_nested() {
@@ -616,10 +618,13 @@ where
         // Advance to the non-pseudo-element part of the selector.
         let next_sequence = iter.next_sequence().unwrap();
         debug_assert_eq!(next_sequence, Combinator::PseudoElement);
+        fail_cache_prefix_index = Some(0);
     }
 
     matches_complex_selector_internal(
         iter,
+        fail_cache_prefix_ids,
+        fail_cache_prefix_index,
         element,
         context,
         rightmost,
@@ -636,7 +641,7 @@ fn matches_complex_selector_list<E: Element>(
     rightmost: SubjectOrPseudoElement,
 ) -> KleeneValue {
     KleeneValue::any(list.iter(), |selector| {
-        matches_complex_selector(selector.iter(), element, context, rightmost)
+        matches_complex_selector(selector.iter(), None, element, context, rightmost)
     })
 }
 
@@ -663,6 +668,7 @@ fn matches_relative_selector<E: Element>(
             }
             let mut matched = matches_complex_selector(
                 relative_selector.selector.iter(),
+                None,
                 &el,
                 context,
                 rightmost,
@@ -715,8 +721,14 @@ fn matches_relative_selector<E: Element>(
                     rightmost,
                 )
             } else {
-                matches_complex_selector(relative_selector.selector.iter(), &el, context, rightmost)
-                    .to_bool(true)
+                matches_complex_selector(
+                    relative_selector.selector.iter(),
+                    None,
+                    &el,
+                    context,
+                    rightmost,
+                )
+                .to_bool(true)
             };
             if matched {
                 return true;
@@ -853,7 +865,7 @@ fn matches_relative_selector_subtree<E: Element>(
                 ElementSelectorFlags::RELATIVE_SELECTOR_SEARCH_DIRECTION_ANCESTOR,
             );
         }
-        if matches_complex_selector(selector.iter(), &el, context, rightmost).to_bool(true) {
+        if matches_complex_selector(selector.iter(), None, &el, context, rightmost).to_bool(true) {
             return true;
         }
 
@@ -984,6 +996,8 @@ where
 
 fn matches_complex_selector_internal<E>(
     mut selector_iter: SelectorIter<E::Impl>,
+    fail_cache_prefix_ids: Option<&FailCachePrefixIds<E::Impl>>,
+    fail_cache_prefix_index: Option<usize>,
     element: &E,
     context: &mut MatchingContext<E::Impl>,
     mut rightmost: SubjectOrPseudoElement,
