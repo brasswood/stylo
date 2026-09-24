@@ -1132,12 +1132,24 @@ where
                     "Compound didn't match?"
                 );
                 if !matches_compound_selector.to_bool(false) {
-                    return SelectorMatchingResult::Unknown;
+                    return finish_with_fail_cache(
+                        fail_cache_target,
+                        active_fail_cache_prefix,
+                        SelectorMatchingResult::Unknown,
+                    );
                 }
-                return result;
+                return finish_with_fail_cache(
+                    fail_cache_target,
+                    active_fail_cache_prefix,
+                    result,
+                );
             },
             SelectorMatchingResult::Unknown | SelectorMatchingResult::NotMatchedGlobally => {
-                return result
+                return finish_with_fail_cache(
+                    fail_cache_target,
+                    active_fail_cache_prefix,
+                    result,
+                )
             },
             _ => {},
         }
@@ -1152,7 +1164,11 @@ where
             },
             Combinator::Child => {
                 // Upgrade the failure status to NotMatchedAndRestartFromClosestDescendant.
-                return SelectorMatchingResult::NotMatchedAndRestartFromClosestDescendant;
+                return finish_with_fail_cache(
+                    fail_cache_target,
+                    active_fail_cache_prefix,
+                    SelectorMatchingResult::NotMatchedAndRestartFromClosestDescendant,
+                );
             },
             Combinator::LaterSibling => {
                 // If the failure status is NotMatchedAndRestartFromClosestDescendant and combinator is
@@ -1162,7 +1178,11 @@ where
                     result,
                     SelectorMatchingResult::NotMatchedAndRestartFromClosestDescendant
                 ) {
-                    return result;
+                    return finish_with_fail_cache(
+                        fail_cache_target,
+                        active_fail_cache_prefix,
+                        result,
+                    );
                 }
             },
             Combinator::NextSibling
@@ -1173,14 +1193,22 @@ where
                 // `candidate_not_found`, but it doesn't matter in practice since they don't have
                 // sibling / descendant combinators to the right of them. This hopefully saves one
                 // branch.
-                return result;
+                return finish_with_fail_cache(
+                    fail_cache_target,
+                    active_fail_cache_prefix,
+                    result,
+                );
             },
         }
 
         if featureless {
             // A featureless element didn't match the selector, we can stop matching now rather
             // than looking at following elements for our combinator.
-            return candidate_not_found;
+            return finish_with_fail_cache(
+                fail_cache_target,
+                active_fail_cache_prefix,
+                candidate_not_found,
+            );
         }
     }
 }
@@ -1261,7 +1289,7 @@ where
     };
     context.nest(|context| {
         context.with_featureless(false, |context| {
-            matches_complex_selector(selector.iter(), element, context, rightmost)
+            matches_complex_selector(selector.iter(), None, element, context, rightmost)
         })
     })
 }
@@ -1279,7 +1307,9 @@ where
     if element.is_html_slot_element() {
         return KleeneValue::False;
     }
-    context.nest(|context| matches_complex_selector(selector.iter(), element, context, rightmost))
+    context.nest(|context| {
+        matches_complex_selector(selector.iter(), None, element, context, rightmost)
+    })
 }
 
 fn matches_rare_attribute_selector<E>(
