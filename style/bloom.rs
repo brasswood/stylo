@@ -12,6 +12,9 @@ use crate::LocalName;
 use atomic_refcell::{AtomicRefCell, AtomicRefMut};
 use dom::ElementState;
 use selectors::bloom::BloomFilter;
+use selectors::parser::{
+    BloomHashOptions, COMMON_PSEUDO_CLASS_HASH, FIRST_EDGE_CHILD_HASH, LAST_EDGE_CHILD_HASH,
+};
 use smallvec::SmallVec;
 
 thread_local! {
@@ -70,6 +73,7 @@ pub struct StyleBloom<E: BloomFilterElement> {
     /// StyleBloom to live in ThreadLocalStyleContext, which is dropped from the
     /// parent thread.
     filter: AtomicRefMut<'static, BloomFilter>,
+    hash_options: BloomHashOptions,
 
     /// The stack of elements that this bloom filter contains, along with the
     /// number of hashes pushed for each element.
@@ -117,7 +121,7 @@ pub fn is_attr_name_excluded_from_filter(name: &LocalName) -> bool {
 }
 
 /// Gather all relevant hash for fast-reject filters from an element.
-pub fn each_relevant_element_hash<E, F>(element: E, mut f: F)
+pub fn each_relevant_element_hash<E, F>(element: E, options: BloomHashOptions, mut f: F)
 where
     E: BloomFilterElement,
     F: FnMut(u32),
@@ -137,8 +141,18 @@ where
         }
     });
 
-    if element.state().intersects(ElementState::RARE_PSEUDO_CLASS_STATES.complement()) {
-        f(1);
+    if options.common_pseudo_class
+        && element.state().intersects(ElementState::RARE_PSEUDO_CLASS_STATES.complement())
+    {
+        f(COMMON_PSEUDO_CLASS_HASH);
+    }
+    if options.edge_children {
+        if element.prev_sibling_element().is_none() {
+            f(FIRST_EDGE_CHILD_HASH);
+        }
+        if element.next_sibling_element().is_none() {
+            f(LAST_EDGE_CHILD_HASH);
+        }
     }
 }
 
@@ -159,7 +173,7 @@ impl<E: BloomFilterElement> StyleBloom<E> {
     //
     // See https://github.com/servo/servo/pull/18420#issuecomment-328769322
     #[inline(never)]
-    pub fn new() -> Self {
+    pub fn new(hash_options: BloomHashOptions) -> Self {
         let filter = BLOOM_KEY.with(|b| b.borrow_mut());
         debug_assert!(
             filter.is_zeroed(),
@@ -167,6 +181,7 @@ impl<E: BloomFilterElement> StyleBloom<E> {
         );
         StyleBloom {
             filter,
+            hash_options,
             elements: Default::default(),
             pushed_hashes: Default::default(),
         }
@@ -192,7 +207,7 @@ impl<E: BloomFilterElement> StyleBloom<E> {
     /// `rebuild`.
     fn push_internal(&mut self, element: E) {
         let mut count = 0;
-        each_relevant_element_hash(element, |hash| {
+        each_relevant_element_hash(element, self.hash_options, |hash| {
             count += 1;
             self.filter.insert_hash(hash);
             self.pushed_hashes.push(hash);
@@ -212,7 +227,9 @@ impl<E: BloomFilterElement> StyleBloom<E> {
         // Verify that the pushed hashes match the ones we'd get from the element.
         let mut expected_hashes = vec![];
         if cfg!(debug_assertions) {
-            each_relevant_element_hash(popped_element, |hash| expected_hashes.push(hash));
+            each_relevant_element_hash(popped_element, self.hash_options, |hash| {
+                expected_hashes.push(hash)
+            });
         }
 
         for _ in 0..num_hashes {

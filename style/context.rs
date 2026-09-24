@@ -621,7 +621,7 @@ impl<E: StyleSharingElement> ThreadLocalStyleContext<E> {
         ThreadLocalStyleContext {
             sharing_cache: StyleSharingCache::new(),
             rule_cache: RuleCache::new(),
-            bloom_filter: StyleBloom::new(),
+            bloom_filter: StyleBloom::new(Default::default()),
             tasks: SequentialTaskList(Vec::new()),
             statistics: PerThreadTraversalStatistics::default(),
             stack_limit_checker: StackLimitChecker::new(
