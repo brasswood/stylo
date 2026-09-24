@@ -1569,6 +1569,31 @@ impl<Impl: SelectorImpl> Clone for FailCachePrefixIds<Impl> {
     }
 }
 
+impl<Impl: SelectorImpl> FailCachePrefixIds<Impl> {
+    /// Creates ids for the given prefix lengths, optionally interning eagerly.
+    pub fn new(
+        selector: Selector<Impl>,
+        prefix_lengths: Box<[u16]>,
+        generator: StdArc<dyn FailCachePrefixIdGenerator<Impl>>,
+        eager: bool,
+    ) -> Self {
+        let result = Self {
+            selector,
+            entries: IntoIterator::into_iter(prefix_lengths).map(|prefix_length| FailCachePrefixId {
+                prefix_length,
+                id: AtomicU16::new(0),
+            }).collect(),
+            generator,
+        };
+        if eager {
+            for index in 0..result.entries.len() {
+                result.get_or_intern(index);
+            }
+        }
+        result
+    }
+}
+
 impl<'a, Impl: 'a + SelectorImpl> SelectorIter<'a, Impl> {
     /// Prepares this iterator to point to the next sequence to the left,
     /// returning the combinator if the sequence was found.
