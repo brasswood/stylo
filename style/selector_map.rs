@@ -551,6 +551,45 @@ impl SelectorMap<Rule> {
     }
 }
 
+impl SelectorMap<UniversalTailRule> {
+    /// Finds rules whose stripped selector matches this element, so that their
+    /// original selectors can be accepted for its descendants.
+    pub fn get_matching_universal_tails<'selectormap, E>(
+        &'selectormap self,
+        element: E,
+        matching_selectors: &mut SmallVec<[&'selectormap Selector<SelectorImpl>; 16]>,
+        matching_context: &mut MatchingContext<E::Impl>,
+    ) -> Statistics
+    where
+        E: SelectorMapElement + StyleSharingElement,
+    {
+        let start = Start::now();
+        let mut matching_time = tsc_timer::Duration::from_cycles(0);
+        let mut hits = 0;
+        let mut stats = Statistics::default();
+        self.lookup(element, matching_context.quirks_mode(), None, |entry| {
+            hits += 1;
+            let match_start = Start::now();
+            let (matched, match_stats) = matches_selector_at_offset_as_subject(
+                &entry.rule.selector,
+                entry.activation_offset,
+                &element,
+                matching_context,
+            );
+            matching_time += match_start.elapsed();
+            stats += match_stats;
+            if matched && !matching_selectors.contains(&&entry.rule.selector) {
+                matching_selectors.push(&entry.rule.selector);
+            }
+            true
+        });
+        stats.times._time_inside_buckets = matching_time;
+        stats.times.querying_selector_map = start.elapsed() - matching_time;
+        stats.counts.selector_map_hits = hits;
+        stats
+    }
+}
+
 impl<T: SelectorMapEntry> SelectorMap<T> {
     /// Inserts an entry into the correct bucket(s).
     pub fn insert(&mut self, entry: T, quirks_mode: QuirksMode) -> Result<(), AllocErr> {
