@@ -31,6 +31,33 @@ impl FailCache {
         false
     }
 
+    #[inline]
+    pub fn insert_unchecked(&mut self, id: u16) {
+        debug_assert_ne!(id, 0, "0 is reserved as the vacant fail-cache entry");
+        debug_assert!(
+            !self.contains(id),
+            "callers are expected to check whether the entry is already cached",
+        );
+        let index = self.next_insert_index as usize;
+        self.entries[index] = id;
+        self.next_insert_index = (index as u8 + 1) % self.entries.len() as u8;
+        #[cfg(feature = "fail_cache_fill_stats")]
+        if self.next_insert_index == 0 {
+            self.filled_once = true;
+        }
+    }
+
+    #[inline]
+    pub fn filled_once(&self) -> bool {
+        #[cfg(feature = "fail_cache_fill_stats")]
+        {
+            self.filled_once
+        }
+        #[cfg(not(feature = "fail_cache_fill_stats"))]
+        {
+            false
+        }
+    }
 }
 
 /// What kind of selector matching mode we should use.
@@ -228,6 +255,7 @@ where
     /// Caches to speed up expensive selector matches.
     pub selector_caches: &'a mut SelectorCaches,
 
+    use_fail_caches: bool,
     classes_and_ids_case_sensitivity: CaseSensitivity,
     _impl: ::std::marker::PhantomData<Impl>,
 }
@@ -287,6 +315,7 @@ where
             extra_data: Default::default(),
             current_relative_selector_anchor: None,
             selector_caches,
+            use_fail_caches: false,
             _impl: ::std::marker::PhantomData,
         }
     }
@@ -332,6 +361,16 @@ where
     #[inline]
     pub fn needs_selector_flags(&self) -> bool {
         self.needs_selector_flags == NeedsSelectorFlags::Yes
+    }
+
+    #[inline]
+    pub fn set_use_fail_caches(&mut self, value: bool) {
+        self.use_fail_caches = value;
+    }
+
+    #[inline]
+    pub fn use_fail_caches(&self) -> bool {
+        self.use_fail_caches
     }
 
     /// Whether or not we're matching to invalidate.
