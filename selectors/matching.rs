@@ -515,7 +515,9 @@ where
     if let (Some(element), Some((prefixes, index))) = (element, prefix) {
         if is_cacheable_failure(result) {
             if let Some(prefix_id) = prefixes.get_or_intern(index) {
-                element.insert_into_fail_cache(prefix_id);
+                if !element.fail_cache_contains(prefix_id) {
+                    element.insert_into_fail_cache(prefix_id);
+                }
             }
         }
     }
