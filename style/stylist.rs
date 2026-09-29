@@ -3306,12 +3306,11 @@ fn fail_cache_prefix_components<T>(components: &[T], prefix_length: usize) -> &[
 }
 
 fn cacheable_prefix_combinators(
-    mut combinators: impl Iterator<Item = Combinator> + Clone,
+    mut combinators: impl Iterator<Item = Combinator>,
 ) -> bool {
-    combinators.clone().next().is_some()
-        && combinators.all(|combinator| {
-            matches!(combinator, Combinator::Child | Combinator::Descendant)
-        })
+    combinators.all(|combinator| {
+        matches!(combinator, Combinator::Child | Combinator::Descendant)
+    })
 }
 
 impl FailCachePrefix {
@@ -5115,6 +5114,7 @@ mod fail_cache_tests {
             fail_cache_prefix_components(&match_order, 2),
             ["ancestor", "class"],
         );
+        assert!(cacheable_prefix_combinators(std::iter::empty::<Combinator>()));
         assert!(cacheable_prefix_combinators(
             [Combinator::Child, Combinator::Descendant].into_iter(),
         ));
