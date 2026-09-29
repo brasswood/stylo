@@ -1602,7 +1602,7 @@ impl<Impl: SelectorImpl> FailCachePrefixIds<Impl> {
         (next < self.entries.len()).then_some(next)
     }
 
-    /// Assigns an id only when a failed match is about to populate the cache.
+    /// Assigns an id on first use, so the prefix can be checked before matching.
     #[inline]
     pub fn get_or_intern(&self, index: usize) -> Option<u16> {
         if let Some(id) = self.get(index) {
