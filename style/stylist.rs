@@ -84,6 +84,7 @@ use smallvec::SmallVec;
 use std::cmp::Ordering;
 use std::hash::{Hash, Hasher};
 use std::sync::{Arc as StdArc, Mutex};
+use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
 use std::{mem, ops};
 
 /// The type of the stylesheets that the stylist contains.
@@ -281,11 +282,15 @@ lazy_static! {
         Mutex::new(UserAgentCascadeDataCache::new());
 }
 
-/// Fine-grained timings for fail-cache metadata construction.
+/// Fine-grained timings for fail-cache setup and matching.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct FailCacheBuildTimings {
     /// Time spent constructing per-selector fail-cache entry lists.
     pub entry_build: tsc_timer::Duration,
+    /// Time spent hashing and interning prefixes during selector matching.
+    pub prefix_interning: tsc_timer::Duration,
+    /// Number of per-selector prefix interning lookups during matching.
+    pub prefix_interning_calls: u64,
 }
 
 impl CascadeDataCacheEntry for UserAgentCascadeData {
@@ -1150,11 +1155,18 @@ impl Stylist {
         /* TODO: shadow DOM. doc_author_rules_apply && */ f(&self.cascade_data.author)
     }
 
-    /// Returns accumulated timings for fail-cache metadata construction.
+    /// Returns accumulated timings for fail-cache setup and prefix interning.
     pub fn fail_cache_build_timings(&self) -> FailCacheBuildTimings {
         FailCacheBuildTimings {
             entry_build: self.cascade_data.author.fail_cache_entry_build_time +
                 self.cascade_data.user.fail_cache_entry_build_time,
+            prefix_interning: tsc_timer::Duration::from_cycles(
+                self.cascade_data.author.fail_cache_prefix_ids.interning_cycles.load(AtomicOrdering::Relaxed)
+                    + self.cascade_data.user.fail_cache_prefix_ids.interning_cycles.load(AtomicOrdering::Relaxed),
+            ),
+            prefix_interning_calls:
+                self.cascade_data.author.fail_cache_prefix_ids.interning_calls.load(AtomicOrdering::Relaxed)
+                    + self.cascade_data.user.fail_cache_prefix_ids.interning_calls.load(AtomicOrdering::Relaxed),
         }
     }
 
@@ -3271,6 +3283,8 @@ struct FailCachePrefix(
 #[derive(Debug, Default)]
 struct FailCachePrefixInterner {
     entries: Mutex<FailCachePrefixInternerEntries>,
+    interning_cycles: AtomicU64,
+    interning_calls: AtomicU64,
 }
 
 #[derive(Debug)]
@@ -3342,21 +3356,27 @@ impl Hash for FailCachePrefix {
 
 impl FailCachePrefixIdGenerator<SelectorImpl> for FailCachePrefixInterner {
     fn get_or_intern(&self, selector: &Selector<SelectorImpl>, prefix_length: usize) -> Option<u16> {
-        let mut entries = self.entries.lock().unwrap();
-        let prefix = FailCachePrefix(selector.clone(), prefix_length);
-        if let Some(id) = entries.ids.get(&prefix) {
-            return Some(*id);
-        }
-        if entries.next_id == 0 {
-            return None;
-        }
-        let id = entries.next_id;
-        entries.next_id = entries.next_id.wrapping_add(1);
-        if entries.next_id == 0 {
-            log::warn!("Ran out of fail-cache prefix ids; later prefixes will not be cached");
-        }
-        entries.ids.insert(prefix, id);
-        Some(id)
+        let start = tsc_timer::Start::now();
+        let result = {
+            let mut entries = self.entries.lock().unwrap();
+            let prefix = FailCachePrefix(selector.clone(), prefix_length);
+            if let Some(id) = entries.ids.get(&prefix) {
+                Some(*id)
+            } else if entries.next_id == 0 {
+                None
+            } else {
+                let id = entries.next_id;
+                entries.next_id = entries.next_id.wrapping_add(1);
+                if entries.next_id == 0 {
+                    log::warn!("Ran out of fail-cache prefix ids; later prefixes will not be cached");
+                }
+                entries.ids.insert(prefix, id);
+                Some(id)
+            }
+        };
+        self.interning_cycles.fetch_add(start.elapsed().cycles(), AtomicOrdering::Relaxed);
+        self.interning_calls.fetch_add(1, AtomicOrdering::Relaxed);
+        result
     }
 }
 
