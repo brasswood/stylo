@@ -256,6 +256,7 @@ where
     pub selector_caches: &'a mut SelectorCaches,
 
     use_fail_caches: bool,
+    fail_cache_hit: bool,
     classes_and_ids_case_sensitivity: CaseSensitivity,
     _impl: ::std::marker::PhantomData<Impl>,
 }
@@ -316,6 +317,7 @@ where
             current_relative_selector_anchor: None,
             selector_caches,
             use_fail_caches: false,
+            fail_cache_hit: false,
             _impl: ::std::marker::PhantomData,
         }
     }
@@ -371,6 +373,16 @@ where
     #[inline]
     pub fn use_fail_caches(&self) -> bool {
         self.use_fail_caches
+    }
+
+    #[inline]
+    pub fn note_fail_cache_hit(&mut self) {
+        self.fail_cache_hit = true;
+    }
+
+    #[inline]
+    pub fn take_fail_cache_hit(&mut self) -> bool {
+        ::std::mem::replace(&mut self.fail_cache_hit, false)
     }
 
     /// Whether or not we're matching to invalidate.

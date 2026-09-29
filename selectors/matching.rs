@@ -107,9 +107,11 @@ impl Default for SelectorStats {
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ScopeProximityStats {
     pub fast_rejects: usize,
+    pub fail_cache_rejects: usize,
     pub slow_rejects: usize,
     pub slow_accepts: usize,
     pub time_fast_rejecting: Duration, // Non-optional, since `fast_rejects` will tell us whether there were any.
+    pub time_fail_cache_rejecting: Duration,
     pub time_slow_rejecting: Duration,
     pub time_slow_accepting: Duration,
 }
@@ -117,9 +119,11 @@ pub struct ScopeProximityStats {
 impl AddAssign<BloomQueryStats> for ScopeProximityStats {
     fn add_assign(&mut self, rhs: BloomQueryStats) {
         self.fast_rejects += usize::from(rhs.time_fast_rejecting.is_some());
+        self.fail_cache_rejects += usize::from(rhs.time_fail_cache_rejecting.is_some());
         self.slow_rejects += usize::from(rhs.time_slow_rejecting.is_some());
         self.slow_accepts += usize::from(rhs.time_slow_accepting.is_some());
         self.time_fast_rejecting += rhs.time_fast_rejecting.unwrap_or_default();
+        self.time_fail_cache_rejecting += rhs.time_fail_cache_rejecting.unwrap_or_default();
         self.time_slow_rejecting += rhs.time_slow_rejecting.unwrap_or_default();
         self.time_slow_accepting += rhs.time_slow_accepting.unwrap_or_default();
     }
@@ -129,6 +133,7 @@ impl AddAssign<BloomQueryStats> for ScopeProximityStats {
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BloomQueryStats {
     pub time_fast_rejecting: Option<Duration>,
+    pub time_fail_cache_rejecting: Option<Duration>,
     pub time_slow_rejecting: Option<Duration>,
     pub time_slow_accepting: Option<Duration>,
 }
@@ -151,7 +156,9 @@ pub struct CountingStats {
     pub selector_map_hits: usize,
     /// Number of fast rejects from the bloom filter
     pub fast_rejects: usize,
-    /// Number of slow rejects from the bloom filter
+    /// Number of rejects from a fail cache
+    pub fail_cache_rejects: usize,
+    /// Number of rejects after matching without a fail-cache hit
     pub slow_rejects: usize,
     /// Number of slow accepts
     pub slow_accepts: usize,
@@ -168,10 +175,13 @@ pub struct TimingStats {
     pub querying_selector_map: Duration,
     /// Time spent fast rejecting a selector
     pub fast_rejecting: Duration,
+    /// Time spent rejecting a selector using a fail cache
+    pub fail_cache_rejecting: Duration,
     /// Time spent slow rejecting a selector after all of the following happen:
     /// - Style sharing fails
     /// - Selector appears in the selector map
     /// - Bloom filter does not fast reject
+    /// - Fail cache does not reject
     pub slow_rejecting: Duration,
     /// Time spent slow accepting
     pub slow_accepting: Duration,
@@ -187,9 +197,11 @@ pub struct TimingStats {
 impl AddAssign<BloomQueryStats> for Statistics {
     fn add_assign(&mut self, rhs: BloomQueryStats) {
         self.counts.fast_rejects += usize::from(rhs.time_fast_rejecting.is_some());
+        self.counts.fail_cache_rejects += usize::from(rhs.time_fail_cache_rejecting.is_some());
         self.counts.slow_rejects += usize::from(rhs.time_slow_rejecting.is_some());
         self.counts.slow_accepts += usize::from(rhs.time_slow_accepting.is_some());
         self.times.fast_rejecting += rhs.time_fast_rejecting.unwrap_or_default();
+        self.times.fail_cache_rejecting += rhs.time_fail_cache_rejecting.unwrap_or_default();
         self.times.slow_rejecting += rhs.time_slow_rejecting.unwrap_or_default();
         self.times.slow_accepting += rhs.time_slow_accepting.unwrap_or_default();
     }
@@ -198,9 +210,11 @@ impl AddAssign<BloomQueryStats> for Statistics {
 impl AddAssign<ScopeProximityStats> for Statistics {
     fn add_assign(&mut self, rhs: ScopeProximityStats) {
         self.counts.fast_rejects += rhs.fast_rejects;
+        self.counts.fail_cache_rejects += rhs.fail_cache_rejects;
         self.counts.slow_rejects += rhs.slow_rejects;
         self.counts.slow_accepts += rhs.slow_accepts;
         self.times.fast_rejecting += rhs.time_fast_rejecting;
+        self.times.fail_cache_rejecting += rhs.time_fail_cache_rejecting;
         self.times.slow_rejecting += rhs.time_slow_rejecting;
         self.times.slow_accepting += rhs.time_slow_accepting;
     }
@@ -433,6 +447,7 @@ where
         does_match.to_bool(true),
         BloomQueryStats {
             time_fast_rejecting: None,
+            time_fail_cache_rejecting: None,
             time_slow_rejecting: (!matched).then_some(duration),
             time_slow_accepting: matched.then_some(duration),
         },
@@ -453,6 +468,7 @@ pub fn matches_selector_kleene<E>(
 where
     E: Element,
 {
+    context.take_fail_cache_hit();
     // Use the bloom filter to fast-reject.
     if let Some(hashes) = hashes {
         if let Some(filter) = context.bloom_filter {
@@ -462,6 +478,7 @@ where
             if !may_match {
                 return (KleeneValue::False, BloomQueryStats {
                     time_fast_rejecting: Some(fast_reject_duration),
+                    time_fail_cache_rejecting: None,
                     time_slow_rejecting: None,
                     time_slow_accepting: None,
                 });
@@ -481,12 +498,14 @@ where
         },
     );
     let slow_match_duration = start.elapsed();
+    let fail_cache_reject = context.take_fail_cache_hit() && does_match == KleeneValue::False;
     let is_slow_accept = does_match == KleeneValue::True;
-    let is_slow_reject = !is_slow_accept;
+    let is_slow_reject = does_match == KleeneValue::False && !fail_cache_reject;
     (
         does_match,
         BloomQueryStats {
             time_fast_rejecting: None,
+            time_fail_cache_rejecting: fail_cache_reject.then_some(slow_match_duration),
             time_slow_rejecting: is_slow_reject.then_some(slow_match_duration),
             time_slow_accepting: is_slow_accept.then_some(slow_match_duration),
         }
@@ -1058,9 +1077,10 @@ where
         .then(|| fail_cache_prefix_ids.zip(fail_cache_prefix_index))
         .flatten();
     let active_fail_cache_prefix_id = active_fail_cache_prefix
-        .and_then(|(prefixes, index)| prefixes.get(index));
+        .and_then(|(prefixes, index)| prefixes.get_or_intern(index));
     if let Some(prefix_id) = active_fail_cache_prefix_id {
         if element.fail_cache_contains(prefix_id) {
+            context.note_fail_cache_hit();
             return fail_cache_hit_result();
         }
     }
