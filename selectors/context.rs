@@ -570,3 +570,23 @@ where
         self.current_relative_selector_anchor
     }
 }
+
+#[cfg(test)]
+mod fail_cache_tests {
+    use super::FailCache;
+
+    #[test]
+    fn fail_cache_grows_without_evicting_prefixes() {
+        let mut cache = FailCache::default();
+        for id in 1..=8 {
+            cache.insert_unchecked(id);
+        }
+        assert_eq!((cache.insertions(), cache.size()), (8, 8));
+        assert!(!cache.filled_once());
+
+        cache.insert_unchecked(9);
+        assert_eq!((cache.insertions(), cache.size()), (9, 9));
+        assert!(cache.filled_once());
+        assert!((1..=9).all(|id| cache.contains(id)));
+    }
+}
