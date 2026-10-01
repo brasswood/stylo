@@ -1172,6 +1172,7 @@ impl Stylist {
         }
     }
 
+    /// Returns the instrumentation counters for each unique fail-cache prefix.
     pub fn fail_cache_prefix_instrumentation(&self) -> Vec<FailCachePrefixInstrumentation> {
         let mut counters = FxHashMap::default();
         self.cascade_data.author.fail_cache_prefix_ids.add_instrumentation_to(&mut counters);
@@ -3304,12 +3305,18 @@ struct FailCachePrefixInterner {
     interning_calls: AtomicU64,
 }
 
+/// Instrumentation counters collected for one unique selector prefix.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct FailCachePrefixInstrumentation {
+    /// Report-local index identifying this prefix.
     pub prefix_index: usize,
+    /// Number of non-sibling selector occurrences that contain this prefix.
     pub prefix_occurrences: u64,
+    /// Number of times this prefix was hashed for an interner map lookup.
     pub hashings: u64,
+    /// Number of times this prefix was newly inserted into the interner map.
     pub internments: u64,
+    /// Number of times this prefix was inserted into an element's fail cache.
     pub insertions: u64,
 }
 
