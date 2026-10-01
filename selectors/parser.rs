@@ -1542,6 +1542,8 @@ where
 {
     /// Returns the id for a prefix with `prefix_length` match-order components.
     fn get_or_intern(&self, selector: &Selector<Impl>, prefix_length: usize) -> Option<u16>;
+
+    fn record_insertion(&self, _selector: &Selector<Impl>, _prefix_length: usize) {}
 }
 
 #[derive(Debug)]
@@ -1614,6 +1616,12 @@ impl<Impl: SelectorImpl> FailCachePrefixIds<Impl> {
             Ok(_) => Some(id),
             Err(existing) => Some(existing),
         }
+    }
+
+    pub fn record_insertion(&self, index: usize) {
+        let entry = &self.entries[index];
+        self.generator
+            .record_insertion(&self.selector, entry.prefix_length.into());
     }
 }
 

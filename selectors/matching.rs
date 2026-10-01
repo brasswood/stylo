@@ -536,6 +536,7 @@ where
             if let Some(prefix_id) = prefixes.get_or_intern(index) {
                 if !element.fail_cache_contains(prefix_id) {
                     element.insert_into_fail_cache(prefix_id);
+                    prefixes.record_insertion(index);
                 }
             }
         }
