@@ -71,7 +71,8 @@ use rustc_hash::FxHashMap;
 use selectors::attr::{CaseSensitivity, NamespaceConstraint};
 use selectors::bloom::BloomFilter;
 use selectors::matching::{
-    MatchingContext, MatchingMode, NeedsSelectorFlags, ScopeProximityStats, SelectorCaches, matches_selector, selector_may_match
+    fail_cache_instrumentation_enabled, MatchingContext, MatchingMode, NeedsSelectorFlags,
+    ScopeProximityStats, SelectorCaches, matches_selector, selector_may_match,
 };
 use selectors::matching::{MatchingForInvalidation, VisitedHandlingMode};
 use selectors::parser::{
@@ -3375,29 +3376,55 @@ impl Hash for FailCachePrefix {
     }
 }
 
+impl FailCachePrefixInterner {
+    fn note_prefix_occurrence(&self, prefix: FailCachePrefix) {
+        if !fail_cache_instrumentation_enabled() {
+            return;
+        }
+        let mut entries = self.entries.lock().unwrap();
+        entries.instrumentation.entry(prefix).or_default().prefix_occurrences += 1;
+    }
+
+}
+
 impl FailCachePrefixIdGenerator<SelectorImpl> for FailCachePrefixInterner {
     fn get_or_intern(&self, selector: &Selector<SelectorImpl>, prefix_length: usize) -> Option<u16> {
         let start = tsc_timer::Start::now();
         let result = {
             let mut entries = self.entries.lock().unwrap();
             let prefix = FailCachePrefix(selector.clone(), prefix_length);
-            if let Some(id) = entries.ids.get(&prefix) {
-                Some(*id)
+            let (result, interned) = if let Some(id) = entries.ids.get(&prefix).copied() {
+                (Some(id), false)
             } else if entries.next_id == 0 {
-                None
+                (None, false)
             } else {
                 let id = entries.next_id;
                 entries.next_id = entries.next_id.wrapping_add(1);
                 if entries.next_id == 0 {
                     log::warn!("Ran out of fail-cache prefix ids; later prefixes will not be cached");
                 }
-                entries.ids.insert(prefix, id);
-                Some(id)
+                entries.ids.insert(prefix.clone(), id);
+                (Some(id), true)
+            };
+            if fail_cache_instrumentation_enabled() {
+                let counters = entries.instrumentation.entry(prefix).or_default();
+                counters.hashings += 1;
+                counters.internments += u64::from(interned);
             }
+            result
         };
         self.interning_cycles.fetch_add(start.elapsed().cycles(), AtomicOrdering::Relaxed);
         self.interning_calls.fetch_add(1, AtomicOrdering::Relaxed);
         result
+    }
+
+    fn record_insertion(&self, selector: &Selector<SelectorImpl>, prefix_length: usize) {
+        if !fail_cache_instrumentation_enabled() {
+            return;
+        }
+        let prefix = FailCachePrefix(selector.clone(), prefix_length);
+        let mut entries = self.entries.lock().unwrap();
+        entries.instrumentation.entry(prefix).or_default().insertions += 1;
     }
 }
 
@@ -3872,6 +3899,9 @@ impl CascadeData {
                 .filter_map(Component::as_combinator)) {
                 break;
             }
+            self.fail_cache_prefix_ids.note_prefix_occurrence(FailCachePrefix(
+                selector.clone(), prefix_length,
+            ));
             prefix_lengths.push(prefix_length.try_into().unwrap());
             offset = next_offset;
         }
