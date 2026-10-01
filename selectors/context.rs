@@ -9,21 +9,29 @@ use crate::parser::{Selector, SelectorImpl};
 use crate::relative_selector::cache::RelativeSelectorCache;
 use crate::relative_selector::filter::RelativeSelectorFilterMap;
 use crate::tree::{Element, OpaqueElement};
+use smallvec::SmallVec;
+use std::sync::atomic::{AtomicBool, Ordering};
 
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+static FAIL_CACHE_INSTRUMENTATION_ENABLED: AtomicBool = AtomicBool::new(false);
+
+pub fn set_fail_cache_instrumentation_enabled(enabled: bool) {
+    FAIL_CACHE_INSTRUMENTATION_ENABLED.store(enabled, Ordering::Relaxed);
+}
+
+pub fn fail_cache_instrumentation_enabled() -> bool {
+    FAIL_CACHE_INSTRUMENTATION_ENABLED.load(Ordering::Relaxed)
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct FailCache {
-    entries: [u16; 8],
-    next_insert_index: u8,
-    #[cfg(feature = "fail_cache_fill_stats")]
-    filled_once: bool,
+    entries: SmallVec<[u16; 8]>,
 }
 
 impl FailCache {
     #[inline]
     pub fn contains(&self, id: u16) -> bool {
         debug_assert_ne!(id, 0, "0 is reserved as the vacant fail-cache entry");
-        // This for-loop vectorizes better than `Slice::contains` for my small fixed-size slice
-        for entry in self.entries {
+        for entry in self.entries.iter().copied() {
             if entry == id {
                 return true;
             }
@@ -38,25 +46,20 @@ impl FailCache {
             !self.contains(id),
             "callers are expected to check whether the entry is already cached",
         );
-        let index = self.next_insert_index as usize;
-        self.entries[index] = id;
-        self.next_insert_index = (index as u8 + 1) % self.entries.len() as u8;
-        #[cfg(feature = "fail_cache_fill_stats")]
-        if self.next_insert_index == 0 {
-            self.filled_once = true;
-        }
+        self.entries.push(id);
     }
 
     #[inline]
     pub fn filled_once(&self) -> bool {
-        #[cfg(feature = "fail_cache_fill_stats")]
-        {
-            self.filled_once
-        }
-        #[cfg(not(feature = "fail_cache_fill_stats"))]
-        {
-            false
-        }
+        self.entries.len() > 8
+    }
+
+    pub fn insertions(&self) -> usize {
+        self.entries.len()
+    }
+
+    pub fn size(&self) -> usize {
+        self.entries.len().max(8)
     }
 }
 
