@@ -62,6 +62,7 @@ use crate::values::specified::position::PositionTryFallbacksTryTactic;
 use crate::values::{computed, AtomIdent};
 use crate::AllocErr;
 use crate::{Atom, LocalName, Namespace, ShrinkIfNeeded, WeakAtom};
+use cssparser::ToCss as _;
 use dom::{DocumentState, ElementState};
 #[cfg(feature = "gecko")]
 use malloc_size_of::MallocUnconditionalShallowSizeOf;
@@ -1169,6 +1170,21 @@ impl Stylist {
                 self.cascade_data.author.fail_cache_prefix_ids.interning_calls.load(AtomicOrdering::Relaxed)
                     + self.cascade_data.user.fail_cache_prefix_ids.interning_calls.load(AtomicOrdering::Relaxed),
         }
+    }
+
+    pub fn fail_cache_prefix_instrumentation(&self) -> Vec<FailCachePrefixInstrumentation> {
+        let mut counters = FxHashMap::default();
+        self.cascade_data.author.fail_cache_prefix_ids.add_instrumentation_to(&mut counters);
+        self.cascade_data.user.fail_cache_prefix_ids.add_instrumentation_to(&mut counters);
+        counters.into_values().enumerate().map(|(prefix_index, counters)| {
+            FailCachePrefixInstrumentation {
+                prefix_index,
+                prefix_occurrences: counters.prefix_occurrences,
+                hashings: counters.hashings,
+                internments: counters.internments,
+                insertions: counters.insertions,
+            }
+        }).collect()
     }
 
     /// Execute callback for all applicable style rule data.
@@ -3385,6 +3401,19 @@ impl FailCachePrefixInterner {
         entries.instrumentation.entry(prefix).or_default().prefix_occurrences += 1;
     }
 
+    fn add_instrumentation_to(
+        &self,
+        target: &mut FxHashMap<FailCachePrefix, FailCachePrefixCounters>,
+    ) {
+        let entries = self.entries.lock().unwrap();
+        for (prefix, counters) in &entries.instrumentation {
+            let total = target.entry(prefix.clone()).or_default();
+            total.prefix_occurrences += counters.prefix_occurrences;
+            total.hashings += counters.hashings;
+            total.internments += counters.internments;
+            total.insertions += counters.insertions;
+        }
+    }
 }
 
 impl FailCachePrefixIdGenerator<SelectorImpl> for FailCachePrefixInterner {
