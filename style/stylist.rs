@@ -3287,15 +3287,37 @@ struct FailCachePrefixInterner {
     interning_calls: AtomicU64,
 }
 
+#[derive(Clone, Copy, Debug, Default)]
+pub struct FailCachePrefixInstrumentation {
+    pub prefix_index: usize,
+    pub prefix_occurrences: u64,
+    pub hashings: u64,
+    pub internments: u64,
+    pub insertions: u64,
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+struct FailCachePrefixCounters {
+    prefix_occurrences: u64,
+    hashings: u64,
+    internments: u64,
+    insertions: u64,
+}
+
 #[derive(Debug)]
 struct FailCachePrefixInternerEntries {
     ids: FxHashMap<FailCachePrefix, u16>,
+    instrumentation: FxHashMap<FailCachePrefix, FailCachePrefixCounters>,
     next_id: u16,
 }
 
 impl Default for FailCachePrefixInternerEntries {
     fn default() -> Self {
-        Self { ids: FxHashMap::default(), next_id: 1 }
+        Self {
+            ids: FxHashMap::default(),
+            instrumentation: FxHashMap::default(),
+            next_id: 1,
+        }
     }
 }
 
