@@ -41,14 +41,12 @@ pub fn fail_cache_insertion_count<E: Element>(element: &E) -> usize {
         .unwrap_or_default()
 }
 
-pub fn record_fail_cache_insertion<E: Element>(element: &E) {
-    if fail_cache_instrumentation_enabled() {
-        *fail_cache_insertions()
-            .lock()
-            .unwrap()
-            .entry(element.opaque())
-            .or_default() += 1;
-    }
+pub(crate) fn record_fail_cache_insertion<E: Element>(element: &E) {
+    *fail_cache_insertions()
+        .lock()
+        .unwrap()
+        .entry(element.opaque())
+        .or_default() += 1;
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -59,14 +57,40 @@ pub struct FailCache {
 
 impl FailCache {
     #[inline]
+    pub fn len(&self) -> usize {
+        self.entries.iter().filter(|entry| **entry != 0).count()
+    }
+
+    #[inline]
     pub fn contains(&self, id: u16) -> bool {
         debug_assert_ne!(id, 0, "0 is reserved as the vacant fail-cache entry");
-        for entry in self.entries {
-            if entry == id {
-                return true;
+        if self.entries[0] == 0 {
+            return false;
+        }
+        #[cfg(target_arch = "x86_64")]
+        {
+            use std::arch::x86_64::{
+                __m128i, _mm_cmpeq_epi16, _mm_loadu_si128, _mm_movemask_epi8, _mm_set1_epi16,
+            };
+            // SAFETY: `entries` is exactly eight contiguous u16s and loadu permits unaligned reads.
+            unsafe {
+                let entries = _mm_loadu_si128(self.entries.as_ptr().cast::<__m128i>());
+                let needle = _mm_set1_epi16(id as i16);
+                _mm_movemask_epi8(_mm_cmpeq_epi16(entries, needle)) != 0
             }
         }
-        false
+        #[cfg(not(target_arch = "x86_64"))]
+        {
+            for entry in self.entries {
+                if entry == id {
+                    return true;
+                }
+                if entry == 0 {
+                    return false;
+                }
+            }
+            false
+        }
     }
 
     #[inline]
@@ -597,10 +621,13 @@ mod fail_cache_tests {
     #[test]
     fn cache_overwrites_the_oldest_entry_after_eight_insertions() {
         let mut cache = FailCache::default();
+        assert_eq!(cache.len(), 0);
+        assert!(!cache.contains(1));
         for id in 1..=9 {
             cache.insert_unchecked(id);
         }
 
+        assert_eq!(cache.len(), 8);
         assert!(!cache.contains(1));
         assert!((2..=9).all(|id| cache.contains(id)));
 

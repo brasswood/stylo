@@ -269,7 +269,7 @@ pub struct ElementData {
 }
 
 // There's one of these per rendered elements so it better be small.
-size_of_test!(ElementData, 56);
+size_of_test!(ElementData, 40);
 
 /// The kind of restyle that a single element should do.
 #[derive(Debug)]
