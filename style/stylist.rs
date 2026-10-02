@@ -3455,9 +3455,6 @@ impl FailCachePrefixIdGenerator<SelectorImpl> for FailCachePrefixInterner {
     }
 
     fn record_insertion(&self, selector: &Selector<SelectorImpl>, prefix_length: usize) {
-        if !fail_cache_instrumentation_enabled() {
-            return;
-        }
         let prefix = FailCachePrefix(selector.clone(), prefix_length);
         let mut entries = self.entries.lock().unwrap();
         entries.instrumentation.entry(prefix).or_default().insertions += 1;

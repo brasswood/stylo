@@ -534,8 +534,10 @@ where
     if let (Some(element), Some((prefixes, index))) = (element, prefix) {
         if is_cacheable_failure(result) {
             if let Some(prefix_id) = prefixes.get_or_intern(index) {
-                if !element.fail_cache_contains(prefix_id) {
-                    element.insert_into_fail_cache(prefix_id);
+                if element.insert_into_fail_cache(prefix_id)
+                    && fail_cache_instrumentation_enabled()
+                {
+                    record_fail_cache_insertion(element);
                     prefixes.record_insertion(index);
                 }
             }
@@ -1073,6 +1075,11 @@ fn matches_complex_selector_internal<E>(
 where
     E: Element,
 {
+    debug!(
+        "Matching complex selector {:?} for {:?}",
+        selector_iter, element
+    );
+
     let active_fail_cache_prefix = context
         .use_fail_caches()
         .then(|| fail_cache_prefix_ids.zip(fail_cache_prefix_index))
@@ -1086,11 +1093,6 @@ where
         }
     }
     let fail_cache_target = active_fail_cache_prefix.map(|_| element);
-
-    debug!(
-        "Matching complex selector {:?} for {:?}",
-        selector_iter, element
-    );
 
     let matches_compound_selector =
         matches_compound_selector(&mut selector_iter, element, context, rightmost);
@@ -1914,5 +1916,10 @@ mod fail_cache_tests {
         assert!(!is_cacheable_failure(
             SelectorMatchingResult::NotMatchedAndRestartFromClosestDescendant,
         ));
+        assert!(is_cacheable_failure(
+            SelectorMatchingResult::NotMatchedAndRestartFromClosestLaterSibling,
+        ));
+        assert!(!is_cacheable_failure(SelectorMatchingResult::Matched));
+        assert!(!is_cacheable_failure(SelectorMatchingResult::Unknown));
     }
 }

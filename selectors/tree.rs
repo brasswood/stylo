@@ -187,6 +187,8 @@ pub trait Element: Sized + Clone + Debug {
         false
     }
 
-    /// Inserts `id` into the per-element fail cache.
-    fn insert_into_fail_cache(&self, _id: u16) {}
+    /// Inserts `id` into the per-element fail cache, returning whether it was new.
+    fn insert_into_fail_cache(&self, _id: u16) -> bool {
+        false
+    }
 }
