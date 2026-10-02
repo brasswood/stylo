@@ -10,7 +10,6 @@ use crate::relative_selector::cache::RelativeSelectorCache;
 use crate::relative_selector::filter::RelativeSelectorFilterMap;
 use crate::tree::{Element, OpaqueElement};
 use std::collections::HashMap;
-use smallvec::SmallVec;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 
@@ -52,16 +51,17 @@ pub fn record_fail_cache_insertion<E: Element>(element: &E) {
     }
 }
 
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct FailCache {
-    entries: SmallVec<[u16; 8]>,
+    entries: [u16; 8],
+    next_insert_index: u8,
 }
 
 impl FailCache {
     #[inline]
     pub fn contains(&self, id: u16) -> bool {
         debug_assert_ne!(id, 0, "0 is reserved as the vacant fail-cache entry");
-        for entry in self.entries.iter().copied() {
+        for entry in self.entries {
             if entry == id {
                 return true;
             }
@@ -76,20 +76,9 @@ impl FailCache {
             !self.contains(id),
             "callers are expected to check whether the entry is already cached",
         );
-        self.entries.push(id);
-    }
-
-    #[inline]
-    pub fn filled_once(&self) -> bool {
-        self.entries.len() > 8
-    }
-
-    pub fn insertions(&self) -> usize {
-        self.entries.len()
-    }
-
-    pub fn size(&self) -> usize {
-        self.entries.len().max(8)
+        let index = self.next_insert_index as usize;
+        self.entries[index] = id;
+        self.next_insert_index = (index as u8 + 1) % self.entries.len() as u8;
     }
 }
 
