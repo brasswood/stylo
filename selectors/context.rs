@@ -9,10 +9,17 @@ use crate::parser::{Selector, SelectorImpl};
 use crate::relative_selector::cache::RelativeSelectorCache;
 use crate::relative_selector::filter::RelativeSelectorFilterMap;
 use crate::tree::{Element, OpaqueElement};
+use std::collections::HashMap;
 use smallvec::SmallVec;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Mutex, OnceLock};
 
 static FAIL_CACHE_INSTRUMENTATION_ENABLED: AtomicBool = AtomicBool::new(false);
+static FAIL_CACHE_INSERTIONS: OnceLock<Mutex<HashMap<OpaqueElement, usize>>> = OnceLock::new();
+
+fn fail_cache_insertions() -> &'static Mutex<HashMap<OpaqueElement, usize>> {
+    FAIL_CACHE_INSERTIONS.get_or_init(|| Mutex::new(HashMap::new()))
+}
 
 pub fn set_fail_cache_instrumentation_enabled(enabled: bool) {
     FAIL_CACHE_INSTRUMENTATION_ENABLED.store(enabled, Ordering::Relaxed);
@@ -20,6 +27,29 @@ pub fn set_fail_cache_instrumentation_enabled(enabled: bool) {
 
 pub fn fail_cache_instrumentation_enabled() -> bool {
     FAIL_CACHE_INSTRUMENTATION_ENABLED.load(Ordering::Relaxed)
+}
+
+pub fn clear_fail_cache_insertion_counts() {
+    fail_cache_insertions().lock().unwrap().clear();
+}
+
+pub fn fail_cache_insertion_count<E: Element>(element: &E) -> usize {
+    fail_cache_insertions()
+        .lock()
+        .unwrap()
+        .get(&element.opaque())
+        .copied()
+        .unwrap_or_default()
+}
+
+pub fn record_fail_cache_insertion<E: Element>(element: &E) {
+    if fail_cache_instrumentation_enabled() {
+        *fail_cache_insertions()
+            .lock()
+            .unwrap()
+            .entry(element.opaque())
+            .or_default() += 1;
+    }
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
