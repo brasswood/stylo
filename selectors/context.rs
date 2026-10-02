@@ -576,6 +576,25 @@ mod fail_cache_tests {
     use super::FailCache;
 
     #[test]
+    fn overflowed_cache_keeps_membership_and_insertion_count() {
+        let mut cache = FailCache::default();
+        let ids = [
+            19, 4, 12, 2, 17, 8, 1, 15, 6, 11, 3, 18, 5, 14, 7, 16, 9, 13, 10,
+        ];
+
+        for id in ids {
+            cache.insert_unchecked(id);
+        }
+
+        assert_eq!(cache.insertions(), ids.len());
+        assert_eq!(cache.size(), ids.len());
+        assert!(cache.filled_once());
+        assert!(ids.into_iter().all(|id| cache.contains(id)));
+        assert!(!cache.contains(20));
+        assert!(!cache.contains(83));
+    }
+
+    #[test]
     fn fail_cache_grows_without_evicting_prefixes() {
         let mut cache = FailCache::default();
         for id in 1..=8 {
