@@ -1556,7 +1556,7 @@ struct FailCachePrefixId {
 #[derive(Debug)]
 pub struct FailCachePrefixIds<Impl: SelectorImpl> {
     selector: Selector<Impl>,
-    entries: Box<[FailCachePrefixId]>,
+    entries: StdArc<[FailCachePrefixId]>,
     generator: StdArc<dyn FailCachePrefixIdGenerator<Impl>>,
 }
 
@@ -1564,10 +1564,7 @@ impl<Impl: SelectorImpl> Clone for FailCachePrefixIds<Impl> {
     fn clone(&self) -> Self {
         Self {
             selector: self.selector.clone(),
-            entries: self.entries.iter().map(|entry| FailCachePrefixId {
-                prefix_length: entry.prefix_length,
-                id: AtomicU16::new(entry.id.load(Ordering::Relaxed)),
-            }).collect(),
+            entries: self.entries.clone(),
             generator: self.generator.clone(),
         }
     }
@@ -1582,10 +1579,15 @@ impl<Impl: SelectorImpl> FailCachePrefixIds<Impl> {
     ) -> Self {
         Self {
             selector,
-            entries: IntoIterator::into_iter(prefix_lengths).map(|prefix_length| FailCachePrefixId {
-                prefix_length,
-                id: AtomicU16::new(0),
-            }).collect(),
+            entries: StdArc::from(
+                IntoIterator::into_iter(prefix_lengths)
+                    .map(|prefix_length| FailCachePrefixId {
+                        prefix_length,
+                        id: AtomicU16::new(0),
+                    })
+                    .collect::<Vec<_>>()
+                    .into_boxed_slice(),
+            ),
             generator,
         }
     }
@@ -3952,6 +3954,7 @@ pub mod tests {
     use cssparser::{serialize_identifier, Parser as CssParser, ParserInput, ToCss};
     use std::collections::HashMap;
     use std::fmt;
+    use std::sync::atomic::AtomicUsize;
 
     #[derive(Clone, Debug, Eq, PartialEq)]
     pub enum PseudoClass {
@@ -5035,5 +5038,28 @@ pub mod tests {
         let mut test_visitor = TestVisitor { seen: vec![] };
         parse("::before:hover").unwrap().slice()[0].visit(&mut test_visitor);
         assert!(test_visitor.seen.contains(&":hover".into()));
+    }
+
+    #[test]
+    fn cloned_fail_cache_prefix_ids_share_lazy_interning() {
+        #[derive(Debug)]
+        struct Generator(AtomicUsize);
+        impl FailCachePrefixIdGenerator<DummySelectorImpl> for Generator {
+            fn get_or_intern(&self, _: &Selector<DummySelectorImpl>, _: usize) -> Option<u16> {
+                self.0.fetch_add(1, Ordering::Relaxed);
+                Some(1)
+            }
+        }
+        let generator = StdArc::new(Generator(AtomicUsize::new(0)));
+        let ids = FailCachePrefixIds::new(
+            parse(".a .b").unwrap().slice()[0].clone(),
+            vec![1u16].into_boxed_slice(),
+            generator.clone(),
+        );
+        let cloned_ids = ids.clone();
+
+        assert_eq!(ids.get_or_intern(0), Some(1));
+        assert_eq!(cloned_ids.get_or_intern(0), Some(1));
+        assert_eq!(generator.0.load(Ordering::Relaxed), 1);
     }
 }
