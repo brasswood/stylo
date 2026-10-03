@@ -523,6 +523,21 @@ fn is_cacheable_failure(result: SelectorMatchingResult) -> bool {
 }
 
 #[inline]
+fn insert_fail_cache_entry<E>(
+    element: &E,
+    prefixes: &FailCachePrefixIds<E::Impl>,
+    index: usize,
+    prefix_id: u16,
+) where
+    E: Element,
+{
+    if element.insert_into_fail_cache(prefix_id) && fail_cache_instrumentation_enabled() {
+        record_fail_cache_insertion(element);
+        prefixes.record_insertion(index);
+    }
+}
+
+#[inline]
 fn finish_with_fail_cache<E>(
     element: Option<&E>,
     prefix: Option<(&FailCachePrefixIds<E::Impl>, usize)>,
@@ -544,6 +559,31 @@ where
         }
     }
     result
+}
+
+fn flush_pending_fail_cache_entries<E>(
+    pending: SmallVec<[(E, usize); 8]>,
+    prefixes: &FailCachePrefixIds<E::Impl>,
+) where
+    E: Element,
+{
+    let mut prefix_ids = SmallVec::<[(usize, Option<u16>); 4]>::new();
+    for (element, index) in pending {
+        let prefix_id = match prefix_ids
+            .iter()
+            .find(|(prefix_index, _)| *prefix_index == index)
+        {
+            Some((_, prefix_id)) => *prefix_id,
+            None => {
+                let prefix_id = prefixes.get_or_intern(index);
+                prefix_ids.push((index, prefix_id));
+                prefix_id
+            },
+        };
+        if let Some(prefix_id) = prefix_id {
+            insert_fail_cache_entry(&element, prefixes, index, prefix_id);
+        }
+    }
 }
 
 /// Whether a compound selector matched, and whether it was the rightmost
