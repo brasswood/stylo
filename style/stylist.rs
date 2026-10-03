@@ -1181,6 +1181,7 @@ impl Stylist {
             FailCachePrefixInstrumentation {
                 prefix_index,
                 prefix_occurrences: counters.prefix_occurrences,
+                slow_rejecting_prefix_occurrences: counters.slow_rejecting_prefix_occurrences,
                 hashings: counters.hashings,
                 internments: counters.internments,
                 insertions: counters.insertions,
@@ -3312,6 +3313,8 @@ pub struct FailCachePrefixInstrumentation {
     pub prefix_index: usize,
     /// Number of non-sibling selector occurrences that contain this prefix.
     pub prefix_occurrences: u64,
+    /// Number of those selector occurrences with at least one slow reject.
+    pub slow_rejecting_prefix_occurrences: u64,
     /// Number of times this prefix was hashed for an interner map lookup.
     pub hashings: u64,
     /// Number of times this prefix was newly inserted into the interner map.
@@ -3323,6 +3326,7 @@ pub struct FailCachePrefixInstrumentation {
 #[derive(Clone, Copy, Debug, Default)]
 struct FailCachePrefixCounters {
     prefix_occurrences: u64,
+    slow_rejecting_prefix_occurrences: u64,
     hashings: u64,
     internments: u64,
     insertions: u64,
@@ -3416,6 +3420,7 @@ impl FailCachePrefixInterner {
         for (prefix, counters) in &entries.instrumentation {
             let total = target.entry(prefix.clone()).or_default();
             total.prefix_occurrences += counters.prefix_occurrences;
+            total.slow_rejecting_prefix_occurrences += counters.slow_rejecting_prefix_occurrences;
             total.hashings += counters.hashings;
             total.internments += counters.internments;
             total.insertions += counters.insertions;
@@ -3458,6 +3463,20 @@ impl FailCachePrefixIdGenerator<SelectorImpl> for FailCachePrefixInterner {
         let prefix = FailCachePrefix(selector.clone(), prefix_length);
         let mut entries = self.entries.lock().unwrap();
         entries.instrumentation.entry(prefix).or_default().insertions += 1;
+    }
+
+    fn record_slow_rejecting_occurrence(
+        &self,
+        selector: &Selector<SelectorImpl>,
+        prefix_length: usize,
+    ) {
+        let prefix = FailCachePrefix(selector.clone(), prefix_length);
+        let mut entries = self.entries.lock().unwrap();
+        entries
+            .instrumentation
+            .entry(prefix)
+            .or_default()
+            .slow_rejecting_prefix_occurrences += 1;
     }
 }
 
