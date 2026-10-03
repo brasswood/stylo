@@ -5069,23 +5069,50 @@ pub mod tests {
     #[test]
     fn cloned_fail_cache_prefix_ids_share_lazy_interning() {
         #[derive(Debug)]
-        struct Generator(AtomicUsize);
+        struct Generator {
+            internings: AtomicUsize,
+            slow_rejects: AtomicUsize,
+        }
         impl FailCachePrefixIdGenerator<DummySelectorImpl> for Generator {
             fn get_or_intern(&self, _: &Selector<DummySelectorImpl>, _: usize) -> Option<u16> {
-                self.0.fetch_add(1, Ordering::Relaxed);
+                self.internings.fetch_add(1, Ordering::Relaxed);
                 Some(1)
             }
+
+            fn record_slow_rejecting_occurrence(
+                &self,
+                _: &Selector<DummySelectorImpl>,
+                _: usize,
+            ) {
+                self.slow_rejects.fetch_add(1, Ordering::Relaxed);
+            }
         }
-        let generator = StdArc::new(Generator(AtomicUsize::new(0)));
+        let generator = StdArc::new(Generator {
+            internings: AtomicUsize::new(0),
+            slow_rejects: AtomicUsize::new(0),
+        });
         let ids = FailCachePrefixIds::new(
             parse(".a .b").unwrap().slice()[0].clone(),
             vec![1u16].into_boxed_slice(),
             generator.clone(),
         );
-        let cloned_ids = ids.clone();
-
-        assert_eq!(ids.get_or_intern(0), Some(1));
-        assert_eq!(cloned_ids.get_or_intern(0), Some(1));
-        assert_eq!(generator.0.load(Ordering::Relaxed), 1);
+        let barrier = StdArc::new(std::sync::Barrier::new(8));
+        let threads: Vec<_> = (0..8)
+            .map(|_| {
+                let ids = ids.clone();
+                let barrier = barrier.clone();
+                std::thread::spawn(move || {
+                    barrier.wait();
+                    ids.get_or_intern(0)
+                })
+            })
+            .collect();
+        for thread in threads {
+            assert_eq!(thread.join().unwrap(), Some(1));
+        }
+        assert_eq!(generator.internings.load(Ordering::Relaxed), 1);
+        ids.record_slow_rejecting_prefixes();
+        ids.record_slow_rejecting_prefixes();
+        assert_eq!(generator.slow_rejects.load(Ordering::Relaxed), 1);
     }
 }
