@@ -427,6 +427,11 @@ where
     }
 
     #[inline]
+    pub fn has_fail_cache_hit(&self) -> bool {
+        self.fail_cache_hit
+    }
+
+    #[inline]
     pub fn take_fail_cache_hit(&mut self) -> bool {
         ::std::mem::replace(&mut self.fail_cache_hit, false)
     }

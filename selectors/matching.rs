@@ -501,6 +501,11 @@ where
     let fail_cache_reject = context.take_fail_cache_hit() && does_match == KleeneValue::False;
     let is_slow_accept = does_match == KleeneValue::True;
     let is_slow_reject = does_match == KleeneValue::False && !fail_cache_reject;
+    if is_slow_reject && fail_cache_instrumentation_enabled() {
+        if let Some(prefixes) = selector_fail_cache_prefix_ids {
+            prefixes.record_slow_rejecting_prefixes();
+        }
+    }
     (
         does_match,
         BloomQueryStats {
@@ -542,19 +547,17 @@ fn finish_with_fail_cache<E>(
     element: Option<&E>,
     prefix: Option<(&FailCachePrefixIds<E::Impl>, usize)>,
     result: SelectorMatchingResult,
+    pending: &mut SmallVec<[(E, usize); 8]>,
 ) -> SelectorMatchingResult
 where
     E: Element,
 {
     if let (Some(element), Some((prefixes, index))) = (element, prefix) {
         if is_cacheable_failure(result) {
-            if let Some(prefix_id) = prefixes.get_or_intern(index) {
-                if element.insert_into_fail_cache(prefix_id)
-                    && fail_cache_instrumentation_enabled()
-                {
-                    record_fail_cache_insertion(element);
-                    prefixes.record_insertion(index);
-                }
+            if let Some(prefix_id) = prefixes.get(index) {
+                insert_fail_cache_entry(element, prefixes, index, prefix_id);
+            } else {
+                pending.push((element.clone(), index));
             }
         }
     }
@@ -730,7 +733,8 @@ where
         fail_cache_prefix_index = Some(0);
     }
 
-    matches_complex_selector_internal(
+    let mut pending_fail_cache_insertions = SmallVec::new();
+    let result = matches_complex_selector_internal(
         iter,
         fail_cache_prefix_ids,
         fail_cache_prefix_index,
@@ -738,8 +742,15 @@ where
         context,
         rightmost,
         SubjectOrPseudoElement::Yes,
-    )
-    .into()
+        &mut pending_fail_cache_insertions,
+    );
+    let result = result.into();
+    if result == KleeneValue::False && !context.has_fail_cache_hit() {
+        if let Some(prefixes) = fail_cache_prefix_ids {
+            flush_pending_fail_cache_entries(pending_fail_cache_insertions, prefixes);
+        }
+    }
+    result
 }
 
 /// Matches each selector of a list as a complex selector
@@ -1111,6 +1122,7 @@ fn matches_complex_selector_internal<E>(
     context: &mut MatchingContext<E::Impl>,
     mut rightmost: SubjectOrPseudoElement,
     mut first_subject_compound: SubjectOrPseudoElement,
+    pending_fail_cache_insertions: &mut SmallVec<[(E, usize); 8]>,
 ) -> SelectorMatchingResult
 where
     E: Element,
@@ -1125,7 +1137,7 @@ where
         .then(|| fail_cache_prefix_ids.zip(fail_cache_prefix_index))
         .flatten();
     let active_fail_cache_prefix_id = active_fail_cache_prefix
-        .and_then(|(prefixes, index)| prefixes.get_or_intern(index));
+        .and_then(|(prefixes, index)| prefixes.get(index));
     if let Some(prefix_id) = active_fail_cache_prefix_id {
         if element.fail_cache_contains(prefix_id) {
             context.note_fail_cache_hit();
@@ -1148,6 +1160,7 @@ where
                     SelectorMatchingResult::NotMatchedAndRestartFromClosestLaterSibling
                 },
             },
+            pending_fail_cache_insertions,
         );
     };
     let next_fail_cache_prefix_index = fail_cache_prefix_ids
@@ -1161,6 +1174,7 @@ where
             fail_cache_target,
             active_fail_cache_prefix,
             SelectorMatchingResult::NotMatchedGlobally,
+            pending_fail_cache_insertions,
         );
     }
 
@@ -1177,6 +1191,7 @@ where
             fail_cache_target,
             active_fail_cache_prefix,
             SelectorMatchingResult::NotMatchedAndRestartFromClosestLaterSibling,
+            pending_fail_cache_insertions,
         );
     }
 
@@ -1215,6 +1230,7 @@ where
                     fail_cache_target,
                     active_fail_cache_prefix,
                     candidate_not_found,
+                    pending_fail_cache_insertions,
                 )
             },
             Some(e) => e,
@@ -1230,6 +1246,7 @@ where
                     context,
                     rightmost,
                     first_subject_compound,
+                    pending_fail_cache_insertions,
                 )
             })
         });
@@ -1246,12 +1263,14 @@ where
                         fail_cache_target,
                         active_fail_cache_prefix,
                         SelectorMatchingResult::Unknown,
+                        pending_fail_cache_insertions,
                     );
                 }
                 return finish_with_fail_cache(
                     fail_cache_target,
                     active_fail_cache_prefix,
                     result,
+                    pending_fail_cache_insertions,
                 );
             },
             SelectorMatchingResult::Unknown | SelectorMatchingResult::NotMatchedGlobally => {
@@ -1259,6 +1278,7 @@ where
                     fail_cache_target,
                     active_fail_cache_prefix,
                     result,
+                    pending_fail_cache_insertions,
                 )
             },
             _ => {},
@@ -1278,6 +1298,7 @@ where
                     fail_cache_target,
                     active_fail_cache_prefix,
                     SelectorMatchingResult::NotMatchedAndRestartFromClosestDescendant,
+                    pending_fail_cache_insertions,
                 );
             },
             Combinator::LaterSibling => {
@@ -1292,6 +1313,7 @@ where
                         fail_cache_target,
                         active_fail_cache_prefix,
                         result,
+                        pending_fail_cache_insertions,
                     );
                 }
             },
@@ -1307,6 +1329,7 @@ where
                     fail_cache_target,
                     active_fail_cache_prefix,
                     result,
+                    pending_fail_cache_insertions,
                 );
             },
         }
@@ -1318,6 +1341,7 @@ where
                 fail_cache_target,
                 active_fail_cache_prefix,
                 candidate_not_found,
+                pending_fail_cache_insertions,
             );
         }
     }
