@@ -27,8 +27,9 @@ use std::borrow::{Borrow, Cow};
 use std::fmt::{self, Debug};
 use std::iter::Rev;
 use std::slice;
-use std::sync::atomic::{AtomicU16, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU16, Ordering};
 use std::sync::Arc as StdArc;
+use std::sync::OnceLock;
 
 #[cfg(feature = "to_shmem")]
 use to_shmem_derive::ToShmem;
@@ -1544,12 +1545,20 @@ where
     fn get_or_intern(&self, selector: &Selector<Impl>, prefix_length: usize) -> Option<u16>;
 
     fn record_insertion(&self, _selector: &Selector<Impl>, _prefix_length: usize) {}
+
+    fn record_slow_rejecting_occurrence(
+        &self,
+        _selector: &Selector<Impl>,
+        _prefix_length: usize,
+    ) {
+    }
 }
 
 #[derive(Debug)]
 struct FailCachePrefixId {
     prefix_length: u16,
     id: AtomicU16,
+    interned_id: OnceLock<Option<u16>>,
 }
 
 /// Lazily assigned fail-cache prefix ids in combinator match order.
@@ -1558,6 +1567,7 @@ pub struct FailCachePrefixIds<Impl: SelectorImpl> {
     selector: Selector<Impl>,
     entries: StdArc<[FailCachePrefixId]>,
     generator: StdArc<dyn FailCachePrefixIdGenerator<Impl>>,
+    slow_rejecting_prefixes_recorded: StdArc<AtomicBool>,
 }
 
 impl<Impl: SelectorImpl> Clone for FailCachePrefixIds<Impl> {
@@ -1566,6 +1576,7 @@ impl<Impl: SelectorImpl> Clone for FailCachePrefixIds<Impl> {
             selector: self.selector.clone(),
             entries: self.entries.clone(),
             generator: self.generator.clone(),
+            slow_rejecting_prefixes_recorded: self.slow_rejecting_prefixes_recorded.clone(),
         }
     }
 }
@@ -1584,18 +1595,20 @@ impl<Impl: SelectorImpl> FailCachePrefixIds<Impl> {
                     .map(|prefix_length| FailCachePrefixId {
                         prefix_length,
                         id: AtomicU16::new(0),
+                        interned_id: OnceLock::new(),
                     })
                     .collect::<Vec<_>>()
                     .into_boxed_slice(),
             ),
             generator,
+            slow_rejecting_prefixes_recorded: StdArc::new(AtomicBool::new(false)),
         }
     }
 
     /// Returns an already-assigned prefix id without hashing the prefix.
     #[inline]
     pub fn get(&self, index: usize) -> Option<u16> {
-        let id = self.entries[index].id.load(Ordering::Relaxed);
+        let id = self.entries[index].id.load(Ordering::Acquire);
         (id != 0).then_some(id)
     }
 
@@ -1606,18 +1619,18 @@ impl<Impl: SelectorImpl> FailCachePrefixIds<Impl> {
         (next < self.entries.len()).then_some(next)
     }
 
-    /// Assigns an id on first use, so the prefix can be checked before matching.
+    /// Assigns an id on first request, hashing the prefix at most once.
     #[inline]
     pub fn get_or_intern(&self, index: usize) -> Option<u16> {
-        if let Some(id) = self.get(index) {
-            return Some(id);
-        }
         let entry = &self.entries[index];
-        let id = self.generator.get_or_intern(&self.selector, entry.prefix_length.into())?;
-        match entry.id.compare_exchange(0, id, Ordering::Relaxed, Ordering::Relaxed) {
-            Ok(_) => Some(id),
-            Err(existing) => Some(existing),
+        let id = *entry.interned_id.get_or_init(|| {
+            self.generator
+                .get_or_intern(&self.selector, entry.prefix_length.into())
+        });
+        if let Some(id) = id {
+            entry.id.store(id, Ordering::Release);
         }
+        id
     }
 
     pub fn record_insertion(&self, index: usize) {
