@@ -1638,6 +1638,19 @@ impl<Impl: SelectorImpl> FailCachePrefixIds<Impl> {
         self.generator
             .record_insertion(&self.selector, entry.prefix_length.into());
     }
+
+    /// Records this selector's prefixes once after an instrumented slow reject.
+    pub fn record_slow_rejecting_prefixes(&self) {
+        if self.slow_rejecting_prefixes_recorded.swap(true, Ordering::Relaxed) {
+            return;
+        }
+        for entry in self.entries.iter() {
+            self.generator.record_slow_rejecting_occurrence(
+                &self.selector,
+                entry.prefix_length.into(),
+            );
+        }
+    }
 }
 
 impl<'a, Impl: 'a + SelectorImpl> SelectorIter<'a, Impl> {
