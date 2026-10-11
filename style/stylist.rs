@@ -3484,12 +3484,33 @@ impl FailCachePrefixInterner {
 }
 
 impl FailCachePrefixIdGenerator<SelectorImpl> for FailCachePrefixInterner {
-    fn get_or_intern(&self, selector: &Selector<SelectorImpl>, prefix_length: usize) -> Option<u16> {
+    fn note_prefix_occurrence(
+        &self,
+        selector: &Selector<SelectorImpl>,
+        prefix_length: usize,
+        has_sibling_combinator: bool,
+        selector_has_eligible_prefix: &StdArc<AtomicBool>,
+    ) -> Option<StdArc<AtomicBool>> {
+        self.register_prefix_occurrence(
+            FailCachePrefix(selector.clone(), prefix_length),
+            has_sibling_combinator,
+            selector_has_eligible_prefix,
+        )
+    }
+
+    fn get_or_intern(
+        &self,
+        selector: &Selector<SelectorImpl>,
+        prefix_length: usize,
+        has_sibling_combinator: bool,
+    ) -> Option<u16> {
         let start = tsc_timer::Start::now();
         let result = {
             let mut entries = self.entries.lock().unwrap();
             let prefix = FailCachePrefix(selector.clone(), prefix_length);
-            let (result, interned) = if let Some(id) = entries.ids.get(&prefix).copied() {
+            // TODO: Allocate sibling prefixes from their reserved ID range.
+            let key = (prefix.clone(), has_sibling_combinator);
+            let (result, interned) = if let Some(id) = entries.ids.get(&key).copied() {
                 (Some(id), false)
             } else if entries.next_id == 0 {
                 (None, false)
@@ -3499,7 +3520,7 @@ impl FailCachePrefixIdGenerator<SelectorImpl> for FailCachePrefixInterner {
                 if entries.next_id == 0 {
                     log::warn!("Ran out of fail-cache prefix ids; later prefixes will not be cached");
                 }
-                entries.ids.insert(prefix.clone(), id);
+                entries.ids.insert(key, id);
                 (Some(id), true)
             };
             if fail_cache_instrumentation_enabled() {
