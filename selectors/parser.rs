@@ -1541,8 +1541,24 @@ pub trait FailCachePrefixIdGenerator<Impl>: Debug + Send + Sync
 where
     Impl: SelectorImpl,
 {
+    /// Registers one selector occurrence and updates its shared eligibility state.
+    fn note_prefix_occurrence(
+        &self,
+        _selector: &Selector<Impl>,
+        _prefix_length: usize,
+        _selector_contains_sibling_combinator: bool,
+        _selector_has_eligible_prefix: &StdArc<AtomicBool>,
+    ) -> Option<StdArc<AtomicBool>> {
+        None
+    }
+
     /// Returns the id for a prefix with `prefix_length` match-order components.
-    fn get_or_intern(&self, selector: &Selector<Impl>, prefix_length: usize) -> Option<u16>;
+    fn get_or_intern(
+        &self,
+        selector: &Selector<Impl>,
+        prefix_length: usize,
+        selector_contains_sibling_combinator: bool,
+    ) -> Option<u16>;
 
     fn record_insertion(&self, _selector: &Selector<Impl>, _prefix_length: usize) {}
 
@@ -1559,6 +1575,7 @@ struct FailCachePrefixId {
     prefix_length: u16,
     id: AtomicU16,
     interned_id: OnceLock<Option<u16>>,
+    prefix_is_popular: Option<StdArc<AtomicBool>>,
 }
 
 /// Lazily assigned fail-cache prefix ids in combinator match order.
