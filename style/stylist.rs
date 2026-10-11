@@ -3375,7 +3375,13 @@ fn cacheable_prefix_combinators(
     mut combinators: impl Iterator<Item = Combinator>,
 ) -> bool {
     combinators.all(|combinator| {
-        matches!(combinator, Combinator::Child | Combinator::Descendant)
+        matches!(
+            combinator,
+            Combinator::Child
+                | Combinator::Descendant
+                | Combinator::NextSibling
+                | Combinator::LaterSibling
+        )
     })
 }
 
@@ -3954,7 +3960,7 @@ impl CascadeData {
         let mut prefix_lengths = Vec::new();
         let mut offset = 0usize;
         while let Some((next_offset, combinator)) = next_selector_offset(selector, offset) {
-            if !matches!(combinator, Combinator::Child | Combinator::Descendant) {
+            if !cacheable_prefix_combinators(std::iter::once(combinator)) {
                 break;
             }
             let prefix_length = selector.len() - next_offset;
@@ -3967,9 +3973,6 @@ impl CascadeData {
                 .filter_map(Component::as_combinator)) {
                 break;
             }
-            self.fail_cache_prefix_ids.note_prefix_occurrence(FailCachePrefix(
-                selector.clone(), prefix_length,
-            ));
             prefix_lengths.push(prefix_length.try_into().unwrap());
             offset = next_offset;
         }
@@ -5238,8 +5241,9 @@ mod fail_cache_tests {
         assert!(cacheable_prefix_combinators(
             [Combinator::Child, Combinator::Descendant].into_iter(),
         ));
-        assert!(!cacheable_prefix_combinators(
-            [Combinator::NextSibling].into_iter(),
+        assert!(cacheable_prefix_combinators(
+            [Combinator::NextSibling, Combinator::LaterSibling].into_iter(),
         ));
+        assert!(!cacheable_prefix_combinators([Combinator::PseudoElement].into_iter()));
     }
 }
