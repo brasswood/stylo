@@ -1583,6 +1583,8 @@ struct FailCachePrefixId {
 pub struct FailCachePrefixIds<Impl: SelectorImpl> {
     selector: Selector<Impl>,
     entries: StdArc<[FailCachePrefixId]>,
+    selector_contains_sibling_combinator: bool,
+    selector_has_eligible_prefix: StdArc<AtomicBool>,
     generator: StdArc<dyn FailCachePrefixIdGenerator<Impl>>,
     slow_rejecting_prefixes_recorded: StdArc<AtomicBool>,
 }
@@ -1592,6 +1594,8 @@ impl<Impl: SelectorImpl> Clone for FailCachePrefixIds<Impl> {
         Self {
             selector: self.selector.clone(),
             entries: self.entries.clone(),
+            selector_contains_sibling_combinator: self.selector_contains_sibling_combinator,
+            selector_has_eligible_prefix: self.selector_has_eligible_prefix.clone(),
             generator: self.generator.clone(),
             slow_rejecting_prefixes_recorded: self.slow_rejecting_prefixes_recorded.clone(),
         }
@@ -1605,18 +1609,39 @@ impl<Impl: SelectorImpl> FailCachePrefixIds<Impl> {
         prefix_lengths: Box<[u16]>,
         generator: StdArc<dyn FailCachePrefixIdGenerator<Impl>>,
     ) -> Self {
+        let components = selector.iter_raw_match_order().as_slice();
+        let selector_contains_sibling_combinator = components.iter().any(|component| {
+            matches!(
+                component,
+                Component::Combinator(Combinator::NextSibling | Combinator::LaterSibling)
+            )
+        });
+        let selector_has_eligible_prefix = StdArc::new(AtomicBool::new(false));
+        let entries = IntoIterator::into_iter(prefix_lengths)
+            .map(|prefix_length| {
+                let prefix_is_popular = generator.note_prefix_occurrence(
+                    &selector,
+                    prefix_length.into(),
+                    selector_contains_sibling_combinator,
+                    &selector_has_eligible_prefix,
+                );
+                if prefix_is_popular.is_none() {
+                    selector_has_eligible_prefix.store(true, Ordering::Relaxed);
+                }
+                FailCachePrefixId {
+                    prefix_length,
+                    id: AtomicU16::new(0),
+                    interned_id: OnceLock::new(),
+                    prefix_is_popular,
+                }
+            })
+            .collect::<Vec<_>>()
+            .into_boxed_slice();
         Self {
             selector,
-            entries: StdArc::from(
-                IntoIterator::into_iter(prefix_lengths)
-                    .map(|prefix_length| FailCachePrefixId {
-                        prefix_length,
-                        id: AtomicU16::new(0),
-                        interned_id: OnceLock::new(),
-                    })
-                    .collect::<Vec<_>>()
-                    .into_boxed_slice(),
-            ),
+            entries: StdArc::from(entries),
+            selector_contains_sibling_combinator,
+            selector_has_eligible_prefix,
             generator,
             slow_rejecting_prefixes_recorded: StdArc::new(AtomicBool::new(false)),
         }
