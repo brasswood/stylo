@@ -376,6 +376,21 @@ impl From<SelectorMatchingResult> for KleeneValue {
     }
 }
 
+impl From<FailCacheResult> for SelectorMatchingResult {
+    #[inline]
+    fn from(value: FailCacheResult) -> Self {
+        match value {
+            FailCacheResult::NotMatchedAndRestartFromClosestLaterSibling => {
+                Self::NotMatchedAndRestartFromClosestLaterSibling
+            },
+            FailCacheResult::NotMatchedAndRestartFromClosestDescendant => {
+                Self::NotMatchedAndRestartFromClosestDescendant
+            },
+            FailCacheResult::NotMatchedGlobally => Self::NotMatchedGlobally,
+        }
+    }
+}
+
 /// Matches a selector, fast-rejecting against a bloom filter.
 /// Returns whether the selector matched, whether we fast-rejected, and the time
 /// spent slow-rejecting.
@@ -518,13 +533,17 @@ where
 }
 
 #[inline]
-fn fail_cache_hit_result() -> SelectorMatchingResult {
-    SelectorMatchingResult::NotMatchedAndRestartFromClosestLaterSibling
-}
-
-#[inline]
-fn is_cacheable_failure(result: SelectorMatchingResult) -> bool {
-    result == fail_cache_hit_result()
+fn fail_cache_result(result: SelectorMatchingResult) -> Option<FailCacheResult> {
+    match result {
+        SelectorMatchingResult::NotMatchedAndRestartFromClosestLaterSibling => {
+            Some(FailCacheResult::NotMatchedAndRestartFromClosestLaterSibling)
+        },
+        SelectorMatchingResult::NotMatchedAndRestartFromClosestDescendant => {
+            Some(FailCacheResult::NotMatchedAndRestartFromClosestDescendant)
+        },
+        SelectorMatchingResult::NotMatchedGlobally => Some(FailCacheResult::NotMatchedGlobally),
+        SelectorMatchingResult::Matched | SelectorMatchingResult::Unknown => None,
+    }
 }
 
 #[inline]
