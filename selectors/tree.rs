@@ -7,7 +7,7 @@
 
 use crate::attr::{AttrSelectorOperation, CaseSensitivity, NamespaceConstraint};
 use crate::bloom::BloomFilter;
-use crate::matching::{ElementSelectorFlags, MatchingContext};
+use crate::matching::{ElementSelectorFlags, FailCacheResult, MatchingContext};
 use crate::parser::SelectorImpl;
 use std::fmt::Debug;
 use std::ptr::NonNull;
@@ -187,8 +187,18 @@ pub trait Element: Sized + Clone + Debug {
         false
     }
 
-    /// Inserts `id` into the per-element fail cache, returning whether it was new.
+    /// Returns the cached sibling-aware failure result for this prefix, if present.
+    fn fail_cache_result(&self, _id: u16) -> Option<FailCacheResult> {
+        None
+    }
+
+    /// Inserts a legacy failed prefix, returning whether it was new.
     fn insert_into_fail_cache(&self, _id: u16) -> bool {
+        false
+    }
+
+    /// Inserts a sibling-aware failed prefix and its backtracking result.
+    fn insert_fail_cache_result(&self, _id: u16, _result: FailCacheResult) -> bool {
         false
     }
 }

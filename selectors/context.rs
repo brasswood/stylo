@@ -49,6 +49,31 @@ pub(crate) fn record_fail_cache_insertion<E: Element>(element: &E) {
         .or_default() += 1;
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(u16)]
+pub enum FailCacheResult {
+    NotMatchedGlobally,
+    NotMatchedAndRestartFromClosestDescendant,
+    NotMatchedAndRestartFromClosestLaterSibling,
+}
+
+/// Reserve disjoint id ranges for legacy and sibling-aware cache entries.
+pub const MAX_NON_SIBLING_FAIL_CACHE_PREFIX_ID: u16 = 0x0fff;
+pub const FIRST_SIBLING_FAIL_CACHE_PREFIX_ID: u16 = MAX_NON_SIBLING_FAIL_CACHE_PREFIX_ID + 1;
+pub const MAX_FAIL_CACHE_PREFIX_ID: u16 = u16::MAX >> 2;
+
+impl FailCacheResult {
+    #[inline]
+    fn from_bits(bits: u16) -> Self {
+        match bits {
+            0 => Self::NotMatchedGlobally,
+            1 => Self::NotMatchedAndRestartFromClosestDescendant,
+            2 => Self::NotMatchedAndRestartFromClosestLaterSibling,
+            _ => unreachable!("invalid fail-cache result bits"),
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct FailCache {
     entries: [u16; 8],
