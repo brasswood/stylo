@@ -5124,8 +5124,6 @@ pub struct Rule {
     #[ignore_malloc_size_of = "selector storage is shared"]
     pub fail_cache_prefix_ids: Option<Box<[FailCachePrefixIds<SelectorImpl>]>>,
 
-    fail_cache_prefixes_eligible: bool,
-
     /// The source order this style rule appears in. Note that we only use
     /// three bytes to store this value in ApplicableDeclarationsBlock, so
     /// we could repurpose that storage here if we needed to.
@@ -5165,14 +5163,6 @@ impl Rule {
         self.fail_cache_prefix_ids
             .as_deref()
             .and_then(<[FailCachePrefixIds<SelectorImpl>]>::first)
-    }
-
-    fn update_fail_cache_eligibility(&mut self) {
-        self.fail_cache_prefixes_eligible = self
-            .fail_cache_prefix_ids
-            .as_deref()
-            .and_then(<[FailCachePrefixIds<SelectorImpl>]>::first)
-            .is_some_and(FailCachePrefixIds::has_eligible_prefix);
     }
 
     /// Returns the offset of the compound that can activate this rule's
@@ -5245,7 +5235,6 @@ impl Rule {
             selector,
             hashes,
             fail_cache_prefix_ids,
-            fail_cache_prefixes_eligible: false,
             style_source,
             source_order,
             layer_id,
