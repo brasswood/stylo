@@ -119,8 +119,47 @@ impl FailCache {
     }
 
     #[inline]
+    pub fn get_sibling(&self, id: u16) -> Option<FailCacheResult> {
+        debug_assert_ne!(id, 0, "0 is reserved as the vacant fail-cache entry");
+        debug_assert!(id >= FIRST_SIBLING_FAIL_CACHE_PREFIX_ID);
+        #[cfg(target_arch = "x86_64")]
+        {
+            use std::arch::x86_64::{
+                __m128i, _mm_and_si128, _mm_cmpeq_epi16, _mm_loadu_si128, _mm_movemask_epi8,
+                _mm_set1_epi16,
+            };
+            // SAFETY: `entries` is exactly eight contiguous u16s and loadu permits unaligned reads.
+            unsafe {
+                let entries = _mm_loadu_si128(self.entries.as_ptr().cast::<__m128i>());
+                let ids = _mm_and_si128(entries, _mm_set1_epi16(!3));
+                let needle = _mm_set1_epi16((id << 2) as i16);
+                let mask = _mm_movemask_epi8(_mm_cmpeq_epi16(ids, needle));
+                if mask == 0 {
+                    None
+                } else {
+                    let index = mask.trailing_zeros() as usize / 2;
+                    Some(FailCacheResult::from_bits(self.entries[index] & 3))
+                }
+            }
+        }
+        #[cfg(not(target_arch = "x86_64"))]
+        {
+            for entry in self.entries.iter() {
+                if *entry == 0 {
+                    return None;
+                }
+                if *entry >> 2 == id {
+                    return Some(FailCacheResult::from_bits(*entry & 3));
+                }
+            }
+            None
+        }
+    }
+
+    #[inline]
     pub fn insert_unchecked(&mut self, id: u16) {
         debug_assert_ne!(id, 0, "0 is reserved as the vacant fail-cache entry");
+        debug_assert!(id <= MAX_NON_SIBLING_FAIL_CACHE_PREFIX_ID);
         debug_assert!(
             !self.contains(id),
             "callers are expected to check whether the entry is already cached",
