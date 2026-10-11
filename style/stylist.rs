@@ -2702,6 +2702,14 @@ impl ElementAndPseudoRules {
             pseudo.shrink_if_needed();
         }
     }
+
+    fn update_fail_cache_eligibility(&mut self) {
+        self.element_map
+            .for_each_entry_mut(Rule::update_fail_cache_eligibility);
+        for pseudo in self.pseudos_map.iter_mut() {
+            pseudo.update_fail_cache_eligibility();
+        }
+    }
 }
 
 impl PartElementAndPseudoRules {
@@ -2709,6 +2717,17 @@ impl PartElementAndPseudoRules {
     fn clear(&mut self) {
         self.element_map.clear();
         self.pseudos_map.clear();
+    }
+
+    fn update_fail_cache_eligibility(&mut self) {
+        for rules in self.element_map.values_mut() {
+            for rule in rules {
+                rule.update_fail_cache_eligibility();
+            }
+        }
+        for pseudo in self.pseudos_map.iter_mut() {
+            pseudo.update_fail_cache_eligibility();
+        }
     }
 }
 
@@ -3896,6 +3915,18 @@ impl CascadeData {
     }
 
     fn did_finish_rebuild(&mut self) {
+        self.normal_rules.update_fail_cache_eligibility();
+        self.universal_tail_rules
+            .for_each_entry_mut(|rule| rule.rule.update_fail_cache_eligibility());
+        if let Some(host_rules) = &mut self.featureless_host_rules {
+            host_rules.update_fail_cache_eligibility();
+        }
+        if let Some(slotted_rules) = &mut self.slotted_rules {
+            slotted_rules.update_fail_cache_eligibility();
+        }
+        if let Some(part_rules) = &mut self.part_rules {
+            part_rules.update_fail_cache_eligibility();
+        }
         self.shrink_maps_if_needed();
         self.compute_layer_order();
     }
