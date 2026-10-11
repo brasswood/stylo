@@ -1661,13 +1661,36 @@ impl<Impl: SelectorImpl> FailCachePrefixIds<Impl> {
         (next < self.entries.len()).then_some(next)
     }
 
+    /// Whether this selector contains a sibling combinator.
+    #[inline]
+    pub fn selector_contains_sibling_combinator(&self) -> bool {
+        self.selector_contains_sibling_combinator
+    }
+
+    /// Whether any prefix is eligible for caching.
+    #[inline]
+    pub fn has_eligible_prefix(&self) -> bool {
+        self.selector_has_eligible_prefix.load(Ordering::Relaxed)
+    }
+
     /// Assigns an id on first request, hashing the prefix at most once.
     #[inline]
     pub fn get_or_intern(&self, index: usize) -> Option<u16> {
         let entry = &self.entries[index];
+        if entry
+            .prefix_is_popular
+            .as_ref()
+            .is_some_and(|popular| !popular.load(Ordering::Relaxed))
+        {
+            return None;
+        }
         let id = *entry.interned_id.get_or_init(|| {
             self.generator
-                .get_or_intern(&self.selector, entry.prefix_length.into())
+                .get_or_intern(
+                    &self.selector,
+                    entry.prefix_length.into(),
+                    self.selector_contains_sibling_combinator,
+                )
         });
         if let Some(id) = id {
             entry.id.store(id, Ordering::Release);
@@ -5116,7 +5139,12 @@ pub mod tests {
             slow_rejects: AtomicUsize,
         }
         impl FailCachePrefixIdGenerator<DummySelectorImpl> for Generator {
-            fn get_or_intern(&self, _: &Selector<DummySelectorImpl>, _: usize) -> Option<u16> {
+            fn get_or_intern(
+                &self,
+                _: &Selector<DummySelectorImpl>,
+                _: usize,
+                _: bool,
+            ) -> Option<u16> {
                 self.internings.fetch_add(1, Ordering::Relaxed);
                 Some(1)
             }
