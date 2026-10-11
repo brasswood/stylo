@@ -552,10 +552,20 @@ fn insert_fail_cache_entry<E>(
     prefixes: &FailCachePrefixIds<E::Impl>,
     index: usize,
     prefix_id: u16,
+    result: FailCacheResult,
 ) where
     E: Element,
 {
-    if element.insert_into_fail_cache(prefix_id) && fail_cache_instrumentation_enabled() {
+    let inserted = if prefixes.selector_contains_sibling_combinator() {
+        element.insert_fail_cache_result(prefix_id, result)
+    } else {
+        debug_assert_eq!(
+            result,
+            FailCacheResult::NotMatchedAndRestartFromClosestLaterSibling
+        );
+        element.insert_into_fail_cache(prefix_id)
+    };
+    if inserted && fail_cache_instrumentation_enabled() {
         record_fail_cache_insertion(element);
         prefixes.record_insertion(index);
     }
@@ -566,17 +576,24 @@ fn finish_with_fail_cache<E>(
     element: Option<&E>,
     prefix: Option<(&FailCachePrefixIds<E::Impl>, usize)>,
     result: SelectorMatchingResult,
-    pending: &mut SmallVec<[(E, usize); 8]>,
+    pending: &mut SmallVec<[(E, usize, FailCacheResult); 8]>,
 ) -> SelectorMatchingResult
 where
     E: Element,
 {
     if let (Some(element), Some((prefixes, index))) = (element, prefix) {
-        if is_cacheable_failure(result) {
+        let cache_result = if prefixes.selector_contains_sibling_combinator() {
+            fail_cache_result(result)
+        } else if result == SelectorMatchingResult::NotMatchedAndRestartFromClosestLaterSibling {
+            Some(FailCacheResult::NotMatchedAndRestartFromClosestLaterSibling)
+        } else {
+            None
+        };
+        if let Some(fail_cache_result) = cache_result {
             if let Some(prefix_id) = prefixes.get(index) {
-                insert_fail_cache_entry(element, prefixes, index, prefix_id);
+                insert_fail_cache_entry(element, prefixes, index, prefix_id, fail_cache_result);
             } else {
-                pending.push((element.clone(), index));
+                pending.push((element.clone(), index, fail_cache_result));
             }
         }
     }
@@ -584,13 +601,13 @@ where
 }
 
 fn flush_pending_fail_cache_entries<E>(
-    pending: SmallVec<[(E, usize); 8]>,
+    pending: SmallVec<[(E, usize, FailCacheResult); 8]>,
     prefixes: &FailCachePrefixIds<E::Impl>,
 ) where
     E: Element,
 {
     let mut prefix_ids = SmallVec::<[(usize, Option<u16>); 4]>::new();
-    for (element, index) in pending {
+    for (element, index, result) in pending {
         let prefix_id = match prefix_ids
             .iter()
             .find(|(prefix_index, _)| *prefix_index == index)
@@ -603,7 +620,7 @@ fn flush_pending_fail_cache_entries<E>(
             },
         };
         if let Some(prefix_id) = prefix_id {
-            insert_fail_cache_entry(&element, prefixes, index, prefix_id);
+            insert_fail_cache_entry(&element, prefixes, index, prefix_id, result);
         }
     }
 }
@@ -1141,7 +1158,7 @@ fn matches_complex_selector_internal<E>(
     context: &mut MatchingContext<E::Impl>,
     mut rightmost: SubjectOrPseudoElement,
     mut first_subject_compound: SubjectOrPseudoElement,
-    pending_fail_cache_insertions: &mut SmallVec<[(E, usize); 8]>,
+    pending_fail_cache_insertions: &mut SmallVec<[(E, usize, FailCacheResult); 8]>,
 ) -> SelectorMatchingResult
 where
     E: Element,
@@ -1155,12 +1172,19 @@ where
         .use_fail_caches()
         .then(|| fail_cache_prefix_ids.zip(fail_cache_prefix_index))
         .flatten();
-    let active_fail_cache_prefix_id = active_fail_cache_prefix
-        .and_then(|(prefixes, index)| prefixes.get(index));
-    if let Some(prefix_id) = active_fail_cache_prefix_id {
-        if element.fail_cache_contains(prefix_id) {
-            context.note_fail_cache_hit();
-            return fail_cache_hit_result();
+    if let Some((prefixes, index)) = active_fail_cache_prefix {
+        if let Some(prefix_id) = prefixes.get(index) {
+            let result = if prefixes.selector_contains_sibling_combinator() {
+                element.fail_cache_result(prefix_id)
+            } else if element.fail_cache_contains(prefix_id) {
+                Some(FailCacheResult::NotMatchedAndRestartFromClosestLaterSibling)
+            } else {
+                None
+            };
+            if let Some(result) = result {
+                context.note_fail_cache_hit();
+                return result.into();
+            }
         }
     }
     let fail_cache_target = active_fail_cache_prefix.map(|_| element);
