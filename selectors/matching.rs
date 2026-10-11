@@ -2006,27 +2006,28 @@ where
 
 #[cfg(test)]
 mod fail_cache_tests {
-    use super::{fail_cache_hit_result, is_cacheable_failure, SelectorMatchingResult};
+    use super::{fail_cache_result, FailCacheResult, SelectorMatchingResult};
 
     #[test]
-    fn cache_hits_restart_ancestor_search() {
-        assert!(matches!(
-            fail_cache_hit_result(),
-            SelectorMatchingResult::NotMatchedAndRestartFromClosestLaterSibling,
-        ));
-        assert!(!matches!(
-            fail_cache_hit_result(),
-            SelectorMatchingResult::NotMatchedGlobally,
-        ));
-        assert!(is_cacheable_failure(fail_cache_hit_result()));
-        assert!(!is_cacheable_failure(SelectorMatchingResult::NotMatchedGlobally));
-        assert!(!is_cacheable_failure(
-            SelectorMatchingResult::NotMatchedAndRestartFromClosestDescendant,
-        ));
-        assert!(is_cacheable_failure(
-            SelectorMatchingResult::NotMatchedAndRestartFromClosestLaterSibling,
-        ));
-        assert!(!is_cacheable_failure(SelectorMatchingResult::Matched));
-        assert!(!is_cacheable_failure(SelectorMatchingResult::Unknown));
+    fn cache_results_preserve_matcher_restart_states() {
+        for (matching, cached) in [
+            (
+                SelectorMatchingResult::NotMatchedAndRestartFromClosestLaterSibling,
+                FailCacheResult::NotMatchedAndRestartFromClosestLaterSibling,
+            ),
+            (
+                SelectorMatchingResult::NotMatchedAndRestartFromClosestDescendant,
+                FailCacheResult::NotMatchedAndRestartFromClosestDescendant,
+            ),
+            (
+                SelectorMatchingResult::NotMatchedGlobally,
+                FailCacheResult::NotMatchedGlobally,
+            ),
+        ] {
+            assert_eq!(fail_cache_result(matching), Some(cached));
+            assert!(SelectorMatchingResult::from(cached) == matching);
+        }
+        assert_eq!(fail_cache_result(SelectorMatchingResult::Matched), None);
+        assert_eq!(fail_cache_result(SelectorMatchingResult::Unknown), None);
     }
 }
