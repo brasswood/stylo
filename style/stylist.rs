@@ -3431,42 +3431,14 @@ impl FailCachePrefixInterner {
     fn register_prefix_occurrence(
         &self,
         prefix: FailCachePrefix,
-        has_sibling_combinator: bool,
-        selector_has_eligible_prefix: &StdArc<AtomicBool>,
+        _has_sibling_combinator: bool,
+        _selector_has_eligible_prefix: &StdArc<AtomicBool>,
     ) -> Option<StdArc<AtomicBool>> {
         let mut entries = self.entries.lock().unwrap();
-        let threshold = if has_sibling_combinator {
-            MIN_SIBLING_FAIL_CACHE_PREFIX_OCCURRENCES
-        } else {
-            MIN_FAIL_CACHE_PREFIX_OCCURRENCES
-        };
-        let prefix_popularity = entries
-            .prefix_popularity
-            .entry((prefix.clone(), has_sibling_combinator))
-            .or_insert_with(|| FailCachePrefixPopularity {
-                occurrences: 0,
-                is_popular: StdArc::new(AtomicBool::new(false)),
-                selectors: Vec::new(),
-            });
-        if prefix_popularity.is_popular.load(AtomicOrdering::Relaxed) {
-            selector_has_eligible_prefix.store(true, AtomicOrdering::Relaxed);
-        } else {
-            prefix_popularity
-                .selectors
-                .push(selector_has_eligible_prefix.clone());
-        }
-        prefix_popularity.occurrences = prefix_popularity.occurrences.saturating_add(1);
-        if prefix_popularity.occurrences >= threshold {
-            prefix_popularity.is_popular.store(true, AtomicOrdering::Relaxed);
-            for selector in prefix_popularity.selectors.drain(..) {
-                selector.store(true, AtomicOrdering::Relaxed);
-            }
-        }
-        let popularity = Some(prefix_popularity.is_popular.clone());
         if fail_cache_instrumentation_enabled() {
             entries.instrumentation.entry(prefix).or_default().prefix_occurrences += 1;
         }
-        popularity
+        None
     }
 
     fn add_instrumentation_to(
