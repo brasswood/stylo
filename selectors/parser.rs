@@ -1583,7 +1583,6 @@ pub struct FailCachePrefixIds<Impl: SelectorImpl> {
     selector: Selector<Impl>,
     entries: StdArc<[FailCachePrefixId]>,
     selector_contains_sibling_combinator: bool,
-    selector_has_eligible_prefix: StdArc<AtomicBool>,
     generator: StdArc<dyn FailCachePrefixIdGenerator<Impl>>,
     slow_rejecting_prefixes_recorded: StdArc<AtomicBool>,
 }
@@ -1594,7 +1593,6 @@ impl<Impl: SelectorImpl> Clone for FailCachePrefixIds<Impl> {
             selector: self.selector.clone(),
             entries: self.entries.clone(),
             selector_contains_sibling_combinator: self.selector_contains_sibling_combinator,
-            selector_has_eligible_prefix: self.selector_has_eligible_prefix.clone(),
             generator: self.generator.clone(),
             slow_rejecting_prefixes_recorded: self.slow_rejecting_prefixes_recorded.clone(),
         }
@@ -1636,7 +1634,6 @@ impl<Impl: SelectorImpl> FailCachePrefixIds<Impl> {
             selector,
             entries: StdArc::from(entries),
             selector_contains_sibling_combinator,
-            selector_has_eligible_prefix,
             generator,
             slow_rejecting_prefixes_recorded: StdArc::new(AtomicBool::new(false)),
         }
@@ -1660,12 +1657,6 @@ impl<Impl: SelectorImpl> FailCachePrefixIds<Impl> {
     #[inline]
     pub fn selector_contains_sibling_combinator(&self) -> bool {
         self.selector_contains_sibling_combinator
-    }
-
-    /// Whether any prefix is eligible for caching.
-    #[inline]
-    pub fn has_eligible_prefix(&self) -> bool {
-        self.selector_has_eligible_prefix.load(Ordering::Relaxed)
     }
 
     /// Assigns an id on first request, hashing the prefix at most once.
