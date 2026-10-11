@@ -3440,15 +3440,8 @@ impl FailCachePrefixInterner {
 }
 
 impl FailCachePrefixIdGenerator<SelectorImpl> for FailCachePrefixInterner {
-    fn note_prefix_occurrence(
-        &self,
-        selector: &Selector<SelectorImpl>,
-        prefix_length: usize,
-        _has_sibling_combinator: bool,
-        _selector_has_eligible_prefix: &StdArc<AtomicBool>,
-    ) -> Option<StdArc<AtomicBool>> {
+    fn note_prefix_occurrence(&self, selector: &Selector<SelectorImpl>, prefix_length: usize) {
         self.register_prefix_occurrence(FailCachePrefix(selector.clone(), prefix_length));
-        None
     }
 
     fn get_or_intern(
