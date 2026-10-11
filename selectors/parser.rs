@@ -1575,7 +1575,6 @@ struct FailCachePrefixId {
     prefix_length: u16,
     id: AtomicU16,
     interned_id: OnceLock<Option<u16>>,
-    prefix_is_popular: Option<StdArc<AtomicBool>>,
 }
 
 /// Lazily assigned fail-cache prefix ids in combinator match order.
@@ -1619,20 +1618,16 @@ impl<Impl: SelectorImpl> FailCachePrefixIds<Impl> {
         let selector_has_eligible_prefix = StdArc::new(AtomicBool::new(false));
         let entries = IntoIterator::into_iter(prefix_lengths)
             .map(|prefix_length| {
-                let prefix_is_popular = generator.note_prefix_occurrence(
+                let _ = generator.note_prefix_occurrence(
                     &selector,
                     prefix_length.into(),
                     selector_contains_sibling_combinator,
                     &selector_has_eligible_prefix,
                 );
-                if prefix_is_popular.is_none() {
-                    selector_has_eligible_prefix.store(true, Ordering::Relaxed);
-                }
                 FailCachePrefixId {
                     prefix_length,
                     id: AtomicU16::new(0),
                     interned_id: OnceLock::new(),
-                    prefix_is_popular,
                 }
             })
             .collect::<Vec<_>>()
