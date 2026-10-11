@@ -5191,13 +5191,9 @@ impl Rule {
     /// Returns the lazy prefix ids stored for this rule.
     #[inline]
     pub fn fail_cache_prefix_ids(&self) -> Option<&FailCachePrefixIds<SelectorImpl>> {
-        if self.fail_cache_prefixes_eligible {
-            self.fail_cache_prefix_ids
-                .as_deref()
-                .and_then(<[FailCachePrefixIds<SelectorImpl>]>::first)
-        } else {
-            None
-        }
+        self.fail_cache_prefix_ids
+            .as_deref()
+            .and_then(<[FailCachePrefixIds<SelectorImpl>]>::first)
     }
 
     fn update_fail_cache_eligibility(&mut self) {
