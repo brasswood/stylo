@@ -89,6 +89,7 @@ impl FailCache {
     #[inline]
     pub fn contains(&self, id: u16) -> bool {
         debug_assert_ne!(id, 0, "0 is reserved as the vacant fail-cache entry");
+        debug_assert!(id <= MAX_NON_SIBLING_FAIL_CACHE_PREFIX_ID);
         if self.entries[0] == 0 {
             return false;
         }
@@ -106,11 +107,11 @@ impl FailCache {
         }
         #[cfg(not(target_arch = "x86_64"))]
         {
-            for entry in self.entries {
-                if entry == id {
+            for entry in self.entries.iter() {
+                if *entry == id {
                     return true;
                 }
-                if entry == 0 {
+                if *entry == 0 {
                     return false;
                 }
             }
@@ -167,6 +168,20 @@ impl FailCache {
         let index = self.next_insert_index as usize;
         self.entries[index] = id;
         self.next_insert_index = (index as u8 + 1) % self.entries.len() as u8;
+    }
+
+    #[inline]
+    pub fn insert_sibling_unchecked(&mut self, id: u16, result: FailCacheResult) -> bool {
+        debug_assert_ne!(id, 0, "0 is reserved as the vacant fail-cache entry");
+        debug_assert!((FIRST_SIBLING_FAIL_CACHE_PREFIX_ID..=MAX_FAIL_CACHE_PREFIX_ID).contains(&id));
+        if let Some(cached_result) = self.get_sibling(id) {
+            debug_assert_eq!(cached_result, result, "a cached prefix must fail consistently");
+            return false;
+        }
+        let index = self.next_insert_index as usize;
+        self.entries[index] = (id << 2) | result as u16;
+        self.next_insert_index = (index as u8 + 1) % self.entries.len() as u8;
+        true
     }
 }
 
