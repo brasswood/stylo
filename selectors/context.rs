@@ -700,7 +700,10 @@ where
 
 #[cfg(test)]
 mod fail_cache_tests {
-    use super::FailCache;
+    use super::{
+        FailCache, FailCacheResult, FIRST_SIBLING_FAIL_CACHE_PREFIX_ID,
+        MAX_FAIL_CACHE_PREFIX_ID, MAX_NON_SIBLING_FAIL_CACHE_PREFIX_ID,
+    };
 
     #[test]
     fn cache_overwrites_the_oldest_entry_after_eight_insertions() {
@@ -718,5 +721,27 @@ mod fail_cache_tests {
         cache.insert_unchecked(1);
         assert!(!cache.contains(2));
         assert!((1..=9).filter(|id| *id != 2).all(|id| cache.contains(id)));
+    }
+
+    #[test]
+    fn cache_separates_legacy_and_sibling_results() {
+        let mut cache = FailCache::default();
+        let sibling_result = FailCacheResult::NotMatchedGlobally;
+        cache.insert_unchecked(1);
+        assert!(cache.insert_sibling_unchecked(FIRST_SIBLING_FAIL_CACHE_PREFIX_ID, sibling_result));
+        assert!(cache.contains(1));
+        assert_eq!(cache.get_sibling(FIRST_SIBLING_FAIL_CACHE_PREFIX_ID), Some(sibling_result));
+        assert_eq!(cache.len(), 2);
+    }
+
+    #[test]
+    fn cache_preserves_results_for_maximum_sibling_prefix_id() {
+        let mut cache = FailCache::default();
+        let result = FailCacheResult::NotMatchedAndRestartFromClosestDescendant;
+        assert!(cache.insert_sibling_unchecked(MAX_FAIL_CACHE_PREFIX_ID, result));
+        assert_eq!(cache.get_sibling(MAX_FAIL_CACHE_PREFIX_ID), Some(result));
+
+        cache.insert_unchecked(MAX_NON_SIBLING_FAIL_CACHE_PREFIX_ID);
+        assert!(cache.contains(MAX_NON_SIBLING_FAIL_CACHE_PREFIX_ID));
     }
 }
