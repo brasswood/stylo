@@ -3416,17 +3416,11 @@ impl Hash for FailCachePrefix {
 }
 
 impl FailCachePrefixInterner {
-    fn register_prefix_occurrence(
-        &self,
-        prefix: FailCachePrefix,
-        _has_sibling_combinator: bool,
-        _selector_has_eligible_prefix: &StdArc<AtomicBool>,
-    ) -> Option<StdArc<AtomicBool>> {
+    fn register_prefix_occurrence(&self, prefix: FailCachePrefix) {
         let mut entries = self.entries.lock().unwrap();
         if fail_cache_instrumentation_enabled() {
             entries.instrumentation.entry(prefix).or_default().prefix_occurrences += 1;
         }
-        None
     }
 
     fn add_instrumentation_to(
@@ -3450,14 +3444,11 @@ impl FailCachePrefixIdGenerator<SelectorImpl> for FailCachePrefixInterner {
         &self,
         selector: &Selector<SelectorImpl>,
         prefix_length: usize,
-        has_sibling_combinator: bool,
-        selector_has_eligible_prefix: &StdArc<AtomicBool>,
+        _has_sibling_combinator: bool,
+        _selector_has_eligible_prefix: &StdArc<AtomicBool>,
     ) -> Option<StdArc<AtomicBool>> {
-        self.register_prefix_occurrence(
-            FailCachePrefix(selector.clone(), prefix_length),
-            has_sibling_combinator,
-            selector_has_eligible_prefix,
-        )
+        self.register_prefix_occurrence(FailCachePrefix(selector.clone(), prefix_length));
+        None
     }
 
     fn get_or_intern(
