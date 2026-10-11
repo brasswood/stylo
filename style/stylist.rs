@@ -3346,17 +3346,21 @@ struct FailCachePrefixCounters {
 
 #[derive(Debug)]
 struct FailCachePrefixInternerEntries {
-    ids: FxHashMap<FailCachePrefix, u16>,
+    ids: FxHashMap<(FailCachePrefix, bool), u16>,
+    prefix_popularity: FxHashMap<(FailCachePrefix, bool), FailCachePrefixPopularity>,
     instrumentation: FxHashMap<FailCachePrefix, FailCachePrefixCounters>,
     next_id: u16,
+    next_sibling_id: u16,
 }
 
 impl Default for FailCachePrefixInternerEntries {
     fn default() -> Self {
         Self {
             ids: FxHashMap::default(),
+            prefix_popularity: FxHashMap::default(),
             instrumentation: FxHashMap::default(),
             next_id: 1,
+            next_sibling_id: FIRST_SIBLING_FAIL_CACHE_PREFIX_ID,
         }
     }
 }
