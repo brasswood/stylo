@@ -3508,20 +3508,41 @@ impl FailCachePrefixIdGenerator<SelectorImpl> for FailCachePrefixInterner {
         let result = {
             let mut entries = self.entries.lock().unwrap();
             let prefix = FailCachePrefix(selector.clone(), prefix_length);
-            // TODO: Allocate sibling prefixes from their reserved ID range.
             let key = (prefix.clone(), has_sibling_combinator);
             let (result, interned) = if let Some(id) = entries.ids.get(&key).copied() {
                 (Some(id), false)
-            } else if entries.next_id == 0 {
-                (None, false)
             } else {
-                let id = entries.next_id;
-                entries.next_id = entries.next_id.wrapping_add(1);
-                if entries.next_id == 0 {
-                    log::warn!("Ran out of fail-cache prefix ids; later prefixes will not be cached");
+                let (next_id, max_id) = if has_sibling_combinator {
+                    (entries.next_sibling_id, MAX_FAIL_CACHE_PREFIX_ID)
+                } else {
+                    (entries.next_id, MAX_NON_SIBLING_FAIL_CACHE_PREFIX_ID)
+                };
+                let (id, exhausted) = if next_id <= max_id {
+                    if has_sibling_combinator {
+                        entries.next_sibling_id += 1;
+                    } else {
+                        entries.next_id += 1;
+                    }
+                    (Some(next_id), next_id == max_id)
+                } else {
+                    (None, false)
+                };
+                if exhausted {
+                    log::warn!(
+                        "Ran out of {} fail-cache prefix ids; later prefixes will not be cached",
+                        if has_sibling_combinator {
+                            "sibling-aware"
+                        } else {
+                            "non-sibling"
+                        }
+                    );
                 }
-                entries.ids.insert(key, id);
-                (Some(id), true)
+                if let Some(id) = id {
+                    entries.ids.insert(key, id);
+                    (Some(id), true)
+                } else {
+                    (None, false)
+                }
             };
             if fail_cache_instrumentation_enabled() {
                 let counters = entries.instrumentation.entry(prefix).or_default();
