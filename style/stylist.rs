@@ -3310,16 +3310,6 @@ struct FailCachePrefixInterner {
     interning_calls: AtomicU64,
 }
 
-const MIN_FAIL_CACHE_PREFIX_OCCURRENCES: u16 = 512;
-const MIN_SIBLING_FAIL_CACHE_PREFIX_OCCURRENCES: u16 = 16;
-
-#[derive(Debug)]
-struct FailCachePrefixPopularity {
-    occurrences: u16,
-    is_popular: StdArc<AtomicBool>,
-    selectors: Vec<StdArc<AtomicBool>>,
-}
-
 /// Instrumentation counters collected for one unique selector prefix.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct FailCachePrefixInstrumentation {
@@ -3349,7 +3339,6 @@ struct FailCachePrefixCounters {
 #[derive(Debug)]
 struct FailCachePrefixInternerEntries {
     ids: FxHashMap<(FailCachePrefix, bool), u16>,
-    prefix_popularity: FxHashMap<(FailCachePrefix, bool), FailCachePrefixPopularity>,
     instrumentation: FxHashMap<FailCachePrefix, FailCachePrefixCounters>,
     next_id: u16,
     next_sibling_id: u16,
@@ -3359,7 +3348,6 @@ impl Default for FailCachePrefixInternerEntries {
     fn default() -> Self {
         Self {
             ids: FxHashMap::default(),
-            prefix_popularity: FxHashMap::default(),
             instrumentation: FxHashMap::default(),
             next_id: 1,
             next_sibling_id: FIRST_SIBLING_FAIL_CACHE_PREFIX_ID,
