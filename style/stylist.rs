@@ -73,6 +73,8 @@ use selectors::attr::{CaseSensitivity, NamespaceConstraint};
 use selectors::bloom::BloomFilter;
 use selectors::matching::{
     fail_cache_instrumentation_enabled, MatchingContext, MatchingMode, NeedsSelectorFlags,
+    FIRST_SIBLING_FAIL_CACHE_PREFIX_ID, MAX_FAIL_CACHE_PREFIX_ID,
+    MAX_NON_SIBLING_FAIL_CACHE_PREFIX_ID,
     ScopeProximityStats, SelectorCaches, matches_selector, selector_may_match,
 };
 use selectors::matching::{MatchingForInvalidation, VisitedHandlingMode};
@@ -86,7 +88,7 @@ use smallvec::SmallVec;
 use std::cmp::Ordering;
 use std::hash::{Hash, Hasher};
 use std::sync::{Arc as StdArc, Mutex};
-use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering as AtomicOrdering};
 use std::{mem, ops};
 
 /// The type of the stylesheets that the stylist contains.
@@ -3306,12 +3308,22 @@ struct FailCachePrefixInterner {
     interning_calls: AtomicU64,
 }
 
+const MIN_FAIL_CACHE_PREFIX_OCCURRENCES: u16 = 512;
+const MIN_SIBLING_FAIL_CACHE_PREFIX_OCCURRENCES: u16 = 16;
+
+#[derive(Debug)]
+struct FailCachePrefixPopularity {
+    occurrences: u16,
+    is_popular: StdArc<AtomicBool>,
+    selectors: Vec<StdArc<AtomicBool>>,
+}
+
 /// Instrumentation counters collected for one unique selector prefix.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct FailCachePrefixInstrumentation {
     /// Report-local index identifying this prefix.
     pub prefix_index: usize,
-    /// Number of non-sibling selector occurrences that contain this prefix.
+    /// Number of selector occurrences containing this fail-cacheable prefix.
     pub prefix_occurrences: u64,
     /// Number of those selector occurrences with at least one slow reject.
     pub slow_rejecting_prefix_occurrences: u64,
