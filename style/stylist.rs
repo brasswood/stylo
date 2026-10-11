@@ -88,7 +88,7 @@ use smallvec::SmallVec;
 use std::cmp::Ordering;
 use std::hash::{Hash, Hasher};
 use std::sync::{Arc as StdArc, Mutex};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering as AtomicOrdering};
+use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
 use std::{mem, ops};
 
 /// The type of the stylesheets that the stylist contains.
@@ -2702,7 +2702,6 @@ impl ElementAndPseudoRules {
             pseudo.shrink_if_needed();
         }
     }
-
 }
 
 impl PartElementAndPseudoRules {
@@ -2711,7 +2710,6 @@ impl PartElementAndPseudoRules {
         self.element_map.clear();
         self.pseudos_map.clear();
     }
-
 }
 
 /// The id of a given layer, a sequentially-increasing identifier.
@@ -3416,13 +3414,6 @@ impl Hash for FailCachePrefix {
 }
 
 impl FailCachePrefixInterner {
-    fn register_prefix_occurrence(&self, prefix: FailCachePrefix) {
-        let mut entries = self.entries.lock().unwrap();
-        if fail_cache_instrumentation_enabled() {
-            entries.instrumentation.entry(prefix).or_default().prefix_occurrences += 1;
-        }
-    }
-
     fn add_instrumentation_to(
         &self,
         target: &mut FxHashMap<FailCachePrefix, FailCachePrefixCounters>,
@@ -3441,7 +3432,15 @@ impl FailCachePrefixInterner {
 
 impl FailCachePrefixIdGenerator<SelectorImpl> for FailCachePrefixInterner {
     fn note_prefix_occurrence(&self, selector: &Selector<SelectorImpl>, prefix_length: usize) {
-        self.register_prefix_occurrence(FailCachePrefix(selector.clone(), prefix_length));
+        if fail_cache_instrumentation_enabled() {
+            self.entries
+                .lock()
+                .unwrap()
+                .instrumentation
+                .entry(FailCachePrefix(selector.clone(), prefix_length))
+                .or_default()
+                .prefix_occurrences += 1;
+        }
     }
 
     fn get_or_intern(
