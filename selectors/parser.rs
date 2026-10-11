@@ -1677,13 +1677,6 @@ impl<Impl: SelectorImpl> FailCachePrefixIds<Impl> {
     #[inline]
     pub fn get_or_intern(&self, index: usize) -> Option<u16> {
         let entry = &self.entries[index];
-        if entry
-            .prefix_is_popular
-            .as_ref()
-            .is_some_and(|popular| !popular.load(Ordering::Relaxed))
-        {
-            return None;
-        }
         let id = *entry.interned_id.get_or_init(|| {
             self.generator
                 .get_or_intern(
