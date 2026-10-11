@@ -243,6 +243,19 @@ impl<T> SelectorMap<T> {
     pub fn len(&self) -> usize {
         self.count
     }
+
+    pub(crate) fn for_each_entry_mut(&mut self, mut f: impl FnMut(&mut T)) {
+        self.root.iter_mut().for_each(&mut f);
+        self.id_hash.values_mut().flatten().for_each(&mut f);
+        self.common_pseudo_classes.iter_mut().for_each(&mut f);
+        self.class_hash.values_mut().flatten().for_each(&mut f);
+        self.local_name_hash.values_mut().flatten().for_each(&mut f);
+        self.attribute_hash.values_mut().flatten().for_each(&mut f);
+        self.namespace_hash.values_mut().flatten().for_each(&mut f);
+        self.rare_pseudo_classes.iter_mut().for_each(&mut f);
+        self.other.iter_mut().for_each(&mut f);
+        self.universal_tails.iter_mut().for_each(&mut f);
+    }
 }
 
 impl SelectorMap<Rule> {
@@ -1137,6 +1150,11 @@ impl<V> MaybeCaseInsensitiveHashMap<Atom, V> {
     /// HashMap::iter
     pub fn iter(&self) -> hash_map::Iter<'_, Atom, V> {
         self.0.iter()
+    }
+
+    /// HashMap::values_mut
+    pub fn values_mut(&mut self) -> hash_map::ValuesMut<'_, Atom, V> {
+        self.0.values_mut()
     }
 
     /// HashMap::clear
