@@ -644,6 +644,27 @@ where
     result
 }
 
+fn cache_branch_failures<E>(
+    elements: &[E],
+    prefixes: Option<&FailCachePrefixIds<E::Impl>>,
+    index: Option<usize>,
+    result: SelectorMatchingResult,
+    pending: &mut SmallVec<[(E, usize, FailCacheResult); 8]>,
+) where
+    E: Element,
+{
+    let (Some(prefixes), Some(index), Some(result)) = (
+        prefixes.filter(|prefixes| prefixes.selector_contains_sibling_combinator()),
+        index,
+        fail_cache_result(result),
+    ) else {
+        return;
+    };
+    for element in elements {
+        queue_fail_cache_entry(element, prefixes, index, result, pending);
+    }
+}
+
 fn flush_pending_fail_cache_entries<E>(
     pending: SmallVec<[(E, usize, FailCacheResult); 8]>,
     prefixes: &FailCachePrefixIds<E::Impl>,
