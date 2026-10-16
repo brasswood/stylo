@@ -89,6 +89,33 @@ impl StylesheetContents {
         allow_import_rules: AllowImportRules,
         sanitization_data: Option<&mut SanitizationData>,
     ) -> Arc<Self> {
+        Self::from_str_with_has(
+            css,
+            url_data,
+            origin,
+            shared_lock,
+            stylesheet_loader,
+            error_reporter,
+            quirks_mode,
+            allow_import_rules,
+            false,
+            sanitization_data,
+        )
+    }
+
+    /// Parse a stylesheet, optionally allowing `:has()` selectors.
+    pub(crate) fn from_str_with_has(
+        css: &str,
+        url_data: UrlExtraData,
+        origin: Origin,
+        shared_lock: &SharedRwLock,
+        stylesheet_loader: Option<&dyn StylesheetLoader>,
+        error_reporter: Option<&dyn ParseErrorReporter>,
+        quirks_mode: QuirksMode,
+        allow_import_rules: AllowImportRules,
+        allow_has: bool,
+        sanitization_data: Option<&mut SanitizationData>,
+    ) -> Arc<Self> {
         let use_counters = UseCounters::default();
         let (namespaces, rules, source_map_url, source_url) = Stylesheet::parse_rules(
             css,
@@ -100,6 +127,7 @@ impl StylesheetContents {
             quirks_mode,
             Some(&use_counters),
             allow_import_rules,
+            allow_has,
             sanitization_data,
         );
 
@@ -424,12 +452,13 @@ impl Stylesheet {
         quirks_mode: QuirksMode,
         use_counters: Option<&UseCounters>,
         allow_import_rules: AllowImportRules,
+        allow_has: bool,
         mut sanitization_data: Option<&mut SanitizationData>,
     ) -> (Namespaces, Vec<CssRule>, Option<String>, Option<String>) {
         let mut input = ParserInput::new(css);
         let mut input = Parser::new(&mut input);
 
-        let context = ParserContext::new(
+        let mut context = ParserContext::new(
             origin,
             url_data,
             None,
@@ -439,6 +468,7 @@ impl Stylesheet {
             error_reporter,
             use_counters,
         );
+        context.allow_has = allow_has;
 
         let mut rule_parser = TopLevelRuleParser {
             shared_lock,
