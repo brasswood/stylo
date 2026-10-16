@@ -566,6 +566,16 @@ fn fail_cache_result(result: SelectorMatchingResult) -> Option<FailCacheResult> 
 }
 
 #[inline]
+fn record_classic_not_matched_result<Impl: SelectorImpl>(
+    context: &mut MatchingContext<Impl>,
+    result: SelectorMatchingResult,
+) {
+    if let Some(result) = fail_cache_result(result) {
+        context.note_not_matched_result(result, false);
+    }
+}
+
+#[inline]
 fn insert_fail_cache_entry<E>(
     element: &E,
     prefixes: &FailCachePrefixIds<E::Impl>,
@@ -1267,6 +1277,7 @@ where
             };
             if let Some(result) = result {
                 context.note_fail_cache_hit();
+                context.note_not_matched_result(result, true);
                 return result.into();
             }
         }
