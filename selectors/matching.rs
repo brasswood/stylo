@@ -404,6 +404,30 @@ impl From<SelectorMatchingResult> for KleeneValue {
     }
 }
 
+#[inline]
+fn fail_cache_result(result: SelectorMatchingResult) -> Option<FailCacheResult> {
+    match result {
+        SelectorMatchingResult::NotMatchedAndRestartFromClosestLaterSibling => {
+            Some(FailCacheResult::NotMatchedAndRestartFromClosestLaterSibling)
+        },
+        SelectorMatchingResult::NotMatchedAndRestartFromClosestDescendant => {
+            Some(FailCacheResult::NotMatchedAndRestartFromClosestDescendant)
+        },
+        SelectorMatchingResult::NotMatchedGlobally => Some(FailCacheResult::NotMatchedGlobally),
+        SelectorMatchingResult::Matched | SelectorMatchingResult::Unknown => None,
+    }
+}
+
+#[inline]
+fn record_classic_not_matched_result<Impl: SelectorImpl>(
+    context: &mut MatchingContext<Impl>,
+    result: SelectorMatchingResult,
+) {
+    if let Some(result) = fail_cache_result(result) {
+        context.note_not_matched_result(result, false);
+    }
+}
+
 /// Matches a selector, fast-rejecting against a bloom filter.
 /// Returns whether the selector matched, whether we fast-rejected, and the time
 /// spent slow-rejecting.
@@ -460,6 +484,8 @@ pub fn matches_selector_kleene<E>(
 where
     E: Element,
 {
+    context.take_fail_cache_hit();
+    context.take_not_matched_result_counts();
     // Use the bloom filter to fast-reject.
     if let Some(hashes) = hashes {
         if let Some(filter) = context.bloom_filter {
@@ -469,8 +495,7 @@ where
             if !may_match {
                 return (KleeneValue::False, BloomQueryStats {
                     time_fast_rejecting: Some(fast_reject_duration),
-                    time_slow_rejecting: None,
-                    time_slow_accepting: None,
+                    ..BloomQueryStats::default()
                 });
             }
         }
@@ -488,14 +513,18 @@ where
         },
     );
     let slow_match_duration = start.elapsed();
+    let fail_cache_reject = context.take_fail_cache_hit() && does_match == KleeneValue::False;
+    let not_matched_result_counts = context.take_not_matched_result_counts();
     let is_slow_accept = does_match == KleeneValue::True;
-    let is_slow_reject = !is_slow_accept;
+    let is_slow_reject = does_match == KleeneValue::False && !fail_cache_reject;
     (
         does_match,
         BloomQueryStats {
             time_fast_rejecting: None,
+            time_fail_cache_rejecting: fail_cache_reject.then_some(slow_match_duration),
             time_slow_rejecting: is_slow_reject.then_some(slow_match_duration),
             time_slow_accepting: is_slow_accept.then_some(slow_match_duration),
+            not_matched_result_counts,
         }
     )
 }
@@ -1061,6 +1090,8 @@ where
         .flatten();
     if let Some(prefix_id) = active_fail_cache_prefix_id {
         if element.fail_cache_contains(prefix_id) {
+            context.note_fail_cache_hit();
+            context.note_not_matched_result(FailCacheResult::NotMatchedGlobally, true);
             return SelectorMatchingResult::NotMatchedGlobally;
         }
     }
