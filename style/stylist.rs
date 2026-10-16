@@ -555,6 +555,8 @@ pub struct Stylist {
     #[cfg_attr(feature = "servo", ignore_malloc_size_of = "defined in selectors")]
     quirks_mode: QuirksMode,
 
+    use_edge_selector_optimization: bool,
+
     /// Selector maps for all of the style sheets in the stylist, after
     /// evalutaing media rules against the current device, split out per
     /// cascade level.
@@ -786,13 +788,21 @@ impl Stylist {
     /// If more members are added here, think about whether they should
     /// be reset in clear().
     #[inline]
-    pub fn new(device: Device, quirks_mode: QuirksMode) -> Self {
+    pub fn new(
+        device: Device,
+        quirks_mode: QuirksMode,
+        use_edge_selector_optimization: bool,
+    ) -> Self {
+        let mut cascade_data = DocumentCascadeData::default();
+        cascade_data.user.use_edge_selector_optimization = use_edge_selector_optimization;
+        cascade_data.author.use_edge_selector_optimization = use_edge_selector_optimization;
         Self {
             device,
             quirks_mode,
+            use_edge_selector_optimization,
             stylesheets: StylistStylesheetSet::new(),
             author_data_cache: CascadeDataCache::new(),
-            cascade_data: Default::default(),
+            cascade_data,
             author_styles_enabled: AuthorStylesEnabled::Yes,
             rule_tree: RuleTree::new(),
             script_custom_properties: Default::default(),
@@ -2799,10 +2809,18 @@ pub struct ScopeBoundWithHashes {
 }
 
 impl ScopeBoundWithHashes {
-    fn new(quirks_mode: QuirksMode, selectors: SelectorList<SelectorImpl>) -> Self {
+    fn new(
+        quirks_mode: QuirksMode,
+        use_edge_selector_optimization: bool,
+        selectors: SelectorList<SelectorImpl>,
+    ) -> Self {
         let mut hashes = SmallVec::with_capacity(selectors.len());
         for selector in selectors.slice() {
-            hashes.push(AncestorHashes::new(selector, quirks_mode));
+            hashes.push(AncestorHashes::new(
+                selector,
+                quirks_mode,
+                use_edge_selector_optimization,
+            ));
         }
         Self { selectors, hashes }
     }
