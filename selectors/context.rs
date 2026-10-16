@@ -142,26 +142,28 @@ impl FailCache {
     #[inline]
     pub fn contains(&self, id: u16) -> bool {
         debug_assert_ne!(id, 0, "0 is reserved as the vacant fail-cache entry");
-        debug_assert!(id <= MAX_NON_SIBLING_FAIL_CACHE_PREFIX_ID);
+        debug_assert!(id <= MAX_FAIL_CACHE_PREFIX_ID);
         if self.entries[0] == 0 {
             return false;
         }
         #[cfg(target_arch = "x86_64")]
         {
             use std::arch::x86_64::{
-                __m128i, _mm_cmpeq_epi16, _mm_loadu_si128, _mm_movemask_epi8, _mm_set1_epi16,
+                __m128i, _mm_and_si128, _mm_cmpeq_epi16, _mm_loadu_si128, _mm_movemask_epi8,
+                _mm_set1_epi16,
             };
             // SAFETY: `entries` is exactly eight contiguous u16s and loadu permits unaligned reads.
             unsafe {
                 let entries = _mm_loadu_si128(self.entries.as_ptr().cast::<__m128i>());
-                let needle = _mm_set1_epi16(id as i16);
-                _mm_movemask_epi8(_mm_cmpeq_epi16(entries, needle)) != 0
+                let ids = _mm_and_si128(entries, _mm_set1_epi16(!3));
+                let needle = _mm_set1_epi16((id << 2) as i16);
+                _mm_movemask_epi8(_mm_cmpeq_epi16(ids, needle)) != 0
             }
         }
         #[cfg(not(target_arch = "x86_64"))]
         {
             for entry in self.entries.iter() {
-                if *entry == id {
+                if *entry >> 2 == id {
                     return true;
                 }
                 if *entry == 0 {
@@ -213,14 +215,15 @@ impl FailCache {
     #[inline]
     pub fn insert_unchecked(&mut self, id: u16) {
         debug_assert_ne!(id, 0, "0 is reserved as the vacant fail-cache entry");
-        debug_assert!(id <= MAX_NON_SIBLING_FAIL_CACHE_PREFIX_ID);
+        debug_assert!(id <= MAX_FAIL_CACHE_PREFIX_ID);
         debug_assert!(
             !self.contains(id),
             "callers are expected to check whether the entry is already cached",
         );
-        let index = self.next_insert_index as usize;
-        self.entries[index] = id;
-        self.next_insert_index = (index as u8 + 1) % self.entries.len() as u8;
+        self.insert_sibling_unchecked(
+            id,
+            FailCacheResult::NotMatchedAndRestartFromClosestLaterSibling,
+        );
     }
 
     #[inline]
@@ -834,13 +837,20 @@ mod fail_cache_tests {
     }
 
     #[test]
-    fn cache_separates_legacy_and_sibling_results() {
+    fn cache_stores_results_for_non_sibling_and_sibling_prefixes() {
         let mut cache = FailCache::default();
         let sibling_result = FailCacheResult::NotMatchedGlobally;
         cache.insert_unchecked(1);
         assert!(cache.insert_sibling_unchecked(FIRST_SIBLING_FAIL_CACHE_PREFIX_ID, sibling_result));
         assert!(cache.contains(1));
-        assert_eq!(cache.get_sibling(FIRST_SIBLING_FAIL_CACHE_PREFIX_ID), Some(sibling_result));
+        assert_eq!(
+            cache.get_sibling(1),
+            Some(FailCacheResult::NotMatchedAndRestartFromClosestLaterSibling)
+        );
+        assert_eq!(
+            cache.get_sibling(FIRST_SIBLING_FAIL_CACHE_PREFIX_ID),
+            Some(sibling_result)
+        );
         assert_eq!(cache.len(), 2);
     }
 
@@ -859,7 +869,10 @@ mod fail_cache_tests {
             ] {
                 assert!(!cache.insert_sibling_unchecked(id, result));
             }
-            assert_eq!(cache.get_sibling(id), Some(FailCacheResult::NotMatchedGlobally));
+            assert_eq!(
+                cache.get_sibling(id),
+                Some(FailCacheResult::NotMatchedGlobally)
+            );
         }
     }
 
