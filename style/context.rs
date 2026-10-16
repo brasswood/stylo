@@ -617,11 +617,11 @@ pub struct ThreadLocalStyleContext<E: StyleSharingElement> {
 
 impl<E: StyleSharingElement> ThreadLocalStyleContext<E> {
     /// Creates a new `ThreadLocalStyleContext`
-    pub fn new() -> Self {
+    pub fn new(use_edge_selector_optimization: bool) -> Self {
         ThreadLocalStyleContext {
             sharing_cache: StyleSharingCache::new(),
             rule_cache: RuleCache::new(),
-            bloom_filter: StyleBloom::new(),
+            bloom_filter: StyleBloom::new(use_edge_selector_optimization),
             tasks: SequentialTaskList(Vec::new()),
             statistics: PerThreadTraversalStatistics::default(),
             stack_limit_checker: StackLimitChecker::new(
