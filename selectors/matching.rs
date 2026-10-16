@@ -572,6 +572,23 @@ fn insert_fail_cache_entry<E>(
 }
 
 #[inline]
+fn queue_fail_cache_entry<E>(
+    element: &E,
+    prefixes: &FailCachePrefixIds<E::Impl>,
+    index: usize,
+    result: FailCacheResult,
+    pending: &mut SmallVec<[(E, usize, FailCacheResult); 8]>,
+) where
+    E: Element,
+{
+    if let Some(prefix_id) = prefixes.get(index) {
+        insert_fail_cache_entry(element, prefixes, index, prefix_id, result);
+    } else {
+        pending.push((element.clone(), index, result));
+    }
+}
+
+#[inline]
 fn finish_with_fail_cache<E>(
     element: Option<&E>,
     prefix: Option<(&FailCachePrefixIds<E::Impl>, usize)>,
