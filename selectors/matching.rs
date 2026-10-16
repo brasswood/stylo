@@ -1323,8 +1323,6 @@ where
     };
 
     let mut visited_branch_elements = SmallVec::<[E; 8]>::new();
-    // Preserve a precise later-sibling failure when every candidate miss was cheap.
-    let mut has_strong_candidate_failure = false;
     let mut element = element.clone();
     loop {
         if element.is_link() {
@@ -1337,11 +1335,7 @@ where
         } = next_element_for_combinator(&element, combinator, &context);
         element = match next_element {
             None => {
-                if context.use_fail_caches()
-                    && (candidate_not_found
-                        != SelectorMatchingResult::NotMatchedGlobally
-                        || has_strong_candidate_failure)
-                {
+                if context.use_fail_caches() {
                     cache_branch_failures(
                         &visited_branch_elements,
                         fail_cache_prefix_ids,
@@ -1379,10 +1373,6 @@ where
             result,
             SelectorMatchingResult::Matched | SelectorMatchingResult::Unknown
         ) {
-            has_strong_candidate_failure |= !matches!(
-                result,
-                SelectorMatchingResult::NotMatchedAndRestartFromClosestLaterSibling
-            );
             visited_branch_elements.push(element.clone());
         }
 
@@ -1498,10 +1488,7 @@ where
         if featureless {
             // A featureless element didn't match the selector, we can stop matching now rather
             // than looking at following elements for our combinator.
-            if context.use_fail_caches()
-                && (candidate_not_found != SelectorMatchingResult::NotMatchedGlobally
-                    || has_strong_candidate_failure)
-            {
+            if context.use_fail_caches() {
                 cache_branch_failures(
                     &visited_branch_elements,
                     fail_cache_prefix_ids,
