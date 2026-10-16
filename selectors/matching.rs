@@ -1408,7 +1408,24 @@ where
                     pending_fail_cache_insertions,
                 );
             },
-            SelectorMatchingResult::Unknown | SelectorMatchingResult::NotMatchedGlobally => {
+            SelectorMatchingResult::Unknown => {
+                return finish_with_fail_cache(
+                    fail_cache_target,
+                    active_fail_cache_prefix,
+                    result,
+                    pending_fail_cache_insertions,
+                );
+            },
+            SelectorMatchingResult::NotMatchedGlobally => {
+                if context.use_fail_caches() {
+                    cache_branch_failures(
+                        &visited_branch_elements,
+                        fail_cache_prefix_ids,
+                        next_fail_cache_prefix_index,
+                        result,
+                        pending_fail_cache_insertions,
+                    );
+                }
                 return finish_with_fail_cache(
                     fail_cache_target,
                     active_fail_cache_prefix,
@@ -1444,6 +1461,15 @@ where
                     result,
                     SelectorMatchingResult::NotMatchedAndRestartFromClosestDescendant
                 ) {
+                    if context.use_fail_caches() {
+                        cache_branch_failures(
+                            &visited_branch_elements,
+                            fail_cache_prefix_ids,
+                            next_fail_cache_prefix_index,
+                            result,
+                            pending_fail_cache_insertions,
+                        );
+                    }
                     return finish_with_fail_cache(
                         fail_cache_target,
                         active_fail_cache_prefix,
@@ -1460,7 +1486,7 @@ where
                 // `candidate_not_found`, but it doesn't matter in practice since they don't have
                 // sibling / descendant combinators to the right of them. This hopefully saves one
                 // branch.
-                return finish_with_fail_cache(
+                return finish_with_fail_cache_from_recursive_call(
                     fail_cache_target,
                     active_fail_cache_prefix,
                     result,
@@ -1472,6 +1498,18 @@ where
         if featureless {
             // A featureless element didn't match the selector, we can stop matching now rather
             // than looking at following elements for our combinator.
+            if context.use_fail_caches()
+                && (candidate_not_found != SelectorMatchingResult::NotMatchedGlobally
+                    || has_strong_candidate_failure)
+            {
+                cache_branch_failures(
+                    &visited_branch_elements,
+                    fail_cache_prefix_ids,
+                    next_fail_cache_prefix_index,
+                    candidate_not_found,
+                    pending_fail_cache_insertions,
+                );
+            }
             return finish_with_fail_cache(
                 fail_cache_target,
                 active_fail_cache_prefix,
