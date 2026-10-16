@@ -675,9 +675,9 @@ where
 
 fn cache_branch_failures<E>(
     starting_element: &E,
+    last_visited_element: &E,
     combinator: Combinator,
     visited_count: usize,
-    context: &MatchingContext<E::Impl>,
     prefixes: Option<&FailCachePrefixIds<E::Impl>>,
     index: Option<usize>,
     result: SelectorMatchingResult,
@@ -693,14 +693,41 @@ fn cache_branch_failures<E>(
         return;
     };
 
-    let mut element = starting_element.clone();
-    for _ in 0..visited_count {
-        let Some(next) = next_element_for_combinator(&element, combinator, context).next_element
-        else {
-            break;
-        };
-        element = next;
-        queue_fail_cache_entry(&element, prefixes, index, result, pending);
+    match combinator {
+        Combinator::NextSibling | Combinator::LaterSibling => {
+            let mut element = last_visited_element.clone();
+            for _ in 0..visited_count {
+                queue_fail_cache_entry(&element, prefixes, index, result, pending);
+                let Some(next) = element.next_sibling_element() else {
+                    break;
+                };
+                element = next;
+            }
+        },
+        Combinator::Descendant => {
+            // The element API cannot recover the specific child path from an ancestor, so replay
+            // the bounded walk instead of storing every visited element.
+            let mut element = starting_element.clone();
+            for _ in 0..visited_count {
+                let next = element.parent_element().or_else(|| {
+                    if element.parent_node_is_shadow_root() {
+                        element.containing_shadow_host()
+                    } else {
+                        None
+                    }
+                });
+                let Some(next) = next else {
+                    break;
+                };
+                element = next;
+                queue_fail_cache_entry(&element, prefixes, index, result, pending);
+            }
+        },
+        _ => {
+            for _ in 0..visited_count {
+                queue_fail_cache_entry(last_visited_element, prefixes, index, result, pending);
+            }
+        },
     }
 }
 
@@ -1384,9 +1411,9 @@ where
                 if context.use_fail_caches() {
                     cache_branch_failures(
                         element,
+                        &current_element,
                         combinator,
                         visited_branch_element_count,
-                        context,
                         fail_cache_prefix_ids,
                         next_fail_cache_prefix_index,
                         candidate_not_found,
@@ -1462,9 +1489,9 @@ where
                 if context.use_fail_caches() {
                     cache_branch_failures(
                         element,
+                        &current_element,
                         combinator,
                         visited_branch_element_count,
-                        context,
                         fail_cache_prefix_ids,
                         next_fail_cache_prefix_index,
                         result,
@@ -1515,9 +1542,9 @@ where
                     if context.use_fail_caches() {
                         cache_branch_failures(
                             element,
+                            &current_element,
                             combinator,
                             visited_branch_element_count,
-                            context,
                             fail_cache_prefix_ids,
                             next_fail_cache_prefix_index,
                             result,
@@ -1555,9 +1582,9 @@ where
             if context.use_fail_caches() {
                 cache_branch_failures(
                     element,
+                    &current_element,
                     combinator,
                     visited_branch_element_count,
-                    context,
                     fail_cache_prefix_ids,
                     next_fail_cache_prefix_index,
                     candidate_not_found,
