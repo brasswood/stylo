@@ -75,6 +75,16 @@ impl FailCacheResult {
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct NotMatchedResultCounts {
+    pub fail_cache_global_failures: usize,
+    pub fail_cache_descendant_restarts: usize,
+    pub fail_cache_sibling_restarts: usize,
+    pub classic_global_failures: usize,
+    pub classic_descendant_restarts: usize,
+    pub classic_sibling_restarts: usize,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct FailCache {
     entries: [u16; 8],
     next_insert_index: u8,
