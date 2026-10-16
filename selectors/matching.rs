@@ -1288,16 +1288,18 @@ where
         matches_compound_selector(&mut selector_iter, element, context, rightmost);
 
     let Some(combinator) = selector_iter.next_sequence() else {
+        let result = match matches_compound_selector {
+            KleeneValue::True => SelectorMatchingResult::Matched,
+            KleeneValue::Unknown => SelectorMatchingResult::Unknown,
+            KleeneValue::False => {
+                SelectorMatchingResult::NotMatchedAndRestartFromClosestLaterSibling
+            },
+        };
+        record_classic_not_matched_result(context, result);
         return finish_with_fail_cache(
             fail_cache_target,
             active_fail_cache_prefix,
-            match matches_compound_selector {
-                KleeneValue::True => SelectorMatchingResult::Matched,
-                KleeneValue::Unknown => SelectorMatchingResult::Unknown,
-                KleeneValue::False => {
-                    SelectorMatchingResult::NotMatchedAndRestartFromClosestLaterSibling
-                },
-            },
+            result,
             pending_fail_cache_insertions,
         );
     };
@@ -1308,10 +1310,12 @@ where
     if context.featureless() && !is_pseudo_combinator {
         // A featureless element shouldn't match any further combinator.
         // TODO(emilio): Maybe we could avoid the compound matching more eagerly.
+        let result = SelectorMatchingResult::NotMatchedGlobally;
+        record_classic_not_matched_result(context, result);
         return finish_with_fail_cache(
             fail_cache_target,
             active_fail_cache_prefix,
-            SelectorMatchingResult::NotMatchedGlobally,
+            result,
             pending_fail_cache_insertions,
         );
     }
@@ -1325,10 +1329,12 @@ where
     if matches_compound_selector == KleeneValue::False {
         // We don't short circuit unknown here, since the rest of the selector
         // to the left of this compound may still return false.
+        let result = SelectorMatchingResult::NotMatchedAndRestartFromClosestLaterSibling;
+        record_classic_not_matched_result(context, result);
         return finish_with_fail_cache(
             fail_cache_target,
             active_fail_cache_prefix,
-            SelectorMatchingResult::NotMatchedAndRestartFromClosestLaterSibling,
+            result,
             pending_fail_cache_insertions,
         );
     }
@@ -1374,6 +1380,7 @@ where
                         pending_fail_cache_insertions,
                     );
                 }
+                record_classic_not_matched_result(context, candidate_not_found);
                 return finish_with_fail_cache(
                     fail_cache_target,
                     active_fail_cache_prefix,
@@ -1466,10 +1473,16 @@ where
             },
             Combinator::Child => {
                 // Upgrade the failure status to NotMatchedAndRestartFromClosestDescendant.
+                let upgraded_result =
+                    SelectorMatchingResult::NotMatchedAndRestartFromClosestDescendant;
+                if result != upgraded_result {
+                    // Count a changed restart state, not the same result propagating upward.
+                    record_classic_not_matched_result(context, upgraded_result);
+                }
                 return finish_with_fail_cache(
                     fail_cache_target,
                     active_fail_cache_prefix,
-                    SelectorMatchingResult::NotMatchedAndRestartFromClosestDescendant,
+                    upgraded_result,
                     pending_fail_cache_insertions,
                 );
             },
@@ -1527,6 +1540,7 @@ where
                     pending_fail_cache_insertions,
                 );
             }
+            record_classic_not_matched_result(context, candidate_not_found);
             return finish_with_fail_cache(
                 fail_cache_target,
                 active_fail_cache_prefix,
