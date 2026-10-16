@@ -70,6 +70,7 @@ fn fast_reject<Impl: SelectorImpl>(
     collect_selector_hashes(
         selector.selector.iter(),
         quirks_mode,
+        false,
         &mut hashes,
         &mut len,
         |s| s.iter(),
