@@ -585,15 +585,7 @@ fn insert_fail_cache_entry<E>(
 ) where
     E: Element,
 {
-    let inserted = if prefixes.selector_contains_sibling_combinator() {
-        element.insert_fail_cache_result(prefix_id, result)
-    } else {
-        debug_assert_eq!(
-            result,
-            FailCacheResult::NotMatchedAndRestartFromClosestLaterSibling
-        );
-        element.insert_into_fail_cache(prefix_id)
-    };
+    let inserted = element.insert_fail_cache_result(prefix_id, result);
     if inserted && fail_cache_instrumentation_enabled() {
         record_fail_cache_insertion(element);
         prefixes.record_insertion(index);
@@ -655,17 +647,10 @@ where
     E: Element,
 {
     if let (Some(element), Some((prefixes, index))) = (element, prefix) {
-        let cache_result = if prefixes.selector_contains_sibling_combinator() {
-            fail_cache_result(result).filter(|_| {
-                propagated_from_recursive_call
-                    || result != SelectorMatchingResult::NotMatchedAndRestartFromClosestLaterSibling
-            })
-        } else if result == SelectorMatchingResult::NotMatchedAndRestartFromClosestLaterSibling {
+        let cache_result = fail_cache_result(result).filter(|_| {
             propagated_from_recursive_call
-                .then_some(FailCacheResult::NotMatchedAndRestartFromClosestLaterSibling)
-        } else {
-            None
-        };
+                || result != SelectorMatchingResult::NotMatchedAndRestartFromClosestLaterSibling
+        });
         if let Some(fail_cache_result) = cache_result {
             queue_fail_cache_entry(element, prefixes, index, fail_cache_result, pending);
         }
@@ -685,11 +670,8 @@ fn cache_branch_failures<E>(
 ) where
     E: Element,
 {
-    let (Some(prefixes), Some(index), Some(result)) = (
-        prefixes.filter(|prefixes| prefixes.selector_contains_sibling_combinator()),
-        index,
-        fail_cache_result(result),
-    ) else {
+    let (Some(prefixes), Some(index), Some(result)) = (prefixes, index, fail_cache_result(result))
+    else {
         return;
     };
 
@@ -1305,13 +1287,7 @@ where
         .flatten();
     if let Some((prefixes, index)) = active_fail_cache_prefix {
         if let Some(prefix_id) = prefixes.get(index) {
-            let result = if prefixes.selector_contains_sibling_combinator() {
-                element.fail_cache_result(prefix_id)
-            } else if element.fail_cache_contains(prefix_id) {
-                Some(FailCacheResult::NotMatchedAndRestartFromClosestLaterSibling)
-            } else {
-                None
-            };
+            let result = element.fail_cache_result(prefix_id);
             if let Some(result) = result {
                 context.note_fail_cache_hit();
                 context.note_not_matched_result(result, true);
