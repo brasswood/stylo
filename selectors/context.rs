@@ -449,6 +449,7 @@ where
 
     use_fail_caches: bool,
     fail_cache_hit: bool,
+    not_matched_result_counts: NotMatchedResultCounts,
     classes_and_ids_case_sensitivity: CaseSensitivity,
     _impl: ::std::marker::PhantomData<Impl>,
 }
@@ -510,6 +511,7 @@ where
             selector_caches,
             use_fail_caches: false,
             fail_cache_hit: false,
+            not_matched_result_counts: NotMatchedResultCounts::default(),
             _impl: ::std::marker::PhantomData,
         }
     }
@@ -580,6 +582,16 @@ where
     #[inline]
     pub fn take_fail_cache_hit(&mut self) -> bool {
         ::std::mem::replace(&mut self.fail_cache_hit, false)
+    }
+
+    #[inline]
+    pub fn note_not_matched_result(&mut self, result: FailCacheResult, from_fail_cache: bool) {
+        self.not_matched_result_counts.record(result, from_fail_cache);
+    }
+
+    #[inline]
+    pub fn take_not_matched_result_counts(&mut self) -> NotMatchedResultCounts {
+        ::std::mem::take(&mut self.not_matched_result_counts)
     }
 
     /// Whether or not we're matching to invalidate.
