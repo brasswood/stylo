@@ -174,8 +174,22 @@ impl FailCache {
     pub fn insert_sibling_unchecked(&mut self, id: u16, result: FailCacheResult) -> bool {
         debug_assert_ne!(id, 0, "0 is reserved as the vacant fail-cache entry");
         debug_assert!((FIRST_SIBLING_FAIL_CACHE_PREFIX_ID..=MAX_FAIL_CACHE_PREFIX_ID).contains(&id));
-        if let Some(cached_result) = self.get_sibling(id) {
-            debug_assert_eq!(cached_result, result, "a cached prefix must fail consistently");
+        if let Some(index) = self.entries.iter().position(|entry| *entry >> 2 == id) {
+            let cached_result = FailCacheResult::from_bits(self.entries[index] & 3);
+            let should_upgrade = matches!(
+                (cached_result, result),
+                (
+                    FailCacheResult::NotMatchedAndRestartFromClosestLaterSibling,
+                    FailCacheResult::NotMatchedAndRestartFromClosestDescendant
+                        | FailCacheResult::NotMatchedGlobally
+                ) | (
+                    FailCacheResult::NotMatchedAndRestartFromClosestDescendant,
+                    FailCacheResult::NotMatchedGlobally
+                )
+            );
+            if should_upgrade {
+                self.entries[index] = (id << 2) | result as u16;
+            }
             return false;
         }
         let index = self.next_insert_index as usize;
@@ -732,6 +746,27 @@ mod fail_cache_tests {
         assert!(cache.contains(1));
         assert_eq!(cache.get_sibling(FIRST_SIBLING_FAIL_CACHE_PREFIX_ID), Some(sibling_result));
         assert_eq!(cache.len(), 2);
+    }
+
+    #[test]
+    fn sibling_cache_keeps_the_strongest_restart_result() {
+        let mut cache = FailCache::default();
+        let id = FIRST_SIBLING_FAIL_CACHE_PREFIX_ID;
+        assert!(cache.insert_sibling_unchecked(
+            id,
+            FailCacheResult::NotMatchedAndRestartFromClosestLaterSibling,
+        ));
+        for result in [
+            FailCacheResult::NotMatchedAndRestartFromClosestDescendant,
+            FailCacheResult::NotMatchedGlobally,
+            FailCacheResult::NotMatchedAndRestartFromClosestLaterSibling,
+        ] {
+            assert!(!cache.insert_sibling_unchecked(id, result));
+        }
+        assert_eq!(
+            cache.get_sibling(id),
+            Some(FailCacheResult::NotMatchedGlobally)
+        );
     }
 
     #[test]
