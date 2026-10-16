@@ -187,7 +187,7 @@ pub trait Element: Sized + Clone + Debug {
         false
     }
 
-    /// Returns the cached sibling-aware failure result for this prefix, if present.
+    /// Returns the cached failure result for this prefix, if present.
     fn fail_cache_result(&self, _id: u16) -> Option<FailCacheResult> {
         None
     }
@@ -197,7 +197,7 @@ pub trait Element: Sized + Clone + Debug {
         false
     }
 
-    /// Inserts a sibling-aware failed prefix and its backtracking result.
+    /// Inserts a failed prefix and its backtracking result.
     fn insert_fail_cache_result(&self, _id: u16, _result: FailCacheResult) -> bool {
         false
     }
