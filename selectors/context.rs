@@ -84,6 +84,29 @@ pub struct NotMatchedResultCounts {
     pub classic_sibling_restarts: usize,
 }
 
+impl NotMatchedResultCounts {
+    #[inline]
+    fn record(&mut self, result: FailCacheResult, from_fail_cache: bool) {
+        let count = match (from_fail_cache, result) {
+            (true, FailCacheResult::NotMatchedGlobally) => &mut self.fail_cache_global_failures,
+            (true, FailCacheResult::NotMatchedAndRestartFromClosestDescendant) => {
+                &mut self.fail_cache_descendant_restarts
+            },
+            (true, FailCacheResult::NotMatchedAndRestartFromClosestLaterSibling) => {
+                &mut self.fail_cache_sibling_restarts
+            },
+            (false, FailCacheResult::NotMatchedGlobally) => &mut self.classic_global_failures,
+            (false, FailCacheResult::NotMatchedAndRestartFromClosestDescendant) => {
+                &mut self.classic_descendant_restarts
+            },
+            (false, FailCacheResult::NotMatchedAndRestartFromClosestLaterSibling) => {
+                &mut self.classic_sibling_restarts
+            },
+        };
+        *count += 1;
+    }
+}
+
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct FailCache {
     entries: [u16; 8],
