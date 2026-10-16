@@ -846,7 +846,7 @@ where
         &mut pending_fail_cache_insertions,
     );
     let result = result.into();
-    if result == KleeneValue::False && !context.has_fail_cache_hit() {
+    if result != KleeneValue::Unknown {
         if let Some(prefixes) = fail_cache_prefix_ids {
             flush_pending_fail_cache_entries(pending_fail_cache_insertions, prefixes);
         }
@@ -1322,6 +1322,9 @@ where
         SelectorMatchingResult::NotMatchedGlobally
     };
 
+    let mut visited_branch_elements = SmallVec::<[E; 8]>::new();
+    // Preserve a precise later-sibling failure when every candidate miss was cheap.
+    let mut has_strong_candidate_failure = false;
     let mut element = element.clone();
     loop {
         if element.is_link() {
@@ -1334,12 +1337,25 @@ where
         } = next_element_for_combinator(&element, combinator, &context);
         element = match next_element {
             None => {
+                if context.use_fail_caches()
+                    && (candidate_not_found
+                        != SelectorMatchingResult::NotMatchedGlobally
+                        || has_strong_candidate_failure)
+                {
+                    cache_branch_failures(
+                        &visited_branch_elements,
+                        fail_cache_prefix_ids,
+                        next_fail_cache_prefix_index,
+                        candidate_not_found,
+                        pending_fail_cache_insertions,
+                    );
+                }
                 return finish_with_fail_cache(
                     fail_cache_target,
                     active_fail_cache_prefix,
                     candidate_not_found,
                     pending_fail_cache_insertions,
-                )
+                );
             },
             Some(e) => e,
         };
@@ -1358,6 +1374,17 @@ where
                 )
             })
         });
+
+        if !matches!(
+            result,
+            SelectorMatchingResult::Matched | SelectorMatchingResult::Unknown
+        ) {
+            has_strong_candidate_failure |= !matches!(
+                result,
+                SelectorMatchingResult::NotMatchedAndRestartFromClosestLaterSibling
+            );
+            visited_branch_elements.push(element.clone());
+        }
 
         // Return the status immediately if it is one of the global states.
         match result {
