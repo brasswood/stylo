@@ -697,6 +697,44 @@ where
     Some(duration)
 }
 
+impl SelectorMap<UniversalBucketRule> {
+    /// Finds universal-bucket rules whose activator matches this element.
+    pub fn get_matching_universal_bucket_rules<'selectormap, E>(
+        &'selectormap self,
+        element: E,
+        element_depth: usize,
+        bless_list: &mut SmallVec<[(&'selectormap UniversalBucketRule, usize); 16]>,
+        matching_context: &mut MatchingContext<E::Impl>,
+    ) -> Statistics
+    where
+        E: SelectorMapElement + StyleSharingElement,
+    {
+        let start = Start::now();
+        let mut matching_time = tsc_timer::Duration::from_cycles(0);
+        let mut hits = 0;
+        let mut stats = Statistics::default();
+        let mut seen: SmallVec<[&UniversalBucketRule; 4]> = SmallVec::new();
+        self.lookup(element, matching_context.quirks_mode(), None, |entry| {
+            if let Some(duration) = try_bless_universal_bucket_rule(
+                entry,
+                element,
+                element_depth,
+                bless_list,
+                &mut seen,
+                matching_context,
+            ) {
+                hits += 1;
+                matching_time += duration;
+            }
+            true
+        });
+        stats.times._time_inside_buckets = matching_time;
+        stats.times.querying_selector_map = start.elapsed() - matching_time;
+        stats.counts.selector_map_hits = hits;
+        stats
+    }
+}
+
 impl<T: SelectorMapEntry> SelectorMap<T> {
     /// Inserts an entry into the correct bucket(s).
     pub fn insert(&mut self, entry: T, quirks_mode: QuirksMode) -> Result<(), AllocErr> {
