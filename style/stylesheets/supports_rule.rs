@@ -335,6 +335,7 @@ impl RawSelector {
                     stylesheet_origin: context.stylesheet_origin,
                     url_data: context.url_data,
                     for_supports_rule: true,
+                    allow_has: context.allow_has,
                 };
 
                 Selector::<SelectorImpl>::parse(&parser, input)

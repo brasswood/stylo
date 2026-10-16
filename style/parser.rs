@@ -84,6 +84,8 @@ pub struct ParserContext<'a> {
     pub namespaces: Cow<'a, Namespaces>,
     /// The use counters we want to record while parsing style rules, if any.
     pub use_counters: Option<&'a UseCounters>,
+    /// Whether selectors in this stylesheet may use `:has()`.
+    pub allow_has: bool,
     /// Current nesting context.
     pub nesting_context: NestingContext,
 }
@@ -109,6 +111,7 @@ impl<'a> ParserContext<'a> {
             error_reporter,
             namespaces,
             use_counters,
+            allow_has: false,
             nesting_context: NestingContext::new_from_rule(rule_type),
         }
     }

@@ -133,6 +133,7 @@ fn parse_scope<'a>(
                 namespaces: &context.namespaces,
                 url_data: context.url_data,
                 for_supports_rule: false,
+                allow_has: context.allow_has,
             };
             let parse_relative = if for_end {
                 ParseRelative::ForScope
