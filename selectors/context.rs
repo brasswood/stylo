@@ -780,7 +780,7 @@ where
 #[cfg(test)]
 mod fail_cache_tests {
     use super::{
-        FailCache, FailCacheResult, FIRST_SIBLING_FAIL_CACHE_PREFIX_ID,
+        FailCache, FailCacheResult, NotMatchedResultCounts, FIRST_SIBLING_FAIL_CACHE_PREFIX_ID,
         MAX_FAIL_CACHE_PREFIX_ID, MAX_NON_SIBLING_FAIL_CACHE_PREFIX_ID,
     };
 
@@ -800,6 +800,37 @@ mod fail_cache_tests {
         cache.insert_unchecked(1);
         assert!(!cache.contains(2));
         assert!((1..=9).filter(|id| *id != 2).all(|id| cache.contains(id)));
+    }
+
+    #[test]
+    fn not_matched_counts_separate_result_types_and_origins() {
+        let mut counts = NotMatchedResultCounts::default();
+        for result in [
+            FailCacheResult::NotMatchedGlobally,
+            FailCacheResult::NotMatchedAndRestartFromClosestDescendant,
+            FailCacheResult::NotMatchedAndRestartFromClosestLaterSibling,
+        ] {
+            counts.record(result, true);
+            counts.record(result, false);
+        }
+
+        let expected = NotMatchedResultCounts {
+            fail_cache_global_failures: 1,
+            fail_cache_descendant_restarts: 1,
+            fail_cache_sibling_restarts: 1,
+            classic_global_failures: 1,
+            classic_descendant_restarts: 1,
+            classic_sibling_restarts: 1,
+        };
+        assert_eq!(counts, expected);
+        assert_eq!(counts + expected, NotMatchedResultCounts {
+            fail_cache_global_failures: 2,
+            fail_cache_descendant_restarts: 2,
+            fail_cache_sibling_restarts: 2,
+            classic_global_failures: 2,
+            classic_descendant_restarts: 2,
+            classic_sibling_restarts: 2,
+        });
     }
 
     #[test]
