@@ -283,6 +283,7 @@ impl SelectorMap<Rule> {
             cascade_data,
             stylist,
             false,
+            false,
             debug_html_str,
         )
     }
@@ -304,6 +305,7 @@ impl SelectorMap<Rule> {
         cascade_data: &CascadeData,
         stylist: &Stylist,
         skip_universal_tails: bool,
+        skip_universal_buckets: bool,
         debug_html_str: Option<&str>,
     ) -> Statistics
     where
@@ -484,6 +486,22 @@ impl SelectorMap<Rule> {
             stats += SelectorMap::get_matching_rules(
                 element,
                 &self.universal_tails,
+                matching_rules_list,
+                matching_selectors.as_deref_mut(),
+                selector_stats.as_deref_mut(),
+                matching_context,
+                cascade_level,
+                cascade_data,
+                stylist,
+                false,
+                debug_html_str,
+            );
+        }
+        if !skip_universal_buckets {
+            hits += self.universal_buckets.len();
+            stats += SelectorMap::get_matching_rules(
+                element,
+                &self.universal_buckets,
                 matching_rules_list,
                 matching_selectors.as_deref_mut(),
                 selector_stats.as_deref_mut(),
@@ -702,6 +720,9 @@ impl<T: SelectorMapEntry> SelectorMap<T> {
                     Bucket::Universal if $entry.is_universal_tail() => {
                         Some(&mut self.universal_tails)
                     },
+                    Bucket::Universal if $entry.is_universal_bucket_rule() => {
+                        Some(&mut self.universal_buckets)
+                    },
                     Bucket::Universal => Some(&mut self.other),
                     Bucket::None => None,
                 } {
@@ -874,6 +895,12 @@ impl<T: SelectorMapEntry> SelectorMap<T> {
         }
 
         for entry in self.other.iter() {
+            if !f(&entry) {
+                return false;
+            }
+        }
+
+        for entry in self.universal_buckets.iter() {
             if !f(&entry) {
                 return false;
             }
