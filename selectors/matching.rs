@@ -598,20 +598,47 @@ fn finish_with_fail_cache<E>(
 where
     E: Element,
 {
+    finish_with_fail_cache_inner(element, prefix, result, false, pending)
+}
+
+#[inline]
+fn finish_with_fail_cache_from_recursive_call<E>(
+    element: Option<&E>,
+    prefix: Option<(&FailCachePrefixIds<E::Impl>, usize)>,
+    result: SelectorMatchingResult,
+    pending: &mut SmallVec<[(E, usize, FailCacheResult); 8]>,
+) -> SelectorMatchingResult
+where
+    E: Element,
+{
+    finish_with_fail_cache_inner(element, prefix, result, true, pending)
+}
+
+#[inline]
+fn finish_with_fail_cache_inner<E>(
+    element: Option<&E>,
+    prefix: Option<(&FailCachePrefixIds<E::Impl>, usize)>,
+    result: SelectorMatchingResult,
+    propagated_from_recursive_call: bool,
+    pending: &mut SmallVec<[(E, usize, FailCacheResult); 8]>,
+) -> SelectorMatchingResult
+where
+    E: Element,
+{
     if let (Some(element), Some((prefixes, index))) = (element, prefix) {
         let cache_result = if prefixes.selector_contains_sibling_combinator() {
-            fail_cache_result(result)
+            fail_cache_result(result).filter(|_| {
+                propagated_from_recursive_call
+                    || result != SelectorMatchingResult::NotMatchedAndRestartFromClosestLaterSibling
+            })
         } else if result == SelectorMatchingResult::NotMatchedAndRestartFromClosestLaterSibling {
-            Some(FailCacheResult::NotMatchedAndRestartFromClosestLaterSibling)
+            propagated_from_recursive_call
+                .then_some(FailCacheResult::NotMatchedAndRestartFromClosestLaterSibling)
         } else {
             None
         };
         if let Some(fail_cache_result) = cache_result {
-            if let Some(prefix_id) = prefixes.get(index) {
-                insert_fail_cache_entry(element, prefixes, index, prefix_id, fail_cache_result);
-            } else {
-                pending.push((element.clone(), index, fail_cache_result));
-            }
+            queue_fail_cache_entry(element, prefixes, index, fail_cache_result, pending);
         }
     }
     result
