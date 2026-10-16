@@ -1106,16 +1106,18 @@ where
         matches_compound_selector(&mut selector_iter, element, context, rightmost);
 
     let Some(combinator) = selector_iter.next_sequence() else {
+        let result = match matches_compound_selector {
+            KleeneValue::True => SelectorMatchingResult::Matched,
+            KleeneValue::Unknown => SelectorMatchingResult::Unknown,
+            KleeneValue::False => {
+                SelectorMatchingResult::NotMatchedAndRestartFromClosestLaterSibling
+            },
+        };
+        record_classic_not_matched_result(context, result);
         return finish_with_fail_cache(
             fail_cache_target,
             active_fail_cache_prefix_id,
-            match matches_compound_selector {
-                KleeneValue::True => SelectorMatchingResult::Matched,
-                KleeneValue::Unknown => SelectorMatchingResult::Unknown,
-                KleeneValue::False => {
-                    SelectorMatchingResult::NotMatchedAndRestartFromClosestLaterSibling
-                },
-            },
+            result,
         );
     };
     let (next_fail_cache_prefix_id, remaining_fail_cache_prefix_ids) =
@@ -1125,6 +1127,7 @@ where
     if context.featureless() && !is_pseudo_combinator {
         // A featureless element shouldn't match any further combinator.
         // TODO(emilio): Maybe we could avoid the compound matching more eagerly.
+        record_classic_not_matched_result(context, SelectorMatchingResult::NotMatchedGlobally);
         return finish_with_fail_cache(
             fail_cache_target,
             active_fail_cache_prefix_id,
@@ -1141,6 +1144,10 @@ where
     if matches_compound_selector == KleeneValue::False {
         // We don't short circuit unknown here, since the rest of the selector
         // to the left of this compound may still return false.
+        record_classic_not_matched_result(
+            context,
+            SelectorMatchingResult::NotMatchedAndRestartFromClosestLaterSibling,
+        );
         return finish_with_fail_cache(
             fail_cache_target,
             active_fail_cache_prefix_id,
@@ -1179,6 +1186,7 @@ where
         } = next_element_for_combinator(&element, combinator, &context);
         element = match next_element {
             None => {
+                record_classic_not_matched_result(context, candidate_not_found);
                 return finish_with_fail_cache(
                     fail_cache_target,
                     active_fail_cache_prefix_id,
@@ -1242,10 +1250,15 @@ where
             },
             Combinator::Child => {
                 // Upgrade the failure status to NotMatchedAndRestartFromClosestDescendant.
+                let upgraded_result =
+                    SelectorMatchingResult::NotMatchedAndRestartFromClosestDescendant;
+                if result != upgraded_result {
+                    record_classic_not_matched_result(context, upgraded_result);
+                }
                 return finish_with_fail_cache(
                     fail_cache_target,
                     active_fail_cache_prefix_id,
-                    SelectorMatchingResult::NotMatchedAndRestartFromClosestDescendant,
+                    upgraded_result,
                 );
             },
             Combinator::LaterSibling => {
@@ -1282,6 +1295,7 @@ where
         if featureless {
             // A featureless element didn't match the selector, we can stop matching now rather
             // than looking at following elements for our combinator.
+            record_classic_not_matched_result(context, candidate_not_found);
             return finish_with_fail_cache(
                 fail_cache_target,
                 active_fail_cache_prefix_id,
