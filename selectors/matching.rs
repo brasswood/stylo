@@ -114,6 +114,9 @@ pub struct ScopeProximityStats {
     pub time_fail_cache_rejecting: Duration,
     pub time_slow_rejecting: Duration,
     pub time_slow_accepting: Duration,
+    pub not_matched_result_counts: NotMatchedResultCounts,
+    pub slow_reject_not_matched_result_counts: NotMatchedResultCounts,
+    pub fail_cache_reject_not_matched_result_counts: NotMatchedResultCounts,
 }
 
 impl AddAssign<BloomQueryStats> for ScopeProximityStats {
@@ -122,6 +125,13 @@ impl AddAssign<BloomQueryStats> for ScopeProximityStats {
         self.fail_cache_rejects += usize::from(rhs.time_fail_cache_rejecting.is_some());
         self.slow_rejects += usize::from(rhs.time_slow_rejecting.is_some());
         self.slow_accepts += usize::from(rhs.time_slow_accepting.is_some());
+        self.not_matched_result_counts += rhs.not_matched_result_counts;
+        if rhs.time_slow_rejecting.is_some() {
+            self.slow_reject_not_matched_result_counts += rhs.not_matched_result_counts;
+        }
+        if rhs.time_fail_cache_rejecting.is_some() {
+            self.fail_cache_reject_not_matched_result_counts += rhs.not_matched_result_counts;
+        }
         self.time_fast_rejecting += rhs.time_fast_rejecting.unwrap_or_default();
         self.time_fail_cache_rejecting += rhs.time_fail_cache_rejecting.unwrap_or_default();
         self.time_slow_rejecting += rhs.time_slow_rejecting.unwrap_or_default();
@@ -136,6 +146,7 @@ pub struct BloomQueryStats {
     pub time_fail_cache_rejecting: Option<Duration>,
     pub time_slow_rejecting: Option<Duration>,
     pub time_slow_accepting: Option<Duration>,
+    pub not_matched_result_counts: NotMatchedResultCounts,
 }
 
 /// A struct for returning statistics
@@ -158,6 +169,12 @@ pub struct CountingStats {
     pub fast_rejects: usize,
     /// Number of rejects from a fail cache
     pub fail_cache_rejects: usize,
+    pub fail_cache_global_failures: usize,
+    pub fail_cache_descendant_restarts: usize,
+    pub fail_cache_sibling_restarts: usize,
+    pub classic_global_failures: usize,
+    pub classic_descendant_restarts: usize,
+    pub classic_sibling_restarts: usize,
     /// Number of slow rejects from the bloom filter
     pub slow_rejects: usize,
     /// Number of slow accepts
@@ -199,6 +216,12 @@ impl AddAssign<BloomQueryStats> for Statistics {
         self.counts.fail_cache_rejects += usize::from(rhs.time_fail_cache_rejecting.is_some());
         self.counts.slow_rejects += usize::from(rhs.time_slow_rejecting.is_some());
         self.counts.slow_accepts += usize::from(rhs.time_slow_accepting.is_some());
+        self.counts.fail_cache_global_failures += rhs.not_matched_result_counts.fail_cache_global_failures;
+        self.counts.fail_cache_descendant_restarts += rhs.not_matched_result_counts.fail_cache_descendant_restarts;
+        self.counts.fail_cache_sibling_restarts += rhs.not_matched_result_counts.fail_cache_sibling_restarts;
+        self.counts.classic_global_failures += rhs.not_matched_result_counts.classic_global_failures;
+        self.counts.classic_descendant_restarts += rhs.not_matched_result_counts.classic_descendant_restarts;
+        self.counts.classic_sibling_restarts += rhs.not_matched_result_counts.classic_sibling_restarts;
         self.times.fast_rejecting += rhs.time_fast_rejecting.unwrap_or_default();
         self.times.fail_cache_rejecting += rhs.time_fail_cache_rejecting.unwrap_or_default();
         self.times.slow_rejecting += rhs.time_slow_rejecting.unwrap_or_default();
@@ -212,6 +235,12 @@ impl AddAssign<ScopeProximityStats> for Statistics {
         self.counts.fail_cache_rejects += rhs.fail_cache_rejects;
         self.counts.slow_rejects += rhs.slow_rejects;
         self.counts.slow_accepts += rhs.slow_accepts;
+        self.counts.fail_cache_global_failures += rhs.not_matched_result_counts.fail_cache_global_failures;
+        self.counts.fail_cache_descendant_restarts += rhs.not_matched_result_counts.fail_cache_descendant_restarts;
+        self.counts.fail_cache_sibling_restarts += rhs.not_matched_result_counts.fail_cache_sibling_restarts;
+        self.counts.classic_global_failures += rhs.not_matched_result_counts.classic_global_failures;
+        self.counts.classic_descendant_restarts += rhs.not_matched_result_counts.classic_descendant_restarts;
+        self.counts.classic_sibling_restarts += rhs.not_matched_result_counts.classic_sibling_restarts;
         self.times.fast_rejecting += rhs.time_fast_rejecting;
         self.times.fail_cache_rejecting += rhs.time_fail_cache_rejecting;
         self.times.slow_rejecting += rhs.time_slow_rejecting;
