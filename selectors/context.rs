@@ -57,7 +57,7 @@ pub enum FailCacheResult {
     NotMatchedAndRestartFromClosestLaterSibling,
 }
 
-/// Reserve disjoint id ranges for legacy and sibling-aware cache entries.
+/// Reserve disjoint id ranges for non-sibling and sibling selector prefixes.
 pub const MAX_NON_SIBLING_FAIL_CACHE_PREFIX_ID: u16 = 0x0fff;
 pub const FIRST_SIBLING_FAIL_CACHE_PREFIX_ID: u16 = MAX_NON_SIBLING_FAIL_CACHE_PREFIX_ID + 1;
 pub const MAX_FAIL_CACHE_PREFIX_ID: u16 = u16::MAX >> 2;
@@ -122,7 +122,7 @@ impl FailCache {
     #[inline]
     pub fn get_sibling(&self, id: u16) -> Option<FailCacheResult> {
         debug_assert_ne!(id, 0, "0 is reserved as the vacant fail-cache entry");
-        debug_assert!(id >= FIRST_SIBLING_FAIL_CACHE_PREFIX_ID);
+        debug_assert!(id <= MAX_FAIL_CACHE_PREFIX_ID);
         #[cfg(target_arch = "x86_64")]
         {
             use std::arch::x86_64::{
@@ -173,7 +173,7 @@ impl FailCache {
     #[inline]
     pub fn insert_sibling_unchecked(&mut self, id: u16, result: FailCacheResult) -> bool {
         debug_assert_ne!(id, 0, "0 is reserved as the vacant fail-cache entry");
-        debug_assert!((FIRST_SIBLING_FAIL_CACHE_PREFIX_ID..=MAX_FAIL_CACHE_PREFIX_ID).contains(&id));
+        debug_assert!(id <= MAX_FAIL_CACHE_PREFIX_ID);
         if let Some(index) = self.entries.iter().position(|entry| *entry >> 2 == id) {
             let cached_result = FailCacheResult::from_bits(self.entries[index] & 3);
             let should_upgrade = matches!(
@@ -749,24 +749,22 @@ mod fail_cache_tests {
     }
 
     #[test]
-    fn sibling_cache_keeps_the_strongest_restart_result() {
+    fn result_cache_keeps_the_strongest_restart_result_for_all_prefix_ids() {
         let mut cache = FailCache::default();
-        let id = FIRST_SIBLING_FAIL_CACHE_PREFIX_ID;
-        assert!(cache.insert_sibling_unchecked(
-            id,
-            FailCacheResult::NotMatchedAndRestartFromClosestLaterSibling,
-        ));
-        for result in [
-            FailCacheResult::NotMatchedAndRestartFromClosestDescendant,
-            FailCacheResult::NotMatchedGlobally,
-            FailCacheResult::NotMatchedAndRestartFromClosestLaterSibling,
-        ] {
-            assert!(!cache.insert_sibling_unchecked(id, result));
+        for id in [1, FIRST_SIBLING_FAIL_CACHE_PREFIX_ID] {
+            assert!(cache.insert_sibling_unchecked(
+                id,
+                FailCacheResult::NotMatchedAndRestartFromClosestLaterSibling,
+            ));
+            for result in [
+                FailCacheResult::NotMatchedAndRestartFromClosestDescendant,
+                FailCacheResult::NotMatchedGlobally,
+                FailCacheResult::NotMatchedAndRestartFromClosestLaterSibling,
+            ] {
+                assert!(!cache.insert_sibling_unchecked(id, result));
+            }
+            assert_eq!(cache.get_sibling(id), Some(FailCacheResult::NotMatchedGlobally));
         }
-        assert_eq!(
-            cache.get_sibling(id),
-            Some(FailCacheResult::NotMatchedGlobally)
-        );
     }
 
     #[test]
