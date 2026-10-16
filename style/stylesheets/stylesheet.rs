@@ -533,8 +533,35 @@ impl Stylesheet {
         quirks_mode: QuirksMode,
         allow_import_rules: AllowImportRules,
     ) -> Self {
+        Self::from_str_with_has(
+            css,
+            url_data,
+            origin,
+            media,
+            shared_lock,
+            stylesheet_loader,
+            error_reporter,
+            quirks_mode,
+            allow_import_rules,
+            false,
+        )
+    }
+
+    /// Creates and parses a stylesheet, optionally allowing `:has()` selectors.
+    pub fn from_str_with_has(
+        css: &str,
+        url_data: UrlExtraData,
+        origin: Origin,
+        media: Arc<Locked<MediaList>>,
+        shared_lock: SharedRwLock,
+        stylesheet_loader: Option<&dyn StylesheetLoader>,
+        error_reporter: Option<&dyn ParseErrorReporter>,
+        quirks_mode: QuirksMode,
+        allow_import_rules: AllowImportRules,
+        allow_has: bool,
+    ) -> Self {
         // FIXME: Consider adding use counters to Servo?
-        let contents = StylesheetContents::from_str(
+        let contents = StylesheetContents::from_str_with_has(
             css,
             url_data,
             origin,
@@ -543,6 +570,7 @@ impl Stylesheet {
             error_reporter,
             quirks_mode,
             allow_import_rules,
+            allow_has,
             /* sanitized_output = */ None,
         );
 
