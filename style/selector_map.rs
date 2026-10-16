@@ -13,7 +13,7 @@ use crate::sharing::StyleSharingElement;
 use crate::rule_tree::CascadeLevel;
 use crate::selector_parser::SelectorImpl;
 use crate::stylesheets::scope_rule::ImplicitScopeRoot;
-use crate::stylist::{CascadeData, ContainerConditionId, Rule, ScopeConditionId, Stylist, UniversalTailRule};
+use crate::stylist::{CascadeData, ContainerConditionId, Rule, ScopeConditionId, Stylist, UniversalBucketRule, UniversalTailRule};
 use crate::AllocErr;
 use crate::values::AtomIdent;
 use crate::values::computed::Display;
@@ -79,6 +79,11 @@ pub trait SelectorMapEntry: Sized + Clone {
 
     /// Whether this entry should be held out of ordinary universal lookups.
     fn is_universal_tail(&self) -> bool {
+        false
+    }
+
+    /// Whether this universal-bucket entry can be tested through a bless list.
+    fn is_universal_bucket_rule(&self) -> bool {
         false
     }
 }
@@ -182,6 +187,8 @@ pub struct SelectorMap<T: 'static> {
     pub other: SmallVec<[T; 1]>,
     /// Universal-tail rules that callers may handle through a separate index.
     pub universal_tails: SmallVec<[T; 1]>,
+    /// Universal-bucket rules that callers may handle through a separate index.
+    pub universal_buckets: SmallVec<[T; 1]>,
     /// The number of entries in this map.
     pub count: usize,
 }
@@ -207,6 +214,7 @@ impl<T> SelectorMap<T> {
             rare_pseudo_classes: SmallVec::new(),
             other: SmallVec::new(),
             universal_tails: SmallVec::new(),
+            universal_buckets: SmallVec::new(),
             count: 0,
         }
     }
@@ -231,6 +239,7 @@ impl<T> SelectorMap<T> {
         self.rare_pseudo_classes.clear();
         self.other.clear();
         self.universal_tails.clear();
+        self.universal_buckets.clear();
         self.count = 0;
     }
 
@@ -1090,6 +1099,16 @@ fn find_bucket<'a>(
     }
 
     current_bucket
+}
+
+pub(crate) fn is_universal_bucket_selector(selector: &Selector<SelectorImpl>) -> bool {
+    let mut disjoint_buckets = SmallVec::new();
+    let bucket = find_bucket(selector.iter(), &mut disjoint_buckets);
+    matches!(bucket, Bucket::Universal)
+        && (disjoint_buckets.is_empty()
+            || !disjoint_buckets
+                .iter()
+                .all(|candidate| candidate.more_specific_than(&bucket)))
 }
 
 /// Wrapper for PrecomputedHashMap that does ASCII-case-insensitive lookup in quirks mode.
