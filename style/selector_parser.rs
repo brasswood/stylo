@@ -49,6 +49,8 @@ pub struct SelectorParser<'a> {
     pub url_data: &'a UrlExtraData,
     /// Whether we're parsing selectors for `@supports`
     pub for_supports_rule: bool,
+    /// Whether this parser accepts the `:has()` pseudo-class.
+    pub allow_has: bool,
 }
 
 impl<'a> SelectorParser<'a> {
@@ -60,12 +62,22 @@ impl<'a> SelectorParser<'a> {
         input: &'i str,
         url_data: &UrlExtraData,
     ) -> Result<SelectorList<SelectorImpl>, ParseError<'i>> {
+        Self::parse_author_origin_no_namespace_with_has(input, url_data, false)
+    }
+
+    /// Parse a selector list with an author origin, optionally allowing `:has()`.
+    pub fn parse_author_origin_no_namespace_with_has<'i>(
+        input: &'i str,
+        url_data: &UrlExtraData,
+        allow_has: bool,
+    ) -> Result<SelectorList<SelectorImpl>, ParseError<'i>> {
         let namespaces = Namespaces::default();
         let parser = SelectorParser {
             stylesheet_origin: Origin::Author,
             namespaces: &namespaces,
             url_data,
             for_supports_rule: false,
+            allow_has,
         };
         let mut input = ParserInput::new(input);
         SelectorList::parse(&parser, &mut CssParser::new(&mut input), ParseRelative::No)

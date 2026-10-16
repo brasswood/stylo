@@ -1010,6 +1010,7 @@ impl<'a, 'i> QualifiedRuleParser<'i> for NestedRuleParser<'a, 'i> {
             namespaces: &self.context.namespaces,
             url_data: self.context.url_data,
             for_supports_rule: false,
+            allow_has: self.context.allow_has,
         };
         SelectorList::parse(&selector_parser, input, self.parse_relative())
     }
