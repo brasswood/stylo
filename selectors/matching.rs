@@ -463,6 +463,7 @@ pub fn matches_selector_at_offset_as_subject<E>(
 where
     E: Element,
 {
+    context.take_not_matched_result_counts();
     let start = Start::now();
     let does_match = matches_complex_selector(
         selector.iter_from(offset),
@@ -472,6 +473,7 @@ where
         SubjectOrPseudoElement::Yes,
     );
     let duration = start.elapsed();
+    let not_matched_result_counts = context.take_not_matched_result_counts();
     let matched = does_match == KleeneValue::True;
     (
         does_match.to_bool(true),
@@ -480,6 +482,7 @@ where
             time_fail_cache_rejecting: None,
             time_slow_rejecting: (!matched).then_some(duration),
             time_slow_accepting: matched.then_some(duration),
+            not_matched_result_counts,
         },
     )
 }
@@ -499,6 +502,7 @@ where
     E: Element,
 {
     context.take_fail_cache_hit();
+    context.take_not_matched_result_counts();
     // Use the bloom filter to fast-reject.
     if let Some(hashes) = hashes {
         if let Some(filter) = context.bloom_filter {
@@ -508,9 +512,7 @@ where
             if !may_match {
                 return (KleeneValue::False, BloomQueryStats {
                     time_fast_rejecting: Some(fast_reject_duration),
-                    time_fail_cache_rejecting: None,
-                    time_slow_rejecting: None,
-                    time_slow_accepting: None,
+                    ..BloomQueryStats::default()
                 });
             }
         }
@@ -529,6 +531,7 @@ where
     );
     let slow_match_duration = start.elapsed();
     let fail_cache_reject = context.take_fail_cache_hit() && does_match == KleeneValue::False;
+    let not_matched_result_counts = context.take_not_matched_result_counts();
     let is_slow_accept = does_match == KleeneValue::True;
     let is_slow_reject = does_match == KleeneValue::False && !fail_cache_reject;
     if is_slow_reject && fail_cache_instrumentation_enabled() {
@@ -543,6 +546,7 @@ where
             time_fail_cache_rejecting: fail_cache_reject.then_some(slow_match_duration),
             time_slow_rejecting: is_slow_reject.then_some(slow_match_duration),
             time_slow_accepting: is_slow_accept.then_some(slow_match_duration),
+            not_matched_result_counts,
         }
     )
 }
