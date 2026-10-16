@@ -3983,7 +3983,8 @@ impl CascadeData {
             if !cacheable_prefix_combinators(std::iter::once(combinator)) {
                 break;
             }
-            let prefix_length = selector.len() - next_offset;
+            // Include the combinator so the cached prefix records where matching resumes.
+            let prefix_length = selector.len() - next_offset + 1;
             let prefix = fail_cache_prefix_components(
                 selector.iter_raw_match_order().as_slice(),
                 prefix_length,
@@ -5249,7 +5250,11 @@ pub fn needs_revalidation_for_testing(s: &Selector<SelectorImpl>) -> bool {
 
 #[cfg(test)]
 mod fail_cache_tests {
-    use super::{cacheable_prefix_combinators, fail_cache_prefix_components};
+    use super::{
+        cacheable_prefix_combinators, fail_cache_prefix_components, CascadeData, Component,
+    };
+    use crate::selector_parser::SelectorParser;
+    use crate::stylesheets::UrlExtraData;
     use selectors::parser::Combinator;
 
     #[test]
@@ -5259,13 +5264,42 @@ mod fail_cache_tests {
             fail_cache_prefix_components(&match_order, 2),
             ["ancestor", "class"],
         );
-        assert!(cacheable_prefix_combinators(std::iter::empty::<Combinator>()));
+        assert!(cacheable_prefix_combinators(
+            std::iter::empty::<Combinator>()
+        ));
         assert!(cacheable_prefix_combinators(
             [Combinator::Child, Combinator::Descendant].into_iter(),
         ));
         assert!(cacheable_prefix_combinators(
             [Combinator::NextSibling, Combinator::LaterSibling].into_iter(),
         ));
-        assert!(!cacheable_prefix_combinators([Combinator::PseudoElement].into_iter()));
+        assert!(!cacheable_prefix_combinators(
+            [Combinator::PseudoElement].into_iter()
+        ));
+    }
+
+    #[test]
+    fn cacheable_prefixes_include_their_trailing_combinator() {
+        let url_data = UrlExtraData::from(url::Url::parse("about:blank").unwrap());
+        let selector = SelectorParser::parse_author_origin_no_namespace("a ~ b ~ c", &url_data)
+            .unwrap()
+            .slice()[0]
+            .clone();
+        let mut data = CascadeData::new();
+        let prefixes = data.fail_cache_prefix_ids_for_selector(&selector).unwrap();
+        prefixes[0].get_or_intern(0).unwrap();
+        prefixes[0].get_or_intern(1).unwrap();
+
+        let entries = data.fail_cache_prefix_ids.entries.lock().unwrap();
+        let mut prefix_lengths: Vec<_> = entries.ids.keys().map(|(prefix, _)| prefix.1).collect();
+        assert!(entries.ids.keys().all(|(prefix, _)| {
+            prefix
+                .components()
+                .first()
+                .and_then(Component::as_combinator)
+                == Some(Combinator::LaterSibling)
+        }));
+        prefix_lengths.sort_unstable();
+        assert_eq!(prefix_lengths, [2, 4]);
     }
 }
