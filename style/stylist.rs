@@ -5099,6 +5099,41 @@ impl SelectorMapEntry for UniversalTailRule {
     }
 }
 
+/// A universal-bucket rule indexed by the compound immediately to its left.
+#[derive(Clone, Debug, MallocSizeOf)]
+pub struct UniversalBucketRule {
+    /// The original style rule.
+    pub rule: Rule,
+    pub(crate) activation_offset: usize,
+    pub(crate) matches_descendants: bool,
+}
+
+impl UniversalBucketRule {
+    fn new(rule: Rule, activation_offset: usize, matches_descendants: bool) -> Self {
+        Self {
+            rule,
+            activation_offset,
+            matches_descendants,
+        }
+    }
+
+    /// Returns the original selector represented by this entry.
+    pub fn selector(&self) -> &Selector<SelectorImpl> {
+        &self.rule.selector
+    }
+
+    /// Returns whether the entry remains active below the activating element.
+    pub fn matches_descendants(&self) -> bool {
+        self.matches_descendants
+    }
+}
+
+impl SelectorMapEntry for UniversalBucketRule {
+    fn selector(&self) -> SelectorIter<'_, SelectorImpl> {
+        self.rule.selector.iter_from(self.activation_offset)
+    }
+}
+
 // The size of this is critical to performance on the bloom-basic
 // microbenchmark.
 // When iterating over a large Rule array, we want to be able to fast-reject
