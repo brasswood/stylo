@@ -30,7 +30,7 @@ use crate::properties_and_values::registry::{
 use crate::rule_cache::{RuleCache, RuleCacheConditions};
 use crate::rule_collector::RuleCollector;
 use crate::rule_tree::{CascadeLevel, RuleTree, StrongRuleNode, StyleSource};
-use crate::selector_map::{PrecomputedHashMap, PrecomputedHashSet, SelectorMap, SelectorMapElement, SelectorMapEntry};
+use crate::selector_map::{is_universal_bucket_selector, PrecomputedHashMap, PrecomputedHashSet, SelectorMap, SelectorMapElement, SelectorMapEntry};
 use crate::selector_parser::{
     NonTSPseudoClass, PerPseudoElementMap, PseudoElement, SelectorImpl, SnapshotMap,
 };
@@ -3135,6 +3135,9 @@ pub struct CascadeData {
     /// Rules with descendant-universal tails, indexed by their activator.
     universal_tail_rules: SelectorMap<UniversalTailRule>,
 
+    /// Universal-bucket rules that can be activated by a matching ancestor.
+    universal_bucket_rules: SelectorMap<UniversalBucketRule>,
+
     /// The `:host` pseudo rules that are the rightmost selector (without
     /// accounting for pseudo-elements), or `:scope` rules that may match
     /// the featureless host.
@@ -3416,6 +3419,7 @@ impl CascadeData {
             fail_cache_entry_build_time: tsc_timer::Duration::from_cycles(0),
             normal_rules: ElementAndPseudoRules::default(),
             universal_tail_rules: SelectorMap::new(),
+            universal_bucket_rules: SelectorMap::new(),
             featureless_host_rules: None,
             slotted_rules: None,
             part_rules: None,
@@ -3577,6 +3581,11 @@ impl CascadeData {
         &self.universal_tail_rules
     }
 
+    /// Returns universal-bucket rules indexed by their activating compound.
+    pub fn universal_bucket_rules(&self) -> &SelectorMap<UniversalBucketRule> {
+        &self.universal_bucket_rules
+    }
+
     /// Returns the featureless pseudo rule map for a given pseudo-element.
     #[inline]
     pub fn featureless_host_rules(
@@ -3705,6 +3714,7 @@ impl CascadeData {
     fn shrink_maps_if_needed(&mut self) {
         self.normal_rules.shrink_if_needed();
         self.universal_tail_rules.shrink_if_needed();
+        self.universal_bucket_rules.shrink_if_needed();
         if let Some(ref mut host_rules) = self.featureless_host_rules {
             host_rules.shrink_if_needed();
         }
@@ -4056,6 +4066,20 @@ impl CascadeData {
                     if let Some(offset) = rule.universal_tail_activation_offset() {
                         self.universal_tail_rules.insert(
                             UniversalTailRule::new(rule.clone(), offset),
+                            quirks_mode,
+                        )?;
+                    }
+                }
+                if !matches_featureless_host_only && rule.is_blessable_universal_bucket_rule() {
+                    if let Some((offset, matches_descendants)) =
+                        rule.universal_bucket_activation()
+                    {
+                        self.universal_bucket_rules.insert(
+                            UniversalBucketRule::new(
+                                rule.clone(),
+                                offset,
+                                matches_descendants,
+                            ),
                             quirks_mode,
                         )?;
                     }
@@ -4730,6 +4754,7 @@ impl CascadeData {
     fn clear_cascade_data(&mut self) {
         self.normal_rules.clear();
         self.universal_tail_rules.clear();
+        self.universal_bucket_rules.clear();
         if let Some(ref mut slotted_rules) = self.slotted_rules {
             slotted_rules.clear();
         }
@@ -4883,6 +4908,7 @@ impl CascadeDataCacheEntry for CascadeData {
     fn add_size_of(&self, ops: &mut MallocSizeOfOps, sizes: &mut ServoStyleSetSizes) {
         self.normal_rules.add_size_of(ops, sizes);
         sizes.mOther += self.universal_tail_rules.size_of(ops);
+        sizes.mOther += self.universal_bucket_rules.size_of(ops);
         if let Some(ref slotted_rules) = self.slotted_rules {
             slotted_rules.add_size_of(ops, sizes);
         }
