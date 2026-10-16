@@ -674,7 +674,10 @@ where
 }
 
 fn cache_branch_failures<E>(
-    elements: &[E],
+    starting_element: &E,
+    combinator: Combinator,
+    visited_count: usize,
+    context: &MatchingContext<E::Impl>,
     prefixes: Option<&FailCachePrefixIds<E::Impl>>,
     index: Option<usize>,
     result: SelectorMatchingResult,
@@ -689,8 +692,15 @@ fn cache_branch_failures<E>(
     ) else {
         return;
     };
-    for element in elements {
-        queue_fail_cache_entry(element, prefixes, index, result, pending);
+
+    let mut element = starting_element.clone();
+    for _ in 0..visited_count {
+        let Some(next) = next_element_for_combinator(&element, combinator, context).next_element
+        else {
+            break;
+        };
+        element = next;
+        queue_fail_cache_entry(&element, prefixes, index, result, pending);
     }
 }
 
@@ -1358,22 +1368,25 @@ where
         SelectorMatchingResult::NotMatchedGlobally
     };
 
-    let mut visited_branch_elements = SmallVec::<[E; 8]>::new();
-    let mut element = element.clone();
+    let mut visited_branch_element_count = 0;
+    let mut current_element = element.clone();
     loop {
-        if element.is_link() {
+        if current_element.is_link() {
             visited_handling = VisitedHandlingMode::AllLinksUnvisited;
         }
 
         let NextElement {
             next_element,
             featureless,
-        } = next_element_for_combinator(&element, combinator, &context);
-        element = match next_element {
+        } = next_element_for_combinator(&current_element, combinator, &context);
+        current_element = match next_element {
             None => {
                 if context.use_fail_caches() {
                     cache_branch_failures(
-                        &visited_branch_elements,
+                        element,
+                        combinator,
+                        visited_branch_element_count,
+                        context,
                         fail_cache_prefix_ids,
                         next_fail_cache_prefix_index,
                         candidate_not_found,
@@ -1397,7 +1410,7 @@ where
                     selector_iter.clone(),
                     fail_cache_prefix_ids,
                     next_fail_cache_prefix_index,
-                    &element,
+                    &current_element,
                     context,
                     rightmost,
                     first_subject_compound,
@@ -1410,7 +1423,9 @@ where
             result,
             SelectorMatchingResult::Matched | SelectorMatchingResult::Unknown
         ) {
-            visited_branch_elements.push(element.clone());
+            if context.use_fail_caches() {
+                visited_branch_element_count += 1;
+            }
         }
 
         // Return the status immediately if it is one of the global states.
@@ -1446,7 +1461,10 @@ where
             SelectorMatchingResult::NotMatchedGlobally => {
                 if context.use_fail_caches() {
                     cache_branch_failures(
-                        &visited_branch_elements,
+                        element,
+                        combinator,
+                        visited_branch_element_count,
+                        context,
                         fail_cache_prefix_ids,
                         next_fail_cache_prefix_index,
                         result,
@@ -1496,7 +1514,10 @@ where
                 ) {
                     if context.use_fail_caches() {
                         cache_branch_failures(
-                            &visited_branch_elements,
+                            element,
+                            combinator,
+                            visited_branch_element_count,
+                            context,
                             fail_cache_prefix_ids,
                             next_fail_cache_prefix_index,
                             result,
@@ -1533,7 +1554,10 @@ where
             // than looking at following elements for our combinator.
             if context.use_fail_caches() {
                 cache_branch_failures(
-                    &visited_branch_elements,
+                    element,
+                    combinator,
+                    visited_branch_element_count,
+                    context,
                     fail_cache_prefix_ids,
                     next_fail_cache_prefix_index,
                     candidate_not_found,
