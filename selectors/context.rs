@@ -107,6 +107,26 @@ impl NotMatchedResultCounts {
     }
 }
 
+impl std::ops::AddAssign for NotMatchedResultCounts {
+    fn add_assign(&mut self, rhs: Self) {
+        self.fail_cache_global_failures += rhs.fail_cache_global_failures;
+        self.fail_cache_descendant_restarts += rhs.fail_cache_descendant_restarts;
+        self.fail_cache_sibling_restarts += rhs.fail_cache_sibling_restarts;
+        self.classic_global_failures += rhs.classic_global_failures;
+        self.classic_descendant_restarts += rhs.classic_descendant_restarts;
+        self.classic_sibling_restarts += rhs.classic_sibling_restarts;
+    }
+}
+
+impl std::ops::Add for NotMatchedResultCounts {
+    type Output = Self;
+
+    fn add(mut self, rhs: Self) -> Self::Output {
+        self += rhs;
+        self
+    }
+}
+
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct FailCache {
     entries: [u16; 8],
