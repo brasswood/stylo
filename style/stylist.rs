@@ -4741,6 +4741,10 @@ impl SelectorMapEntry for Rule {
     fn is_universal_tail(&self) -> bool {
         self.is_blessable_universal_tail()
     }
+
+    fn is_universal_bucket_rule(&self) -> bool {
+        self.is_blessable_universal_bucket_rule()
+    }
 }
 
 impl Rule {
@@ -4762,8 +4766,37 @@ impl Rule {
         Some(offset)
     }
 
+    pub(crate) fn universal_bucket_activation(&self) -> Option<(usize, bool)> {
+        if !is_universal_bucket_selector(&self.selector) {
+            return None;
+        }
+        let mut iter = self.selector.iter();
+        while iter.next().is_some() {}
+        let matches_descendants = match iter.next_sequence()? {
+            Combinator::Descendant => true,
+            Combinator::Child => false,
+            _ => return None,
+        };
+        let offset = self.selector.len() - iter.selector_length();
+        iter.next()?;
+        Some((offset, matches_descendants))
+    }
+
     pub(crate) fn is_blessable_universal_tail(&self) -> bool {
         self.universal_tail_activation_offset().is_some()
+            && self.container_condition_id == ContainerConditionId::none()
+            && self.scope_condition_id == ScopeConditionId::none()
+            && !self.is_starting_style
+            && !self.selector.has_pseudo_element()
+            && !self.selector.is_slotted()
+            && matches!(
+                self.selector.matches_featureless_host(false),
+                MatchesFeaturelessHost::Never
+            )
+    }
+
+    pub(crate) fn is_blessable_universal_bucket_rule(&self) -> bool {
+        self.universal_bucket_activation().is_some()
             && self.container_condition_id == ContainerConditionId::none()
             && self.scope_condition_id == ScopeConditionId::none()
             && !self.is_starting_style
