@@ -41,6 +41,17 @@ impl NotMatchedResultCounts {
     }
 }
 
+impl std::ops::AddAssign for NotMatchedResultCounts {
+    fn add_assign(&mut self, rhs: Self) {
+        self.fail_cache_global_failures += rhs.fail_cache_global_failures;
+        self.fail_cache_descendant_restarts += rhs.fail_cache_descendant_restarts;
+        self.fail_cache_sibling_restarts += rhs.fail_cache_sibling_restarts;
+        self.classic_global_failures += rhs.classic_global_failures;
+        self.classic_descendant_restarts += rhs.classic_descendant_restarts;
+        self.classic_sibling_restarts += rhs.classic_sibling_restarts;
+    }
+}
+
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct FailCache {
     entries: [u16; 8],
@@ -287,6 +298,8 @@ where
     pub selector_caches: &'a mut SelectorCaches,
 
     use_fail_caches: bool,
+    fail_cache_hit: bool,
+    not_matched_result_counts: NotMatchedResultCounts,
     classes_and_ids_case_sensitivity: CaseSensitivity,
     _impl: ::std::marker::PhantomData<Impl>,
 }
@@ -347,6 +360,8 @@ where
             current_relative_selector_anchor: None,
             selector_caches,
             use_fail_caches: false,
+            fail_cache_hit: false,
+            not_matched_result_counts: NotMatchedResultCounts::default(),
             _impl: ::std::marker::PhantomData,
         }
     }
@@ -402,6 +417,26 @@ where
     #[inline]
     pub fn use_fail_caches(&self) -> bool {
         self.use_fail_caches
+    }
+
+    #[inline]
+    pub fn note_fail_cache_hit(&mut self) {
+        self.fail_cache_hit = true;
+    }
+
+    #[inline]
+    pub fn take_fail_cache_hit(&mut self) -> bool {
+        ::std::mem::replace(&mut self.fail_cache_hit, false)
+    }
+
+    #[inline]
+    pub fn note_not_matched_result(&mut self, result: FailCacheResult, from_fail_cache: bool) {
+        self.not_matched_result_counts.record(result, from_fail_cache);
+    }
+
+    #[inline]
+    pub fn take_not_matched_result_counts(&mut self) -> NotMatchedResultCounts {
+        ::std::mem::take(&mut self.not_matched_result_counts)
     }
 
     /// Whether or not we're matching to invalidate.
