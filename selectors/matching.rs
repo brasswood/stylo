@@ -149,6 +149,8 @@ pub struct CountingStats {
     pub sharing_instances: usize,
     /// Number of selector map hits
     pub selector_map_hits: usize,
+    /// Number of selector checks made from a bless list
+    pub bless_list_hits: usize,
     /// Number of fast rejects from the bloom filter
     pub fast_rejects: usize,
     /// Number of slow rejects from the bloom filter
@@ -423,6 +425,35 @@ where
     let matched = does_match == KleeneValue::True;
     (
         does_match.to_bool(true),
+        BloomQueryStats {
+            time_fast_rejecting: None,
+            time_slow_rejecting: (!matched).then_some(duration),
+            time_slow_accepting: matched.then_some(duration),
+        },
+    )
+}
+
+/// Matches only the rightmost compound selector, treating it as the subject.
+pub fn matches_rightmost_compound<E>(
+    selector: &Selector<E::Impl>,
+    element: &E,
+    context: &mut MatchingContext<E::Impl>,
+) -> (bool, BloomQueryStats)
+where
+    E: Element,
+{
+    let start = Start::now();
+    let mut selector_iter = selector.iter();
+    let result = matches_compound_selector(
+        &mut selector_iter,
+        element,
+        context,
+        SubjectOrPseudoElement::Yes,
+    );
+    let duration = start.elapsed();
+    let matched = result == KleeneValue::True;
+    (
+        result.to_bool(true),
         BloomQueryStats {
             time_fast_rejecting: None,
             time_slow_rejecting: (!matched).then_some(duration),
