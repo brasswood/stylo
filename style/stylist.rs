@@ -2850,12 +2850,25 @@ impl ScopeBoundsWithHashes {
     /// Create a new scope bound, hashing selectors for fast rejection.
     fn new(
         quirks_mode: QuirksMode,
+        use_edge_selector_optimization: bool,
         start: Option<SelectorList<SelectorImpl>>,
         end: Option<SelectorList<SelectorImpl>>,
     ) -> Self {
         Self {
-            start: start.map(|selectors| ScopeBoundWithHashes::new(quirks_mode, selectors)),
-            end: end.map(|selectors| ScopeBoundWithHashes::new(quirks_mode, selectors)),
+            start: start.map(|selectors| {
+                ScopeBoundWithHashes::new(
+                    quirks_mode,
+                    use_edge_selector_optimization,
+                    selectors,
+                )
+            }),
+            end: end.map(|selectors| {
+                ScopeBoundWithHashes::new(
+                    quirks_mode,
+                    use_edge_selector_optimization,
+                    selectors,
+                )
+            }),
         }
     }
 
@@ -3077,6 +3090,8 @@ impl Default for StylistImplicitScopeRoot {
 /// `InvalidationData`? That'd make `clear_cascade_data()` clearer.
 #[derive(Debug, Clone, MallocSizeOf)]
 pub struct CascadeData {
+    use_edge_selector_optimization: bool,
+
     /// The data coming from normal style rules that apply to elements at this
     /// cascade level.
     normal_rules: ElementAndPseudoRules,
@@ -3236,6 +3251,7 @@ impl CascadeData {
     /// Creates an empty `CascadeData`.
     pub fn new() -> Self {
         Self {
+            use_edge_selector_optimization: false,
             normal_rules: ElementAndPseudoRules::default(),
             featureless_host_rules: None,
             slotted_rules: None,
@@ -3692,7 +3708,11 @@ impl CascadeData {
                 None => selector.clone(),
             };
 
-            let hashes = AncestorHashes::new(&selector, quirks_mode);
+            let hashes = AncestorHashes::new(
+                &selector,
+                quirks_mode,
+                self.use_edge_selector_optimization,
+            );
 
             let rule = Rule::new(
                 selector,
@@ -4184,7 +4204,12 @@ impl CascadeData {
                             containing_rule_state
                                 .ancestor_selector_lists
                                 .push(implicit_scope_selector.clone());
-                            ScopeBoundsWithHashes::new(quirks_mode, start, end)
+                            ScopeBoundsWithHashes::new(
+                                quirks_mode,
+                                self.use_edge_selector_optimization,
+                                start,
+                                end,
+                            )
                         };
 
                     if let Some(selectors) = replaced.start.as_ref() {
