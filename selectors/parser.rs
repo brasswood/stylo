@@ -30,6 +30,7 @@ use std::slice;
 use std::sync::atomic::{AtomicBool, AtomicU16, Ordering};
 use std::sync::Arc as StdArc;
 use std::sync::OnceLock;
+use tsc_timer::Duration;
 
 #[cfg(feature = "to_shmem")]
 use to_shmem_derive::ToShmem;
@@ -1544,13 +1545,14 @@ where
     /// Records one selector occurrence for optional instrumentation.
     fn note_prefix_occurrence(&self, _selector: &Selector<Impl>, _prefix_length: usize) {}
 
-    /// Returns the id for a prefix with `prefix_length` match-order components.
+    /// Returns the id and interning time for a prefix with `prefix_length`
+    /// match-order components.
     fn get_or_intern(
         &self,
         selector: &Selector<Impl>,
         prefix_length: usize,
         selector_contains_sibling_combinator: bool,
-    ) -> Option<u16>;
+    ) -> (Option<u16>, Duration);
 
     fn record_insertion(&self, _selector: &Selector<Impl>, _prefix_length: usize) {}
 
@@ -1647,20 +1649,22 @@ impl<Impl: SelectorImpl> FailCachePrefixIds<Impl> {
 
     /// Assigns an id on first request, hashing the prefix at most once.
     #[inline]
-    pub fn get_or_intern(&self, index: usize) -> Option<u16> {
+    pub fn get_or_intern(&self, index: usize) -> (Option<u16>, Duration) {
         let entry = &self.entries[index];
-        let id = *entry.interned_id.get_or_init(|| {
-            self.generator
-                .get_or_intern(
-                    &self.selector,
-                    entry.prefix_length.into(),
-                    self.selector_contains_sibling_combinator,
-                )
+        let mut interning_time = Duration::default();
+        let id = entry.interned_id.get_or_init(|| {
+            let (id, duration) = self.generator.get_or_intern(
+                &self.selector,
+                entry.prefix_length.into(),
+                self.selector_contains_sibling_combinator,
+            );
+            interning_time = duration;
+            id
         });
-        if let Some(id) = id {
+        if let Some(id) = *id {
             entry.id.store(id, Ordering::Release);
         }
-        id
+        (*id, interning_time)
     }
 
     pub fn record_insertion(&self, index: usize) {
@@ -5109,9 +5113,9 @@ pub mod tests {
                 _: &Selector<DummySelectorImpl>,
                 _: usize,
                 _: bool,
-            ) -> Option<u16> {
+            ) -> (Option<u16>, Duration) {
                 self.internings.fetch_add(1, Ordering::Relaxed);
-                Some(1)
+                (Some(1), Duration::from_cycles(42))
             }
 
             fn record_slow_rejecting_occurrence(
@@ -5142,9 +5146,13 @@ pub mod tests {
                 })
             })
             .collect();
+        let mut interning_cycles = 0;
         for thread in threads {
-            assert_eq!(thread.join().unwrap(), Some(1));
+            let (id, duration) = thread.join().unwrap();
+            assert_eq!(id, Some(1));
+            interning_cycles += duration.cycles();
         }
+        assert_eq!(interning_cycles, 42);
         assert_eq!(generator.internings.load(Ordering::Relaxed), 1);
         ids.record_slow_rejecting_prefixes();
         ids.record_slow_rejecting_prefixes();
