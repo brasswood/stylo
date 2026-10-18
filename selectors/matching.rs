@@ -530,10 +530,7 @@ where
         },
     );
     let elapsed_match_duration = start.elapsed();
-    let match_duration_without_interning = Duration::from_cycles(
-        elapsed_match_duration.cycles()
-            .saturating_sub(prefix_interning_duration.cycles()),
-    );
+    let match_duration_without_interning = elapsed_match_duration - prefix_interning_duration;
     let fail_cache_reject = context.take_fail_cache_hit() && does_match == KleeneValue::False;
     let not_matched_result_counts = context.take_not_matched_result_counts();
     let is_slow_accept = does_match == KleeneValue::True;
