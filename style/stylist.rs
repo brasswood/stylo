@@ -3454,6 +3454,9 @@ impl FailCachePrefixIdGenerator<SelectorImpl> for FailCachePrefixInterner {
             let mut entries = self.entries.lock().unwrap();
             let prefix = FailCachePrefix(selector.clone(), prefix_length);
             let key = (prefix.clone(), has_sibling_combinator);
+            for _ in 0..9 {
+                entries.ids.get(&key);
+            }
             let (result, interned) = if let Some(id) = entries.ids.get(&key).copied() {
                 (Some(id), false)
             } else {
@@ -3483,9 +3486,7 @@ impl FailCachePrefixIdGenerator<SelectorImpl> for FailCachePrefixInterner {
                     );
                 }
                 if let Some(id) = id {
-                    for _ in 0..10 {
-                        entries.ids.insert(key.clone(), id);
-                    }
+                    entries.ids.insert(key.clone(), id);
                     (Some(id), true)
                 } else {
                     (None, false)
