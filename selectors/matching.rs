@@ -465,7 +465,7 @@ where
 {
     context.take_not_matched_result_counts();
     let start = Start::now();
-    let does_match = matches_complex_selector(
+    let (does_match, _) = matches_complex_selector(
         selector.iter_from(offset),
         None,
         element,
@@ -518,7 +518,7 @@ where
         }
     }
     let start = Start::now();
-    let does_match = matches_complex_selector(
+    let (does_match, prefix_interning_duration) = matches_complex_selector(
         selector.iter_from(offset),
         selector_fail_cache_prefix_ids,
         element,
@@ -529,7 +529,8 @@ where
             SubjectOrPseudoElement::No
         },
     );
-    let slow_match_duration = start.elapsed();
+    let elapsed_match_duration = start.elapsed();
+    let match_duration_without_interning = elapsed_match_duration - prefix_interning_duration;
     let fail_cache_reject = context.take_fail_cache_hit() && does_match == KleeneValue::False;
     let not_matched_result_counts = context.take_not_matched_result_counts();
     let is_slow_accept = does_match == KleeneValue::True;
@@ -543,9 +544,9 @@ where
         does_match,
         BloomQueryStats {
             time_fast_rejecting: None,
-            time_fail_cache_rejecting: fail_cache_reject.then_some(slow_match_duration),
-            time_slow_rejecting: is_slow_reject.then_some(slow_match_duration),
-            time_slow_accepting: is_slow_accept.then_some(slow_match_duration),
+            time_fail_cache_rejecting: fail_cache_reject.then_some(match_duration_without_interning),
+            time_slow_rejecting: is_slow_reject.then_some(match_duration_without_interning),
+            time_slow_accepting: is_slow_accept.then_some(match_duration_without_interning),
             not_matched_result_counts,
         }
     )
@@ -716,26 +717,30 @@ fn cache_branch_failures<E>(
 fn flush_pending_fail_cache_entries<E>(
     pending: SmallVec<[(E, usize, FailCacheResult); 8]>,
     prefixes: &FailCachePrefixIds<E::Impl>,
-) where
+) -> Duration
+where
     E: Element,
 {
     let mut prefix_ids = SmallVec::<[(usize, Option<u16>); 4]>::new();
+    let mut interning_duration = Duration::default();
     for (element, index, result) in pending {
-        let prefix_id = match prefix_ids
+        let (prefix_id, duration) = match prefix_ids
             .iter()
             .find(|(prefix_index, _)| *prefix_index == index)
         {
-            Some((_, prefix_id)) => *prefix_id,
+            Some((_, prefix_id)) => (*prefix_id, Duration::default()),
             None => {
-                let prefix_id = prefixes.get_or_intern(index);
+                let (prefix_id, duration) = prefixes.get_or_intern(index);
                 prefix_ids.push((index, prefix_id));
-                prefix_id
+                (prefix_id, duration)
             },
         };
+        interning_duration += duration;
         if let Some(prefix_id) = prefix_id {
             insert_fail_cache_entry(&element, prefixes, index, prefix_id, result);
         }
     }
+    interning_duration
 }
 
 /// Whether a compound selector matched, and whether it was the rightmost
@@ -844,7 +849,7 @@ fn matches_complex_selector<E>(
     element: &E,
     context: &mut MatchingContext<E::Impl>,
     rightmost: SubjectOrPseudoElement,
-) -> KleeneValue
+) -> (KleeneValue, Duration)
 where
     E: Element,
 {
@@ -857,7 +862,7 @@ where
             Component::PseudoElement(ref pseudo) => {
                 if let Some(ref f) = context.pseudo_element_matching_fn {
                     if !f(pseudo) {
-                        return KleeneValue::False;
+                        return (KleeneValue::False, Duration::default());
                     }
                 }
             },
@@ -868,12 +873,12 @@ where
                      in a non-pseudo selector {:?}",
                     other
                 );
-                return KleeneValue::False;
+                return (KleeneValue::False, Duration::default());
             },
         }
 
         if !iter.matches_for_stateless_pseudo_element() {
-            return KleeneValue::False;
+            return (KleeneValue::False, Duration::default());
         }
 
         // Advance to the non-pseudo-element part of the selector.
@@ -894,12 +899,16 @@ where
         &mut pending_fail_cache_insertions,
     );
     let result = result.into();
-    if result != KleeneValue::Unknown {
+    let interning_duration = if result != KleeneValue::Unknown {
         if let Some(prefixes) = fail_cache_prefix_ids {
-            flush_pending_fail_cache_entries(pending_fail_cache_insertions, prefixes);
+            flush_pending_fail_cache_entries(pending_fail_cache_insertions, prefixes)
+        } else {
+            Duration::default()
         }
-    }
-    result
+    } else {
+        Duration::default()
+    };
+    (result, interning_duration)
 }
 
 /// Matches each selector of a list as a complex selector
@@ -910,7 +919,7 @@ fn matches_complex_selector_list<E: Element>(
     rightmost: SubjectOrPseudoElement,
 ) -> KleeneValue {
     KleeneValue::any(list.iter(), |selector| {
-        matches_complex_selector(selector.iter(), None, element, context, rightmost)
+        matches_complex_selector(selector.iter(), None, element, context, rightmost).0
     })
 }
 
@@ -942,6 +951,7 @@ fn matches_relative_selector<E: Element>(
                 context,
                 rightmost,
             )
+            .0
             .to_bool(true);
             if !matched && relative_selector.match_hint.is_subtree() {
                 matched = matches_relative_selector_subtree(
@@ -997,6 +1007,7 @@ fn matches_relative_selector<E: Element>(
                     context,
                     rightmost,
                 )
+                .0
                 .to_bool(true)
             };
             if matched {
@@ -1134,7 +1145,10 @@ fn matches_relative_selector_subtree<E: Element>(
                 ElementSelectorFlags::RELATIVE_SELECTOR_SEARCH_DIRECTION_ANCESTOR,
             );
         }
-        if matches_complex_selector(selector.iter(), None, &el, context, rightmost).to_bool(true) {
+        if matches_complex_selector(selector.iter(), None, &el, context, rightmost)
+            .0
+            .to_bool(true)
+        {
             return true;
         }
 
@@ -1654,7 +1668,7 @@ where
     };
     context.nest(|context| {
         context.with_featureless(false, |context| {
-            matches_complex_selector(selector.iter(), None, element, context, rightmost)
+            matches_complex_selector(selector.iter(), None, element, context, rightmost).0
         })
     })
 }
@@ -1673,7 +1687,7 @@ where
         return KleeneValue::False;
     }
     context.nest(|context| {
-        matches_complex_selector(selector.iter(), None, element, context, rightmost)
+        matches_complex_selector(selector.iter(), None, element, context, rightmost).0
     })
 }
 

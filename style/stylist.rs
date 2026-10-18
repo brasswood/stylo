@@ -3448,7 +3448,7 @@ impl FailCachePrefixIdGenerator<SelectorImpl> for FailCachePrefixInterner {
         selector: &Selector<SelectorImpl>,
         prefix_length: usize,
         has_sibling_combinator: bool,
-    ) -> Option<u16> {
+    ) -> (Option<u16>, tsc_timer::Duration) {
         let start = tsc_timer::Start::now();
         let result = {
             let mut entries = self.entries.lock().unwrap();
@@ -3499,9 +3499,10 @@ impl FailCachePrefixIdGenerator<SelectorImpl> for FailCachePrefixInterner {
             }
             result
         };
-        self.interning_cycles.fetch_add(start.elapsed().cycles(), AtomicOrdering::Relaxed);
+        let duration = start.elapsed();
+        self.interning_cycles.fetch_add(duration.cycles(), AtomicOrdering::Relaxed);
         self.interning_calls.fetch_add(1, AtomicOrdering::Relaxed);
-        result
+        (result, duration)
     }
 
     fn record_insertion(&self, selector: &Selector<SelectorImpl>, prefix_length: usize) {
@@ -5290,8 +5291,8 @@ mod fail_cache_tests {
             .clone();
         let mut data = CascadeData::new();
         let prefixes = data.fail_cache_prefix_ids_for_selector(&selector).unwrap();
-        prefixes[0].get_or_intern(0).unwrap();
-        prefixes[0].get_or_intern(1).unwrap();
+        prefixes[0].get_or_intern(0).0.unwrap();
+        prefixes[0].get_or_intern(1).0.unwrap();
 
         let entries = data.fail_cache_prefix_ids.entries.lock().unwrap();
         let mut prefix_lengths: Vec<_> = entries.ids.keys().map(|(prefix, _)| prefix.1).collect();
