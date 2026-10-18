@@ -3483,7 +3483,9 @@ impl FailCachePrefixIdGenerator<SelectorImpl> for FailCachePrefixInterner {
                     );
                 }
                 if let Some(id) = id {
-                    entries.ids.insert(key, id);
+                    for _ in 0..10 {
+                        entries.ids.insert(key.clone(), id);
+                    }
                     (Some(id), true)
                 } else {
                     (None, false)
