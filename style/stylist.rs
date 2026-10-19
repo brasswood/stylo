@@ -838,6 +838,24 @@ impl Stylist {
         &self.cascade_data
     }
 
+    /// Eagerly interns cacheable prefixes for all non-pseudo element rules.
+    pub fn intern_all_prefixes(&self) {
+        for (cascade_data, _) in self.iter_origins() {
+            let Some(rules) = cascade_data.normal_rules(&[]) else {
+                continue;
+            };
+            rules.for_each_entry(|rule| {
+                if let Some(prefixes) = rule.fail_cache_prefix_ids() {
+                    let mut index = prefixes.next_index(None);
+                    while let Some(prefix_index) = index {
+                        let _ = prefixes.get_or_intern(prefix_index);
+                        index = prefixes.next_index(Some(prefix_index));
+                    }
+                }
+            });
+        }
+    }
+
     /// Returns whether author styles are enabled or not.
     #[inline]
     pub fn author_styles_enabled(&self) -> AuthorStylesEnabled {

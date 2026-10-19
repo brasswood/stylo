@@ -256,6 +256,19 @@ impl<T> SelectorMap<T> {
         self.other.iter_mut().for_each(&mut f);
         self.universal_tails.iter_mut().for_each(&mut f);
     }
+
+    pub(crate) fn for_each_entry(&self, mut f: impl FnMut(&T)) {
+        self.root.iter().for_each(&mut f);
+        self.id_hash.iter().flat_map(|(_, rules)| rules).for_each(&mut f);
+        self.common_pseudo_classes.iter().for_each(&mut f);
+        self.class_hash.iter().flat_map(|(_, rules)| rules).for_each(&mut f);
+        self.local_name_hash.values().flatten().for_each(&mut f);
+        self.attribute_hash.values().flatten().for_each(&mut f);
+        self.namespace_hash.values().flatten().for_each(&mut f);
+        self.rare_pseudo_classes.iter().for_each(&mut f);
+        self.other.iter().for_each(&mut f);
+        self.universal_tails.iter().for_each(&mut f);
+    }
 }
 
 impl SelectorMap<Rule> {
