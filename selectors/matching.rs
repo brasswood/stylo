@@ -477,11 +477,9 @@ fn finish_with_fail_cache<E>(
 where
     E: Element,
 {
-    if let (Some(element), Some((prefixes, index))) = (element, prefix) {
+    if let (Some(element), Some(prefix_id)) = (element, prefix_id) {
         if is_cacheable_failure(result) {
-            if let Some(prefix_id) = prefixes.get_or_intern(index) {
-                element.insert_into_fail_cache(prefix_id);
-            }
+            element.insert_into_fail_cache(prefix_id);
         }
     }
     result
