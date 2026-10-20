@@ -3374,7 +3374,7 @@ impl Default for FailCachePrefixInternerEntries {
 impl Eq for FailCachePrefix {}
 
 fn fail_cache_prefix_components<T>(components: &[T], prefix_length: usize) -> &[T] {
-    &components[components.len() - prefix_length..]
+    &components[..prefix_length]
 }
 
 fn cacheable_prefix_combinators(
