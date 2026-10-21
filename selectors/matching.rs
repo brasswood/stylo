@@ -414,7 +414,6 @@ where
     let start = Start::now();
     let does_match = matches_complex_selector(
         selector.iter_from(offset),
-        None,
         element,
         context,
         SubjectOrPseudoElement::Yes,
