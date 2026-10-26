@@ -951,6 +951,30 @@ pub trait MatchMethods: TElement {
         );
 
         // First of all, update the styles.
+        fn element_to_string(el: &impl TElement) -> String {
+            use std::fmt::Write as _;
+
+            let mut out = String::new();
+            write!(&mut out, "<{}", el.local_name()).unwrap();
+            if let Some(id) = el.id() {
+                write!(&mut out, " id=\"{id}\"").unwrap();
+            }
+
+            let mut classes = String::new();
+            el.each_class(|class| {
+                if !classes.is_empty() {
+                    classes.push(' ');
+                }
+                write!(&mut classes, "{}", class.0).unwrap();
+            });
+            if !classes.is_empty() {
+                write!(&mut out, " class=\"{classes}\"").unwrap();
+            }
+
+            out.push('>');
+            out
+        }
+        debug!(target: "traversal", "finish_restyle({})", element_to_string(self));
         let old_styles = data.set_styles(new_styles);
 
         let new_primary_style = data.styles.primary.as_ref().unwrap();
