@@ -1013,6 +1013,20 @@ pub trait MatchMethods: TElement {
         );
 
         // First of all, update the styles.
+        fn element_to_string(el: &impl TElement) -> String {
+            use std::fmt::Write as _;
+
+            let mut out = String::new();
+            write!(&mut out, "<{}", el.local_name()).unwrap();
+            el.each_attr_name(|name| {
+                if let Some(value) = TElement::get_attr(el, name, &crate::Namespace::default()) {
+                    write!(&mut out, " {}=\"{value}\"", name.0).unwrap();
+                }
+            });
+            out.push('>');
+            out
+        }
+        debug!(target: "traversal", "finish_restyle({})", element_to_string(self));
         let old_styles = data.set_styles(new_styles);
 
         let new_primary_style = data.styles.primary.as_ref().unwrap();
