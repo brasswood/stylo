@@ -476,6 +476,7 @@ impl<E: StyleSharingElement> PartialEq<StyleSharingCandidate<E>> for StyleSharin
 pub struct StyleSharingTarget<E: StyleSharingElement> {
     element: E,
     validation_data: ValidationData,
+    sharing_misses: usize,
 }
 
 impl<E: StyleSharingElement> Deref for StyleSharingTarget<E> {
@@ -492,7 +493,13 @@ impl<E: StyleSharingElement> StyleSharingTarget<E> {
         Self {
             element: element,
             validation_data: ValidationData::default(),
+            sharing_misses: 0,
         }
+    }
+
+    /// Returns the number of cache candidates that failed to match this target.
+    pub fn sharing_misses(&self) -> usize {
+        self.sharing_misses
     }
 
     fn class_list(&mut self) -> &[AtomIdent] {
@@ -824,14 +831,18 @@ impl<E: StyleSharingElement> StyleSharingCache<E> {
         }
 
         self.cache_mut().entries.lookup(|candidate| {
-            Self::test_candidate(
+            let result = Self::test_candidate(
                 target,
                 candidate,
                 &shared_context,
                 bloom_filter,
                 selector_caches,
                 shared_context,
-            )
+            );
+            if result.is_none() {
+                target.sharing_misses += 1;
+            }
+            result
         })
     }
 
