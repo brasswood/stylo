@@ -145,6 +145,8 @@ pub struct Statistics {
 /// A sub-struct for counting statistics.
 #[derive(Default, Debug, Div, Clone, Copy, Add, AddAssign, PartialEq, Eq)]
 pub struct CountingStats {
+    /// Number of elements in the document
+    pub num_elements: usize,
     /// Number of sharing instances
     pub sharing_instances: usize,
     /// Number of style sharing candidates that failed to match
