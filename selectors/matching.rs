@@ -151,6 +151,8 @@ pub struct CountingStats {
     pub sharing_misses: usize,
     /// Number of selector-element pairs accepted via style sharing
     pub sharing_accepts: usize,
+    /// Number of selectors in the stylist
+    pub num_selectors: usize,
     /// Number of selector map hits
     pub selector_map_hits: usize,
     /// Number of selector checks made from a bless list
