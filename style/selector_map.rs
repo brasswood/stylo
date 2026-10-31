@@ -467,20 +467,22 @@ impl SelectorMap<Rule> {
             )
         }
 
-        hits += self.other.len();
-        stats += SelectorMap::get_matching_rules(
-            element,
-            &self.other,
-            matching_rules_list,
-            matching_selectors.as_deref_mut(),
-            selector_stats.as_deref_mut(),
-            matching_context,
-            cascade_level,
-            cascade_data,
-            stylist,
-            skip_universal_tails,
-            debug_html_str,
-        );
+        if !skip_universal_buckets {
+            hits += self.other.len();
+            stats += SelectorMap::get_matching_rules(
+                element,
+                &self.other,
+                matching_rules_list,
+                matching_selectors.as_deref_mut(),
+                selector_stats.as_deref_mut(),
+                matching_context,
+                cascade_level,
+                cascade_data,
+                stylist,
+                skip_universal_tails,
+                debug_html_str,
+            );
+        }
         if !skip_universal_tails {
             hits += self.universal_tails.len();
             stats += SelectorMap::get_matching_rules(
