@@ -651,7 +651,7 @@ impl SelectorMap<UniversalTailRule> {
         });
         stats.times._time_inside_buckets = matching_time;
         stats.times.querying_selector_map = start.elapsed() - matching_time;
-        stats.counts.selector_map_hits = hits;
+        stats.counts.tail_selector_map_hits = hits;
         stats
     }
 }
@@ -729,7 +729,7 @@ impl SelectorMap<UniversalBucketRule> {
         });
         stats.times._time_inside_buckets = matching_time;
         stats.times.querying_selector_map = start.elapsed() - matching_time;
-        stats.counts.selector_map_hits = hits;
+        stats.counts.tail_selector_map_hits = hits;
         stats
     }
 }

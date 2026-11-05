@@ -157,6 +157,8 @@ pub struct CountingStats {
     pub num_selectors: usize,
     /// Number of selector map hits
     pub selector_map_hits: usize,
+    /// Number of universal-tail or universal-bucket selector map hits
+    pub tail_selector_map_hits: usize,
     /// Number of selector checks made from a bless list
     pub bless_list_hits: usize,
     /// Number of fast rejects from the bloom filter
