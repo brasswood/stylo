@@ -172,6 +172,8 @@ pub struct CountingStats {
 /// A sub-struct for timing statistics
 #[derive(Default, Debug, Div, Clone, Copy, Add, AddAssign, PartialEq, Eq)]
 pub struct TimingStats {
+    /// Time spent building the stylist before selector matching
+    pub building_stylist: Duration,
     /// Time spent updating the bloom filter
     pub updating_bloom_filter: Duration,
     /// Time spent checking if a style can be shared
