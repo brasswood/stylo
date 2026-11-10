@@ -191,6 +191,8 @@ pub struct TimingStats {
     pub slow_accepting: Duration,
     /// Time spent inserting elements into the style sharing cache
     pub inserting_into_sharing_cache: Duration,
+    /// Measured overall time spent doing matching. Includes everything except for bulding_stylist.
+    pub total_matching: Duration,
 
     /// Time spent by each call to `get_matching_rules`. This will get subtracted
     /// from the overall time in `get_all_matching_rules`, leaving the total time
