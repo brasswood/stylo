@@ -28,6 +28,7 @@ use smallvec::SmallVec;
 use std::collections::hash_map;
 use std::collections::{HashMap, HashSet};
 use std::hash::{BuildHasherDefault, Hash, Hasher};
+#[cfg(feature = "detailed_statistics")]
 use tsc_timer::Start;
 
 /// A hasher implementation that doesn't hash anything, because it expects its
@@ -785,13 +786,19 @@ impl SelectorMap<UniversalBucketRule> {
     where
         E: SelectorMapElement + StyleSharingElement,
     {
+        #[cfg(feature = "detailed_statistics")]
         let start = Start::now();
+        #[cfg(feature = "detailed_statistics")]
         let mut matching_time = tsc_timer::Duration::from_cycles(0);
+        #[cfg(feature = "detailed_statistics")]
         let mut hits = 0;
+        #[cfg(feature = "detailed_statistics")]
         let mut stats = Statistics::default();
+        #[cfg(not(feature = "detailed_statistics"))]
+        let stats = Statistics::default();
         let mut seen: SmallVec<[&UniversalBucketRule; 4]> = SmallVec::new();
         self.lookup(element, matching_context.quirks_mode(), None, |entry| {
-            if let Some(duration) = try_bless_universal_bucket_rule(
+            if let Some(_duration) = try_bless_universal_bucket_rule(
                 entry,
                 element,
                 element_depth,
@@ -799,14 +806,20 @@ impl SelectorMap<UniversalBucketRule> {
                 &mut seen,
                 matching_context,
             ) {
-                hits += 1;
-                matching_time += duration;
+                #[cfg(feature = "detailed_statistics")]
+                {
+                    hits += 1;
+                    matching_time += _duration;
+                }
             }
             true
         });
-        stats.times._time_inside_buckets = matching_time;
-        stats.times.querying_selector_map = start.elapsed() - matching_time;
-        stats.counts.tail_selector_map_hits = hits;
+        #[cfg(feature = "detailed_statistics")]
+        {
+            stats.times._time_inside_buckets = matching_time;
+            stats.times.querying_selector_map = start.elapsed() - matching_time;
+            stats.counts.tail_selector_map_hits = hits;
+        }
         stats
     }
 }
