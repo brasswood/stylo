@@ -578,12 +578,16 @@ impl SelectorMap<Rule> {
     {
         use selectors::matching::IncludeStartingStyle;
 
+        #[cfg(feature = "detailed_statistics")]
         let start = Start::now();
         let include_starting_style = matches!(
             matching_context.include_starting_style,
             IncludeStartingStyle::Yes
         );
+        #[cfg(feature = "detailed_statistics")]
         let mut acc_stats = Statistics::default();
+        #[cfg(not(feature = "detailed_statistics"))]
+        let acc_stats = Statistics::default();
         for rule in rules {
             #[cfg(feature = "debug_element")]
             if let Some(html_str) = debug_html_str {
@@ -600,7 +604,10 @@ impl SelectorMap<Rule> {
                 if let Some(selector_stats) = selector_stats.as_deref_mut() {
                     selector_stats.push((&rule.selector, SelectorStats::Bloom(bloom_stats)));
                 }
-                acc_stats += bloom_stats;
+                #[cfg(feature = "detailed_statistics")]
+                {
+                    acc_stats += bloom_stats;
+                }
                 if !res {
                     continue;
                 }
@@ -611,7 +618,10 @@ impl SelectorMap<Rule> {
                 if let Some(selector_stats) = selector_stats.as_deref_mut() {
                     selector_stats.push((&rule.selector, SelectorStats::ScopeProximity(scope_proximity_stats)));
                 }
-                acc_stats += scope_proximity_stats;
+                #[cfg(feature = "detailed_statistics")]
+                {
+                    acc_stats += scope_proximity_stats;
+                }
                 if result == ScopeProximity::infinity() {
                     continue;
                 }
@@ -651,7 +661,10 @@ impl SelectorMap<Rule> {
                 matching_selectors.push(&rule.selector); // TODO: Is cloning bad here?
             }
         }
-        acc_stats.times._time_inside_buckets = start.elapsed();
+        #[cfg(feature = "detailed_statistics")]
+        {
+            acc_stats.times._time_inside_buckets = start.elapsed();
+        }
         acc_stats
     }
 }
