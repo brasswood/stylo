@@ -752,6 +752,7 @@ where
         return None;
     }
     seen.push(entry);
+    #[cfg(feature = "detailed_statistics")]
     let start = Start::now();
     let (matched, _) = matches_selector_at_offset_as_subject(
         &entry.rule.selector,
@@ -759,11 +760,16 @@ where
         &element,
         matching_context,
     );
+    #[cfg(feature = "detailed_statistics")]
     let duration = start.elapsed();
     if matched {
         let last_depth = if entry.matches_descendants { usize::MAX } else { element_depth + 1 };
         bless_list.push((entry, last_depth));
     }
+    #[cfg(feature = "detailed_statistics")]
+    let duration = duration;
+    #[cfg(not(feature = "detailed_statistics"))]
+    let duration = tsc_timer::Duration::default();
     Some(duration)
 }
 
