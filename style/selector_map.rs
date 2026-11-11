@@ -340,7 +340,10 @@ impl SelectorMap<Rule> {
 
         if let Some(id) = rule_hash_target.id() {
             if let Some(rules) = self.id_hash.get(id, quirks_mode) {
-                hits += rules.len();
+                #[cfg(feature = "detailed_statistics")]
+                {
+                    hits += rules.len();
+                }
                 stats += SelectorMap::get_matching_rules(
                     element,
                     rules,
@@ -359,7 +362,10 @@ impl SelectorMap<Rule> {
 
         // TODO: this is my best guess at how to determine if an element is eligible to be matched against all the selectors that have common pseudo-classes such as :hover.
         if rule_hash_target.state().intersects(ElementState::RARE_PSEUDO_CLASS_STATES.complement()) {
-            hits += self.common_pseudo_classes.len();
+            #[cfg(feature = "detailed_statistics")]
+            {
+                hits += self.common_pseudo_classes.len();
+            }
             stats += SelectorMap::get_matching_rules(
                 element,
                 &self.common_pseudo_classes,
@@ -377,7 +383,10 @@ impl SelectorMap<Rule> {
 
         rule_hash_target.each_class(|class| {
             if let Some(rules) = self.class_hash.get(&class, quirks_mode) {
-                hits += rules.len();
+                #[cfg(feature = "detailed_statistics")]
+                {
+                    hits += rules.len();
+                }
                 stats += SelectorMap::get_matching_rules(
                     element,
                     rules,
@@ -396,7 +405,10 @@ impl SelectorMap<Rule> {
 
         rule_hash_target.each_attr_name(|name| {
             if let Some(rules) = self.attribute_hash.get(name) {
-                hits += rules.len();
+                #[cfg(feature = "detailed_statistics")]
+                {
+                    hits += rules.len();
+                }
                 stats += SelectorMap::get_matching_rules(
                     element,
                     rules,
