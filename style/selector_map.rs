@@ -426,7 +426,10 @@ impl SelectorMap<Rule> {
         });
 
         if let Some(rules) = self.local_name_hash.get(rule_hash_target.local_name()) {
-            hits += rules.len();
+            #[cfg(feature = "detailed_statistics")]
+            {
+                hits += rules.len();
+            }
             stats += SelectorMap::get_matching_rules(
                 element,
                 rules,
@@ -446,7 +449,10 @@ impl SelectorMap<Rule> {
             .state()
             .intersects(ElementState::RARE_PSEUDO_CLASS_STATES)
         {
-            hits += self.rare_pseudo_classes.len();
+            #[cfg(feature = "detailed_statistics")]
+            {
+                hits += self.rare_pseudo_classes.len();
+            }
             stats += SelectorMap::get_matching_rules(
                 element,
                 &self.rare_pseudo_classes,
@@ -463,7 +469,10 @@ impl SelectorMap<Rule> {
         }
 
         if let Some(rules) = self.namespace_hash.get(rule_hash_target.namespace()) {
-            hits += rules.len();
+            #[cfg(feature = "detailed_statistics")]
+            {
+                hits += rules.len();
+            }
             stats += SelectorMap::get_matching_rules(
                 element,
                 rules,
@@ -479,7 +488,10 @@ impl SelectorMap<Rule> {
             )
         }
 
-        hits += self.other.len();
+        #[cfg(feature = "detailed_statistics")]
+        {
+            hits += self.other.len();
+        }
         stats += SelectorMap::get_matching_rules(
             element,
             &self.other,
