@@ -23,8 +23,11 @@ use derive_more::{Add, AddAssign, Div};
 use log::debug;
 use smallvec::SmallVec;
 use std::borrow::Borrow;
+#[cfg(feature = "detailed_statistics")]
 use std::ops::AddAssign;
-use tsc_timer::{Start, Duration};
+#[cfg(feature = "detailed_statistics")]
+use tsc_timer::Start;
+use tsc_timer::Duration;
 
 pub use crate::context::*;
 
@@ -106,14 +109,21 @@ impl Default for SelectorStats {
 /// Like `BloomQueryStats` but with fields for counting number of queries.
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ScopeProximityStats {
+    #[cfg(feature = "detailed_statistics")]
     pub fast_rejects: usize,
+    #[cfg(feature = "detailed_statistics")]
     pub slow_rejects: usize,
+    #[cfg(feature = "detailed_statistics")]
     pub slow_accepts: usize,
+    #[cfg(feature = "detailed_statistics")]
     pub time_fast_rejecting: Duration, // Non-optional, since `fast_rejects` will tell us whether there were any.
+    #[cfg(feature = "detailed_statistics")]
     pub time_slow_rejecting: Duration,
+    #[cfg(feature = "detailed_statistics")]
     pub time_slow_accepting: Duration,
 }
 
+#[cfg(feature = "detailed_statistics")]
 impl AddAssign<BloomQueryStats> for ScopeProximityStats {
     fn add_assign(&mut self, rhs: BloomQueryStats) {
         self.fast_rejects += usize::from(rhs.time_fast_rejecting.is_some());
@@ -128,8 +138,11 @@ impl AddAssign<BloomQueryStats> for ScopeProximityStats {
 /// A struct for bloom filter querying stats
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BloomQueryStats {
+    #[cfg(feature = "detailed_statistics")]
     pub time_fast_rejecting: Option<Duration>,
+    #[cfg(feature = "detailed_statistics")]
     pub time_slow_rejecting: Option<Duration>,
+    #[cfg(feature = "detailed_statistics")]
     pub time_slow_accepting: Option<Duration>,
 }
 
@@ -137,12 +150,14 @@ pub struct BloomQueryStats {
 #[derive(Default, Debug, Div, Clone, Copy, Add, AddAssign, PartialEq, Eq)]
 pub struct Statistics {
     /// Counts
+    #[cfg(feature = "detailed_statistics")]
     pub counts: CountingStats,
     /// Times
     pub times: TimingStats,
 }
 
 /// A sub-struct for counting statistics.
+#[cfg(feature = "detailed_statistics")]
 #[derive(Default, Debug, Div, Clone, Copy, Add, AddAssign, PartialEq, Eq)]
 pub struct CountingStats {
     /// Number of elements in the document
@@ -174,32 +189,41 @@ pub struct CountingStats {
 pub struct TimingStats {
     /// Time spent building the stylist before selector matching
     pub building_stylist: Duration,
+    #[cfg(feature = "detailed_statistics")]
     /// Time spent updating the bloom filter
     pub updating_bloom_filter: Duration,
+    #[cfg(feature = "detailed_statistics")]
     /// Time spent checking if a style can be shared
     pub checking_style_sharing: Duration,
+    #[cfg(feature = "detailed_statistics")]
     /// Time spent querying the selector map
     pub querying_selector_map: Duration,
+    #[cfg(feature = "detailed_statistics")]
     /// Time spent fast rejecting a selector
     pub fast_rejecting: Duration,
+    #[cfg(feature = "detailed_statistics")]
     /// Time spent slow rejecting a selector after all of the following happen:
     /// - Style sharing fails
     /// - Selector appears in the selector map
     /// - Bloom filter does not fast reject
     pub slow_rejecting: Duration,
+    #[cfg(feature = "detailed_statistics")]
     /// Time spent slow accepting
     pub slow_accepting: Duration,
+    #[cfg(feature = "detailed_statistics")]
     /// Time spent inserting elements into the style sharing cache
     pub inserting_into_sharing_cache: Duration,
     /// Measured overall time spent doing matching. Includes everything except for bulding_stylist.
     pub total_matching: Duration,
 
+    #[cfg(feature = "detailed_statistics")]
     /// Time spent by each call to `get_matching_rules`. This will get subtracted
     /// from the overall time in `get_all_matching_rules`, leaving the total time
     /// spent querying the selector map
     pub _time_inside_buckets: Duration,
 }
 
+#[cfg(feature = "detailed_statistics")]
 impl AddAssign<BloomQueryStats> for Statistics {
     fn add_assign(&mut self, rhs: BloomQueryStats) {
         self.counts.fast_rejects += usize::from(rhs.time_fast_rejecting.is_some());
@@ -211,6 +235,7 @@ impl AddAssign<BloomQueryStats> for Statistics {
     }
 }
 
+#[cfg(feature = "detailed_statistics")]
 impl AddAssign<ScopeProximityStats> for Statistics {
     fn add_assign(&mut self, rhs: ScopeProximityStats) {
         self.counts.fast_rejects += rhs.fast_rejects;
