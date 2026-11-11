@@ -503,18 +503,23 @@ where
     // Use the bloom filter to fast-reject.
     if let Some(hashes) = hashes {
         if let Some(filter) = context.bloom_filter {
+            #[cfg(feature = "detailed_statistics")]
             let start = Start::now();
             let may_match = selector_may_match(hashes, filter);
+            #[cfg(feature = "detailed_statistics")]
             let fast_reject_duration = start.elapsed();
             if !may_match {
-                return (KleeneValue::False, BloomQueryStats {
+                let stats = BloomQueryStats::default();
+                #[cfg(feature = "detailed_statistics")]
+                let stats = BloomQueryStats {
                     time_fast_rejecting: Some(fast_reject_duration),
-                    time_slow_rejecting: None,
-                    time_slow_accepting: None,
-                });
+                    ..stats
+                };
+                return (KleeneValue::False, stats);
             }
         }
     }
+    #[cfg(feature = "detailed_statistics")]
     let start = Start::now();
     let does_match = matches_complex_selector(
         selector.iter_from(offset),
@@ -526,16 +531,20 @@ where
             SubjectOrPseudoElement::No
         },
     );
+    #[cfg(feature = "detailed_statistics")]
     let slow_match_duration = start.elapsed();
-    let is_slow_accept = does_match == KleeneValue::True;
-    let is_slow_reject = !is_slow_accept;
+    let stats = BloomQueryStats::default();
+    #[cfg(feature = "detailed_statistics")]
+    let stats = {
+        let mut stats = stats;
+        let is_slow_accept = does_match == KleeneValue::True;
+        stats.time_slow_rejecting = (!is_slow_accept).then_some(slow_match_duration);
+        stats.time_slow_accepting = is_slow_accept.then_some(slow_match_duration);
+        stats
+    };
     (
         does_match,
-        BloomQueryStats {
-            time_fast_rejecting: None,
-            time_slow_rejecting: is_slow_reject.then_some(slow_match_duration),
-            time_slow_accepting: is_slow_accept.then_some(slow_match_duration),
-        }
+        stats
     )
 }
 
