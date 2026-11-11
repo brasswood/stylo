@@ -427,6 +427,7 @@ pub fn matches_selector_at_offset_as_subject<E>(
 where
     E: Element,
 {
+    #[cfg(feature = "detailed_statistics")]
     let start = Start::now();
     let does_match = matches_complex_selector(
         selector.iter_from(offset),
@@ -434,15 +435,20 @@ where
         context,
         SubjectOrPseudoElement::Yes,
     );
+    #[cfg(feature = "detailed_statistics")]
     let duration = start.elapsed();
-    let matched = does_match == KleeneValue::True;
+    let stats = BloomQueryStats::default();
+    #[cfg(feature = "detailed_statistics")]
+    let stats = {
+        let mut stats = stats;
+        let matched = does_match == KleeneValue::True;
+        stats.time_slow_rejecting = (!matched).then_some(duration);
+        stats.time_slow_accepting = matched.then_some(duration);
+        stats
+    };
     (
         does_match.to_bool(true),
-        BloomQueryStats {
-            time_fast_rejecting: None,
-            time_slow_rejecting: (!matched).then_some(duration),
-            time_slow_accepting: matched.then_some(duration),
-        },
+        stats,
     )
 }
 
@@ -455,6 +461,7 @@ pub fn matches_rightmost_compound<E>(
 where
     E: Element,
 {
+    #[cfg(feature = "detailed_statistics")]
     let start = Start::now();
     let mut selector_iter = selector.iter();
     let result = matches_compound_selector(
@@ -463,15 +470,20 @@ where
         context,
         SubjectOrPseudoElement::Yes,
     );
+    #[cfg(feature = "detailed_statistics")]
     let duration = start.elapsed();
-    let matched = result == KleeneValue::True;
+    let stats = BloomQueryStats::default();
+    #[cfg(feature = "detailed_statistics")]
+    let stats = {
+        let mut stats = stats;
+        let matched = result == KleeneValue::True;
+        stats.time_slow_rejecting = (!matched).then_some(duration);
+        stats.time_slow_accepting = matched.then_some(duration);
+        stats
+    };
     (
         result.to_bool(true),
-        BloomQueryStats {
-            time_fast_rejecting: None,
-            time_slow_rejecting: (!matched).then_some(duration),
-            time_slow_accepting: matched.then_some(duration),
-        },
+        stats,
     )
 }
 
