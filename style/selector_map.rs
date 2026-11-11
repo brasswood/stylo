@@ -681,29 +681,48 @@ impl SelectorMap<UniversalTailRule> {
     where
         E: SelectorMapElement + StyleSharingElement,
     {
+        #[cfg(feature = "detailed_statistics")]
         let start = Start::now();
+        #[cfg(feature = "detailed_statistics")]
         let mut matching_time = tsc_timer::Duration::from_cycles(0);
+        #[cfg(feature = "detailed_statistics")]
         let mut hits = 0;
+        #[cfg(feature = "detailed_statistics")]
         let mut stats = Statistics::default();
+        #[cfg(not(feature = "detailed_statistics"))]
+        let stats = Statistics::default();
         self.lookup(element, matching_context.quirks_mode(), None, |entry| {
-            hits += 1;
+            #[cfg(feature = "detailed_statistics")]
+            {
+                hits += 1;
+            }
+            #[cfg(feature = "detailed_statistics")]
             let match_start = Start::now();
-            let (matched, match_stats) = matches_selector_at_offset_as_subject(
+            let (matched, _match_stats) = matches_selector_at_offset_as_subject(
                 &entry.rule.selector,
                 entry.activation_offset,
                 &element,
                 matching_context,
             );
-            matching_time += match_start.elapsed();
-            stats += match_stats;
+            #[cfg(feature = "detailed_statistics")]
+            {
+                matching_time += match_start.elapsed();
+            }
+            #[cfg(feature = "detailed_statistics")]
+            {
+                stats += _match_stats;
+            }
             if matched && !matching_selectors.contains(&&entry.rule.selector) {
                 matching_selectors.push(&entry.rule.selector);
             }
             true
         });
+        #[cfg(feature = "detailed_statistics")]
+        {
         stats.times._time_inside_buckets = matching_time;
         stats.times.querying_selector_map = start.elapsed() - matching_time;
         stats.counts.tail_selector_map_hits = hits;
+        }
         stats
     }
 }
