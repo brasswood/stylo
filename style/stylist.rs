@@ -3526,12 +3526,18 @@ impl CascadeData {
             &self.scope_subject_map,
             context,
         );
+        #[cfg(feature = "detailed_statistics")]
         let mut acc_stats = ScopeProximityStats::default();
+        #[cfg(not(feature = "detailed_statistics"))]
+        let acc_stats = ScopeProximityStats::default();
         for candidate in result.candidates {
-            let (res, bloom_stats) = context.nest_for_scope(Some(candidate.root), |context| {
+            let (res, _bloom_stats) = context.nest_for_scope(Some(candidate.root), |context| {
                 matches_selector(&rule.selector, 0, Some(&rule.hashes), &element, context)
             });
-            acc_stats += bloom_stats;
+            #[cfg(feature = "detailed_statistics")]
+            {
+                acc_stats += _bloom_stats;
+            }
             if res {
                 return (candidate.proximity, acc_stats);
             }
