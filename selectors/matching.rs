@@ -23,7 +23,6 @@ use derive_more::{Add, AddAssign, Div};
 use log::debug;
 use smallvec::SmallVec;
 use std::borrow::Borrow;
-#[cfg(feature = "detailed_statistics")]
 use std::ops::AddAssign;
 #[cfg(feature = "detailed_statistics")]
 use tsc_timer::Start;
@@ -120,15 +119,17 @@ pub struct ScopeProximityStats {
     pub time_slow_accepting: Duration,
 }
 
-#[cfg(feature = "detailed_statistics")]
 impl AddAssign<BloomQueryStats> for ScopeProximityStats {
     fn add_assign(&mut self, rhs: BloomQueryStats) {
-        self.fast_rejects += usize::from(rhs.time_fast_rejecting.is_some());
-        self.slow_rejects += usize::from(rhs.time_slow_rejecting.is_some());
-        self.slow_accepts += usize::from(rhs.time_slow_accepting.is_some());
-        self.time_fast_rejecting += rhs.time_fast_rejecting.unwrap_or_default();
-        self.time_slow_rejecting += rhs.time_slow_rejecting.unwrap_or_default();
-        self.time_slow_accepting += rhs.time_slow_accepting.unwrap_or_default();
+        self.fast_rejects += rhs.fast_rejects;
+        self.slow_rejects += rhs.slow_rejects;
+        self.slow_accepts += rhs.slow_accepts;
+        #[cfg(feature = "detailed_statistics")]
+        {
+            self.time_fast_rejecting += rhs.time_fast_rejecting.unwrap_or_default();
+            self.time_slow_rejecting += rhs.time_slow_rejecting.unwrap_or_default();
+            self.time_slow_accepting += rhs.time_slow_accepting.unwrap_or_default();
+        }
     }
 }
 
@@ -221,27 +222,31 @@ pub struct TimingStats {
     pub _time_inside_buckets: Duration,
 }
 
-#[cfg(feature = "detailed_statistics")]
 impl AddAssign<BloomQueryStats> for Statistics {
     fn add_assign(&mut self, rhs: BloomQueryStats) {
-        self.counts.fast_rejects += usize::from(rhs.time_fast_rejecting.is_some());
-        self.counts.slow_rejects += usize::from(rhs.time_slow_rejecting.is_some());
-        self.counts.slow_accepts += usize::from(rhs.time_slow_accepting.is_some());
-        self.times.fast_rejecting += rhs.time_fast_rejecting.unwrap_or_default();
-        self.times.slow_rejecting += rhs.time_slow_rejecting.unwrap_or_default();
-        self.times.slow_accepting += rhs.time_slow_accepting.unwrap_or_default();
+        self.counts.fast_rejects += rhs.fast_rejects;
+        self.counts.slow_rejects += rhs.slow_rejects;
+        self.counts.slow_accepts += rhs.slow_accepts;
+        #[cfg(feature = "detailed_statistics")]
+        {
+            self.times.fast_rejecting += rhs.time_fast_rejecting.unwrap_or_default();
+            self.times.slow_rejecting += rhs.time_slow_rejecting.unwrap_or_default();
+            self.times.slow_accepting += rhs.time_slow_accepting.unwrap_or_default();
+        }
     }
 }
 
-#[cfg(feature = "detailed_statistics")]
 impl AddAssign<ScopeProximityStats> for Statistics {
     fn add_assign(&mut self, rhs: ScopeProximityStats) {
         self.counts.fast_rejects += rhs.fast_rejects;
         self.counts.slow_rejects += rhs.slow_rejects;
         self.counts.slow_accepts += rhs.slow_accepts;
-        self.times.fast_rejecting += rhs.time_fast_rejecting;
-        self.times.slow_rejecting += rhs.time_slow_rejecting;
-        self.times.slow_accepting += rhs.time_slow_accepting;
+        #[cfg(feature = "detailed_statistics")]
+        {
+            self.times.fast_rejecting += rhs.time_fast_rejecting;
+            self.times.slow_rejecting += rhs.time_slow_rejecting;
+            self.times.slow_accepting += rhs.time_slow_accepting;
+        }
     }
 }
 
