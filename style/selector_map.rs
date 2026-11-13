@@ -484,10 +484,7 @@ impl SelectorMap<Rule> {
             debug_html_str,
         );
         if !skip_universal_tails {
-            #[cfg(feature = "detailed_statistics")]
-            {
-                hits += self.universal_tails.len();
-            }
+            hits += self.universal_tails.len();
             stats += SelectorMap::get_matching_rules(
                 element,
                 &self.universal_tails,
@@ -503,10 +500,7 @@ impl SelectorMap<Rule> {
             );
         }
         if !skip_universal_buckets {
-            #[cfg(feature = "detailed_statistics")]
-            {
-                hits += self.universal_buckets.len();
-            }
+            hits += self.universal_buckets.len();
             stats += SelectorMap::get_matching_rules(
                 element,
                 &self.universal_buckets,
@@ -557,10 +551,7 @@ impl SelectorMap<Rule> {
             matching_context.include_starting_style,
             IncludeStartingStyle::Yes
         );
-        #[cfg(feature = "detailed_statistics")]
         let mut acc_stats = Statistics::default();
-        #[cfg(not(feature = "detailed_statistics"))]
-        let acc_stats = Statistics::default();
         for rule in rules {
             #[cfg(feature = "debug_element")]
             if let Some(html_str) = debug_html_str {
@@ -577,10 +568,7 @@ impl SelectorMap<Rule> {
                 if let Some(selector_stats) = selector_stats.as_deref_mut() {
                     selector_stats.push((&rule.selector, SelectorStats::Bloom(bloom_stats)));
                 }
-                #[cfg(feature = "detailed_statistics")]
-                {
-                    acc_stats += bloom_stats;
-                }
+                acc_stats += bloom_stats;
                 if !res {
                     continue;
                 }
@@ -591,10 +579,7 @@ impl SelectorMap<Rule> {
                 if let Some(selector_stats) = selector_stats.as_deref_mut() {
                     selector_stats.push((&rule.selector, SelectorStats::ScopeProximity(scope_proximity_stats)));
                 }
-                #[cfg(feature = "detailed_statistics")]
-                {
-                    acc_stats += scope_proximity_stats;
-                }
+                acc_stats += scope_proximity_stats;
                 if result == ScopeProximity::infinity() {
                     continue;
                 }
@@ -658,17 +643,10 @@ impl SelectorMap<UniversalTailRule> {
         let start = Start::now();
         #[cfg(feature = "detailed_statistics")]
         let mut matching_time = tsc_timer::Duration::from_cycles(0);
-        #[cfg(feature = "detailed_statistics")]
         let mut hits = 0;
-        #[cfg(feature = "detailed_statistics")]
         let mut stats = Statistics::default();
-        #[cfg(not(feature = "detailed_statistics"))]
-        let stats = Statistics::default();
         self.lookup(element, matching_context.quirks_mode(), None, |entry| {
-            #[cfg(feature = "detailed_statistics")]
-            {
-                hits += 1;
-            }
+            hits += 1;
             #[cfg(feature = "detailed_statistics")]
             let match_start = Start::now();
             let (matched, _match_stats) = matches_selector_at_offset_as_subject(
@@ -681,10 +659,7 @@ impl SelectorMap<UniversalTailRule> {
             {
                 matching_time += match_start.elapsed();
             }
-            #[cfg(feature = "detailed_statistics")]
-            {
-                stats += _match_stats;
-            }
+            stats += _match_stats;
             if matched && !matching_selectors.contains(&&entry.rule.selector) {
                 matching_selectors.push(&entry.rule.selector);
             }
@@ -692,10 +667,10 @@ impl SelectorMap<UniversalTailRule> {
         });
         #[cfg(feature = "detailed_statistics")]
         {
-        stats.times._time_inside_buckets = matching_time;
-        stats.times.querying_selector_map = start.elapsed() - matching_time;
-        stats.counts.tail_selector_map_hits = hits;
+            stats.times._time_inside_buckets = matching_time;
+            stats.times.querying_selector_map = start.elapsed() - matching_time;
         }
+        stats.counts.tail_selector_map_hits = hits;
         stats
     }
 }
@@ -762,12 +737,8 @@ impl SelectorMap<UniversalBucketRule> {
         let start = Start::now();
         #[cfg(feature = "detailed_statistics")]
         let mut matching_time = tsc_timer::Duration::from_cycles(0);
-        #[cfg(feature = "detailed_statistics")]
         let mut hits = 0;
-        #[cfg(feature = "detailed_statistics")]
         let mut stats = Statistics::default();
-        #[cfg(not(feature = "detailed_statistics"))]
-        let stats = Statistics::default();
         let mut seen: SmallVec<[&UniversalBucketRule; 4]> = SmallVec::new();
         self.lookup(element, matching_context.quirks_mode(), None, |entry| {
             if let Some(_duration) = try_bless_universal_bucket_rule(
@@ -778,9 +749,9 @@ impl SelectorMap<UniversalBucketRule> {
                 &mut seen,
                 matching_context,
             ) {
+                hits += 1;
                 #[cfg(feature = "detailed_statistics")]
                 {
-                    hits += 1;
                     matching_time += _duration;
                 }
             }
@@ -790,8 +761,8 @@ impl SelectorMap<UniversalBucketRule> {
         {
             stats.times._time_inside_buckets = matching_time;
             stats.times.querying_selector_map = start.elapsed() - matching_time;
-            stats.counts.tail_selector_map_hits = hits;
         }
+        stats.counts.tail_selector_map_hits = hits;
         stats
     }
 }
