@@ -317,7 +317,6 @@ impl SelectorMap<Rule> {
         }
 
         let quirks_mode = matching_context.quirks_mode();
-        #[cfg(feature = "detailed_statistics")]
         let mut hits = 0;
         let mut stats = Statistics::default();
 
@@ -325,10 +324,7 @@ impl SelectorMap<Rule> {
         let start = Start::now();
 
         if rule_hash_target.is_root() {
-            #[cfg(feature = "detailed_statistics")]
-            {
-                hits += self.root.len();
-            }
+            hits += self.root.len();
             stats += SelectorMap::get_matching_rules(
                 element,
                 &self.root,
@@ -346,10 +342,7 @@ impl SelectorMap<Rule> {
 
         if let Some(id) = rule_hash_target.id() {
             if let Some(rules) = self.id_hash.get(id, quirks_mode) {
-                #[cfg(feature = "detailed_statistics")]
-                {
-                    hits += rules.len();
-                }
+                hits += rules.len();
                 stats += SelectorMap::get_matching_rules(
                     element,
                     rules,
@@ -368,10 +361,7 @@ impl SelectorMap<Rule> {
 
         // TODO: this is my best guess at how to determine if an element is eligible to be matched against all the selectors that have common pseudo-classes such as :hover.
         if rule_hash_target.state().intersects(ElementState::RARE_PSEUDO_CLASS_STATES.complement()) {
-            #[cfg(feature = "detailed_statistics")]
-            {
-                hits += self.common_pseudo_classes.len();
-            }
+            hits += self.common_pseudo_classes.len();
             stats += SelectorMap::get_matching_rules(
                 element,
                 &self.common_pseudo_classes,
@@ -389,10 +379,7 @@ impl SelectorMap<Rule> {
 
         rule_hash_target.each_class(|class| {
             if let Some(rules) = self.class_hash.get(&class, quirks_mode) {
-                #[cfg(feature = "detailed_statistics")]
-                {
-                    hits += rules.len();
-                }
+                hits += rules.len();
                 stats += SelectorMap::get_matching_rules(
                     element,
                     rules,
@@ -411,10 +398,7 @@ impl SelectorMap<Rule> {
 
         rule_hash_target.each_attr_name(|name| {
             if let Some(rules) = self.attribute_hash.get(name) {
-                #[cfg(feature = "detailed_statistics")]
-                {
-                    hits += rules.len();
-                }
+                hits += rules.len();
                 stats += SelectorMap::get_matching_rules(
                     element,
                     rules,
@@ -432,10 +416,7 @@ impl SelectorMap<Rule> {
         });
 
         if let Some(rules) = self.local_name_hash.get(rule_hash_target.local_name()) {
-            #[cfg(feature = "detailed_statistics")]
-            {
-                hits += rules.len();
-            }
+            hits += rules.len();
             stats += SelectorMap::get_matching_rules(
                 element,
                 rules,
@@ -455,10 +436,7 @@ impl SelectorMap<Rule> {
             .state()
             .intersects(ElementState::RARE_PSEUDO_CLASS_STATES)
         {
-            #[cfg(feature = "detailed_statistics")]
-            {
-                hits += self.rare_pseudo_classes.len();
-            }
+            hits += self.rare_pseudo_classes.len();
             stats += SelectorMap::get_matching_rules(
                 element,
                 &self.rare_pseudo_classes,
@@ -475,10 +453,7 @@ impl SelectorMap<Rule> {
         }
 
         if let Some(rules) = self.namespace_hash.get(rule_hash_target.namespace()) {
-            #[cfg(feature = "detailed_statistics")]
-            {
-                hits += rules.len();
-            }
+            hits += rules.len();
             stats += SelectorMap::get_matching_rules(
                 element,
                 rules,
@@ -494,10 +469,7 @@ impl SelectorMap<Rule> {
             )
         }
 
-        #[cfg(feature = "detailed_statistics")]
-        {
-            hits += self.other.len();
-        }
+        hits += self.other.len();
         stats += SelectorMap::get_matching_rules(
             element,
             &self.other,
@@ -554,8 +526,8 @@ impl SelectorMap<Rule> {
         #[cfg(feature = "detailed_statistics")]
         {
             stats.times.querying_selector_map = duration - stats.times._time_inside_buckets;
-            stats.counts.selector_map_hits = hits;
         }
+        stats.counts.selector_map_hits = hits;
         stats
     }
 
