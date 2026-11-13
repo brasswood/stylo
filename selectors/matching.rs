@@ -109,11 +109,8 @@ impl Default for SelectorStats {
 /// Like `BloomQueryStats` but with fields for counting number of queries.
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ScopeProximityStats {
-    #[cfg(feature = "detailed_statistics")]
     pub fast_rejects: usize,
-    #[cfg(feature = "detailed_statistics")]
     pub slow_rejects: usize,
-    #[cfg(feature = "detailed_statistics")]
     pub slow_accepts: usize,
     #[cfg(feature = "detailed_statistics")]
     pub time_fast_rejecting: Duration, // Non-optional, since `fast_rejects` will tell us whether there were any.
@@ -150,14 +147,12 @@ pub struct BloomQueryStats {
 #[derive(Default, Debug, Div, Clone, Copy, Add, AddAssign, PartialEq, Eq)]
 pub struct Statistics {
     /// Counts
-    #[cfg(feature = "detailed_statistics")]
     pub counts: CountingStats,
     /// Times
     pub times: TimingStats,
 }
 
 /// A sub-struct for counting statistics.
-#[cfg(feature = "detailed_statistics")]
 #[derive(Default, Debug, Div, Clone, Copy, Add, AddAssign, PartialEq, Eq)]
 pub struct CountingStats {
     /// Number of elements in the document
