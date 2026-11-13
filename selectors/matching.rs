@@ -466,16 +466,15 @@ where
     #[cfg(feature = "detailed_statistics")]
     let duration = start.elapsed();
     let matched = does_match == KleeneValue::True;
-    let mut stats = BloomQueryStats {
+    let stats = BloomQueryStats {
         slow_rejects: usize::from(!matched),
         slow_accepts: usize::from(matched),
+        #[cfg(feature = "detailed_statistics")]
+        time_slow_rejecting: (!matched).then_some(duration),
+        #[cfg(feature = "detailed_statistics")]
+        time_slow_accepting: matched.then_some(duration),
         ..BloomQueryStats::default()
     };
-    #[cfg(feature = "detailed_statistics")]
-    {
-        stats.time_slow_rejecting = (!matched).then_some(duration);
-        stats.time_slow_accepting = matched.then_some(duration);
-    }
     (
         does_match.to_bool(true),
         stats,
@@ -503,16 +502,15 @@ where
     #[cfg(feature = "detailed_statistics")]
     let duration = start.elapsed();
     let matched = result == KleeneValue::True;
-    let mut stats = BloomQueryStats {
+    let stats = BloomQueryStats {
         slow_rejects: usize::from(!matched),
         slow_accepts: usize::from(matched),
+        #[cfg(feature = "detailed_statistics")]
+        time_slow_rejecting: (!matched).then_some(duration),
+        #[cfg(feature = "detailed_statistics")]
+        time_slow_accepting: matched.then_some(duration),
         ..BloomQueryStats::default()
     };
-    #[cfg(feature = "detailed_statistics")]
-    {
-        stats.time_slow_rejecting = (!matched).then_some(duration);
-        stats.time_slow_accepting = matched.then_some(duration);
-    }
     (
         result.to_bool(true),
         stats,
@@ -541,14 +539,12 @@ where
             #[cfg(feature = "detailed_statistics")]
             let fast_reject_duration = start.elapsed();
             if !may_match {
-                let mut stats = BloomQueryStats {
+                let stats = BloomQueryStats {
                     fast_rejects: 1,
+                    #[cfg(feature = "detailed_statistics")]
+                    time_fast_rejecting: Some(fast_reject_duration),
                     ..BloomQueryStats::default()
                 };
-                #[cfg(feature = "detailed_statistics")]
-                {
-                    stats.time_fast_rejecting = Some(fast_reject_duration);
-                }
                 return (KleeneValue::False, stats);
             }
         }
@@ -568,16 +564,15 @@ where
     #[cfg(feature = "detailed_statistics")]
     let slow_match_duration = start.elapsed();
     let is_slow_accept = does_match == KleeneValue::True;
-    let mut stats = BloomQueryStats {
+    let stats = BloomQueryStats {
         slow_rejects: usize::from(!is_slow_accept),
         slow_accepts: usize::from(is_slow_accept),
+        #[cfg(feature = "detailed_statistics")]
+        time_slow_rejecting: (!is_slow_accept).then_some(slow_match_duration),
+        #[cfg(feature = "detailed_statistics")]
+        time_slow_accepting: is_slow_accept.then_some(slow_match_duration),
         ..BloomQueryStats::default()
     };
-    #[cfg(feature = "detailed_statistics")]
-    {
-        stats.time_slow_rejecting = (!is_slow_accept).then_some(slow_match_duration);
-        stats.time_slow_accepting = is_slow_accept.then_some(slow_match_duration);
-    }
     (
         does_match,
         stats
