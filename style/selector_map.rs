@@ -649,7 +649,7 @@ impl SelectorMap<UniversalTailRule> {
             hits += 1;
             #[cfg(feature = "detailed_statistics")]
             let match_start = Start::now();
-            let (matched, _match_stats) = matches_selector_at_offset_as_subject(
+            let (matched, match_stats) = matches_selector_at_offset_as_subject(
                 &entry.rule.selector,
                 entry.activation_offset,
                 &element,
@@ -659,7 +659,7 @@ impl SelectorMap<UniversalTailRule> {
             {
                 matching_time += match_start.elapsed();
             }
-            stats += _match_stats;
+            stats += match_stats;
             if matched && !matching_selectors.contains(&&entry.rule.selector) {
                 matching_selectors.push(&entry.rule.selector);
             }
