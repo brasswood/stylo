@@ -557,6 +557,9 @@ pub fn matches_selector_kleene<E>(
 where
     E: Element,
 {
+    #[cfg(feature = "detailed_statistics")]
+    let _ = context.take_not_matched_result_counts();
+
     // Use the bloom filter to fast-reject.
     if let Some(hashes) = hashes {
         if let Some(filter) = context.bloom_filter {
@@ -589,11 +592,15 @@ where
         },
     );
     #[cfg(feature = "detailed_statistics")]
+    let not_matched_result_counts = context.take_not_matched_result_counts();
+    #[cfg(feature = "detailed_statistics")]
     let slow_match_duration = start.elapsed();
     let is_slow_accept = does_match == KleeneValue::True;
     let stats = BloomQueryStats {
         slow_rejects: usize::from(!is_slow_accept),
         slow_accepts: usize::from(is_slow_accept),
+        #[cfg(feature = "detailed_statistics")]
+        not_matched_result_counts,
         #[cfg(feature = "detailed_statistics")]
         time_slow_rejecting: (!is_slow_accept).then_some(slow_match_duration),
         #[cfg(feature = "detailed_statistics")]
