@@ -140,10 +140,8 @@ pub struct SelectorCaches {
     pub relative_selector_filter_map: RelativeSelectorFilterMap,
 }
 
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum NotMatchedResult {
-    #[default]
-    None,
     GlobalFailure,
     DescendantRestart,
     SiblingRestart,
@@ -159,7 +157,6 @@ pub struct NotMatchedResultCounts {
 impl NotMatchedResultCounts {
     fn record(&mut self, result: NotMatchedResult) {
         match result {
-            NotMatchedResult::None => {},
             NotMatchedResult::GlobalFailure => self.classic_global_failures += 1,
             NotMatchedResult::DescendantRestart => self.classic_descendant_restarts += 1,
             NotMatchedResult::SiblingRestart => self.classic_sibling_restarts += 1,
@@ -239,6 +236,7 @@ where
 
     /// Caches to speed up expensive selector matches.
     pub selector_caches: &'a mut SelectorCaches,
+    not_matched_result_counts: NotMatchedResultCounts,
 
     classes_and_ids_case_sensitivity: CaseSensitivity,
     _impl: ::std::marker::PhantomData<Impl>,
@@ -299,6 +297,7 @@ where
             extra_data: Default::default(),
             current_relative_selector_anchor: None,
             selector_caches,
+            not_matched_result_counts: NotMatchedResultCounts::default(),
             _impl: ::std::marker::PhantomData,
         }
     }
@@ -344,6 +343,16 @@ where
     #[inline]
     pub fn needs_selector_flags(&self) -> bool {
         self.needs_selector_flags == NeedsSelectorFlags::Yes
+    }
+
+    #[inline]
+    pub fn note_not_matched_result(&mut self, result: NotMatchedResult) {
+        self.not_matched_result_counts.record(result);
+    }
+
+    #[inline]
+    pub fn take_not_matched_result_counts(&mut self) -> NotMatchedResultCounts {
+        ::std::mem::take(&mut self.not_matched_result_counts)
     }
 
     /// Whether or not we're matching to invalidate.
