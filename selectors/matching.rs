@@ -1246,6 +1246,13 @@ where
             },
             Combinator::Child => {
                 // Upgrade the failure status to NotMatchedAndRestartFromClosestDescendant.
+                #[cfg(feature = "detailed_statistics")]
+                if result != SelectorMatchingResult::NotMatchedAndRestartFromClosestDescendant {
+                    record_classic_not_matched_result(
+                        context,
+                        SelectorMatchingResult::NotMatchedAndRestartFromClosestDescendant,
+                    );
+                }
                 return SelectorMatchingResult::NotMatchedAndRestartFromClosestDescendant;
             },
             Combinator::LaterSibling => {
@@ -1274,6 +1281,8 @@ where
         if featureless {
             // A featureless element didn't match the selector, we can stop matching now rather
             // than looking at following elements for our combinator.
+            #[cfg(feature = "detailed_statistics")]
+            record_classic_not_matched_result(context, candidate_not_found);
             return candidate_not_found;
         }
     }
