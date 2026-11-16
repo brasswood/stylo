@@ -140,6 +140,7 @@ pub struct SelectorCaches {
     pub relative_selector_filter_map: RelativeSelectorFilterMap,
 }
 
+#[cfg(feature = "detailed_statistics")]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum NotMatchedResult {
     GlobalFailure,
@@ -147,6 +148,7 @@ pub enum NotMatchedResult {
     SiblingRestart,
 }
 
+#[cfg(feature = "detailed_statistics")]
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct NotMatchedResultCounts {
     pub classic_global_failures: usize,
@@ -154,6 +156,7 @@ pub struct NotMatchedResultCounts {
     pub classic_sibling_restarts: usize,
 }
 
+#[cfg(feature = "detailed_statistics")]
 impl NotMatchedResultCounts {
     fn record(&mut self, result: NotMatchedResult) {
         match result {
@@ -164,6 +167,7 @@ impl NotMatchedResultCounts {
     }
 }
 
+#[cfg(feature = "detailed_statistics")]
 impl std::ops::AddAssign for NotMatchedResultCounts {
     fn add_assign(&mut self, rhs: Self) {
         self.classic_global_failures += rhs.classic_global_failures;
@@ -236,6 +240,7 @@ where
 
     /// Caches to speed up expensive selector matches.
     pub selector_caches: &'a mut SelectorCaches,
+    #[cfg(feature = "detailed_statistics")]
     not_matched_result_counts: NotMatchedResultCounts,
 
     classes_and_ids_case_sensitivity: CaseSensitivity,
@@ -297,6 +302,7 @@ where
             extra_data: Default::default(),
             current_relative_selector_anchor: None,
             selector_caches,
+            #[cfg(feature = "detailed_statistics")]
             not_matched_result_counts: NotMatchedResultCounts::default(),
             _impl: ::std::marker::PhantomData,
         }
@@ -345,11 +351,13 @@ where
         self.needs_selector_flags == NeedsSelectorFlags::Yes
     }
 
+    #[cfg(feature = "detailed_statistics")]
     #[inline]
     pub fn note_not_matched_result(&mut self, result: NotMatchedResult) {
         self.not_matched_result_counts.record(result);
     }
 
+    #[cfg(feature = "detailed_statistics")]
     #[inline]
     pub fn take_not_matched_result_counts(&mut self) -> NotMatchedResultCounts {
         ::std::mem::take(&mut self.not_matched_result_counts)
