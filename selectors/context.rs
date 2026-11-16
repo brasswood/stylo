@@ -140,6 +140,41 @@ pub struct SelectorCaches {
     pub relative_selector_filter_map: RelativeSelectorFilterMap,
 }
 
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum NotMatchedResult {
+    #[default]
+    None,
+    GlobalFailure,
+    DescendantRestart,
+    SiblingRestart,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct NotMatchedResultCounts {
+    pub classic_global_failures: usize,
+    pub classic_descendant_restarts: usize,
+    pub classic_sibling_restarts: usize,
+}
+
+impl NotMatchedResultCounts {
+    fn record(&mut self, result: NotMatchedResult) {
+        match result {
+            NotMatchedResult::None => {},
+            NotMatchedResult::GlobalFailure => self.classic_global_failures += 1,
+            NotMatchedResult::DescendantRestart => self.classic_descendant_restarts += 1,
+            NotMatchedResult::SiblingRestart => self.classic_sibling_restarts += 1,
+        }
+    }
+}
+
+impl std::ops::AddAssign for NotMatchedResultCounts {
+    fn add_assign(&mut self, rhs: Self) {
+        self.classic_global_failures += rhs.classic_global_failures;
+        self.classic_descendant_restarts += rhs.classic_descendant_restarts;
+        self.classic_sibling_restarts += rhs.classic_sibling_restarts;
+    }
+}
+
 /// Data associated with the matching process for a element.  This context is
 /// used across many selectors for an element, so it's not appropriate for
 /// transient data that applies to only a single selector.
