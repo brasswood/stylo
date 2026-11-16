@@ -112,6 +112,8 @@ pub struct ScopeProximityStats {
     pub slow_rejects: usize,
     pub slow_accepts: usize,
     #[cfg(feature = "detailed_statistics")]
+    pub slow_reject_not_matched_result_counts: NotMatchedResultCounts,
+    #[cfg(feature = "detailed_statistics")]
     pub time_fast_rejecting: Duration, // Non-optional, since `fast_rejects` will tell us whether there were any.
     #[cfg(feature = "detailed_statistics")]
     pub time_slow_rejecting: Duration,
@@ -124,6 +126,10 @@ impl AddAssign<BloomQueryStats> for ScopeProximityStats {
         self.fast_rejects += rhs.fast_rejects;
         self.slow_rejects += rhs.slow_rejects;
         self.slow_accepts += rhs.slow_accepts;
+        #[cfg(feature = "detailed_statistics")]
+        if rhs.slow_rejects > 0 {
+            self.slow_reject_not_matched_result_counts += rhs.not_matched_result_counts;
+        }
         #[cfg(feature = "detailed_statistics")]
         {
             self.time_fast_rejecting += rhs.time_fast_rejecting.unwrap_or_default();
@@ -139,6 +145,8 @@ pub struct BloomQueryStats {
     pub fast_rejects: usize,
     pub slow_rejects: usize,
     pub slow_accepts: usize,
+    #[cfg(feature = "detailed_statistics")]
+    pub not_matched_result_counts: NotMatchedResultCounts,
     #[cfg(feature = "detailed_statistics")]
     pub time_fast_rejecting: Option<Duration>,
     #[cfg(feature = "detailed_statistics")]
