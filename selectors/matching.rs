@@ -557,9 +557,6 @@ pub fn matches_selector_kleene<E>(
 where
     E: Element,
 {
-    #[cfg(feature = "detailed_statistics")]
-    let _ = context.take_not_matched_result_counts();
-
     // Use the bloom filter to fast-reject.
     if let Some(hashes) = hashes {
         if let Some(filter) = context.bloom_filter {
