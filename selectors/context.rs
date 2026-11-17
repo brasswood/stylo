@@ -4,6 +4,7 @@
 
 use crate::attr::CaseSensitivity;
 use crate::bloom::BloomFilter;
+use crate::matching::SelectorMatchingResult;
 use crate::nth_index_cache::{NthIndexCache, NthIndexCacheInner};
 use crate::parser::{Selector, SelectorImpl};
 use crate::relative_selector::cache::RelativeSelectorCache;
@@ -141,14 +142,6 @@ pub struct SelectorCaches {
 }
 
 #[cfg(feature = "detailed_statistics")]
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum NotMatchedResult {
-    GlobalFailure,
-    DescendantRestart,
-    SiblingRestart,
-}
-
-#[cfg(feature = "detailed_statistics")]
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct NotMatchedResultCounts {
     pub classic_global_failures: usize,
@@ -158,11 +151,13 @@ pub struct NotMatchedResultCounts {
 
 #[cfg(feature = "detailed_statistics")]
 impl NotMatchedResultCounts {
-    fn record(&mut self, result: NotMatchedResult) {
+    #[inline]
+    fn record(&mut self, result: SelectorMatchingResult) {
         match result {
-            NotMatchedResult::GlobalFailure => self.classic_global_failures += 1,
-            NotMatchedResult::DescendantRestart => self.classic_descendant_restarts += 1,
-            NotMatchedResult::SiblingRestart => self.classic_sibling_restarts += 1,
+            SelectorMatchingResult::NotMatchedGlobally => self.classic_global_failures += 1,
+            SelectorMatchingResult::NotMatchedAndRestartFromClosestDescendant => self.classic_descendant_restarts += 1,
+            SelectorMatchingResult::NotMatchedAndRestartFromClosestLaterSibling => self.classic_sibling_restarts += 1,
+            _ => {},
         }
     }
 }
@@ -353,7 +348,7 @@ where
 
     #[cfg(feature = "detailed_statistics")]
     #[inline]
-    pub fn note_not_matched_result(&mut self, result: NotMatchedResult) {
+    pub fn note_not_matched_result(&mut self, result: SelectorMatchingResult) {
         self.not_matched_result_counts.record(result);
     }
 

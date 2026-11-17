@@ -393,31 +393,12 @@ pub fn selector_may_match(hashes: &AncestorHashes, bf: &BloomFilter) -> bool {
 /// with coersion to not-matched would result in an invalid before/after comparison
 /// of not-matched/not-matched.
 #[derive(Clone, Copy, Eq, PartialEq)]
-enum SelectorMatchingResult {
+pub enum SelectorMatchingResult {
     Matched,
     NotMatchedAndRestartFromClosestLaterSibling,
     NotMatchedAndRestartFromClosestDescendant,
     NotMatchedGlobally,
     Unknown,
-}
-
-#[cfg(feature = "detailed_statistics")]
-#[inline]
-fn record_classic_not_matched_result<E: Element>(
-    context: &mut MatchingContext<E::Impl>,
-    result: SelectorMatchingResult,
-) {
-    let result = match result {
-        SelectorMatchingResult::NotMatchedGlobally => NotMatchedResult::GlobalFailure,
-        SelectorMatchingResult::NotMatchedAndRestartFromClosestDescendant => {
-            NotMatchedResult::DescendantRestart
-        },
-        SelectorMatchingResult::NotMatchedAndRestartFromClosestLaterSibling => {
-            NotMatchedResult::SiblingRestart
-        },
-        SelectorMatchingResult::Matched | SelectorMatchingResult::Unknown => return,
-    };
-    context.note_not_matched_result(result);
 }
 
 impl From<SelectorMatchingResult> for KleeneValue {
@@ -1142,7 +1123,7 @@ where
             },
         };
         #[cfg(feature = "detailed_statistics")]
-        record_classic_not_matched_result::<E>(context, result);
+        context.note_not_matched_result(result);
         return result;
     };
 
@@ -1151,7 +1132,7 @@ where
         // A featureless element shouldn't match any further combinator.
         // TODO(emilio): Maybe we could avoid the compound matching more eagerly.
         #[cfg(feature = "detailed_statistics")]
-        record_classic_not_matched_result::<E>(context, SelectorMatchingResult::NotMatchedGlobally);
+        context.note_not_matched_result(SelectorMatchingResult::NotMatchedGlobally);
         return SelectorMatchingResult::NotMatchedGlobally;
     }
 
@@ -1165,8 +1146,7 @@ where
         // We don't short circuit unknown here, since the rest of the selector
         // to the left of this compound may still return false.
         #[cfg(feature = "detailed_statistics")]
-        record_classic_not_matched_result::<E>(
-            context,
+        context.note_not_matched_result(
             SelectorMatchingResult::NotMatchedAndRestartFromClosestLaterSibling,
         );
         return SelectorMatchingResult::NotMatchedAndRestartFromClosestLaterSibling;
@@ -1204,7 +1184,7 @@ where
         element = match next_element {
             None => {
                 #[cfg(feature = "detailed_statistics")]
-                record_classic_not_matched_result::<E>(context, candidate_not_found);
+                context.note_not_matched_result(candidate_not_found);
                 return candidate_not_found;
             },
             Some(e) => e,
@@ -1252,8 +1232,7 @@ where
                 // Upgrade the failure status to NotMatchedAndRestartFromClosestDescendant.
                 #[cfg(feature = "detailed_statistics")]
                 if result != SelectorMatchingResult::NotMatchedAndRestartFromClosestDescendant {
-                    record_classic_not_matched_result::<E>(
-                        context,
+                    context.note_not_matched_result(
                         SelectorMatchingResult::NotMatchedAndRestartFromClosestDescendant,
                     );
                 }
@@ -1286,7 +1265,7 @@ where
             // A featureless element didn't match the selector, we can stop matching now rather
             // than looking at following elements for our combinator.
             #[cfg(feature = "detailed_statistics")]
-            record_classic_not_matched_result::<E>(context, candidate_not_found);
+            context.note_not_matched_result(candidate_not_found);
             return candidate_not_found;
         }
     }
