@@ -739,8 +739,9 @@ impl SelectorMap<UniversalBucketRule> {
         let mut matching_time = tsc_timer::Duration::from_cycles(0);
         let mut hits = 0;
         let mut stats = Statistics::default();
+        let quirks_mode = matching_context.quirks_mode();
         let mut seen: SmallVec<[&UniversalBucketRule; 4]> = SmallVec::new();
-        self.lookup(element, matching_context.quirks_mode(), None, |entry| {
+        let mut check_entry = |entry| {
             if let Some(_duration) = try_bless_universal_bucket_rule(
                 entry,
                 element,
@@ -755,6 +756,9 @@ impl SelectorMap<UniversalBucketRule> {
                     matching_time += _duration;
                 }
             }
+        };
+        self.lookup(element, quirks_mode, None, |entry| {
+            check_entry(entry);
             true
         });
         #[cfg(feature = "detailed_statistics")]
