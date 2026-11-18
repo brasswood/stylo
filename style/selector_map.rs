@@ -733,6 +733,10 @@ impl SelectorMap<UniversalBucketRule> {
     where
         E: SelectorMapElement + StyleSharingElement,
     {
+        if self.is_empty() {
+            return Statistics::default();
+        }
+
         #[cfg(feature = "detailed_statistics")]
         let start = Start::now();
         #[cfg(feature = "detailed_statistics")]
@@ -784,10 +788,37 @@ impl SelectorMap<UniversalBucketRule> {
                 }
             }
         });
-        self.lookup(element, quirks_mode, None, |entry| {
-            check_entry(entry);
-            true
+        element.each_attr_name(|name| {
+            if let Some(entries) = self.attribute_hash.get(name) {
+                for entry in entries.iter() {
+                    check_entry(entry);
+                }
+            }
         });
+        if let Some(entries) = self.local_name_hash.get(element.local_name()) {
+            for entry in entries.iter() {
+                check_entry(entry);
+            }
+        }
+        if element
+            .state()
+            .intersects(ElementState::RARE_PSEUDO_CLASS_STATES)
+        {
+            for entry in self.rare_pseudo_classes.iter() {
+                check_entry(entry);
+            }
+        }
+        if let Some(entries) = self.namespace_hash.get(element.namespace()) {
+            for entry in entries.iter() {
+                check_entry(entry);
+            }
+        }
+        for entry in self.other.iter() {
+            check_entry(entry);
+        }
+        for entry in self.universal_buckets.iter() {
+            check_entry(entry);
+        }
         #[cfg(feature = "detailed_statistics")]
         {
             stats.times._time_inside_buckets = matching_time;
