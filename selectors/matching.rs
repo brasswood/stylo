@@ -132,9 +132,9 @@ impl AddAssign<BloomQueryStats> for ScopeProximityStats {
         }
         #[cfg(feature = "detailed_statistics")]
         {
-            self.time_fast_rejecting += rhs.time_fast_rejecting.unwrap_or_default();
-            self.time_slow_rejecting += rhs.time_slow_rejecting.unwrap_or_default();
-            self.time_slow_accepting += rhs.time_slow_accepting.unwrap_or_default();
+            self.time_fast_rejecting += rhs.time_fast_rejecting;
+            self.time_slow_rejecting += rhs.time_slow_rejecting;
+            self.time_slow_accepting += rhs.time_slow_accepting;
         }
     }
 }
@@ -148,11 +148,11 @@ pub struct BloomQueryStats {
     #[cfg(feature = "detailed_statistics")]
     pub not_matched_result_counts: NotMatchedResultCounts,
     #[cfg(feature = "detailed_statistics")]
-    pub time_fast_rejecting: Option<Duration>,
+    pub time_fast_rejecting: Duration,
     #[cfg(feature = "detailed_statistics")]
-    pub time_slow_rejecting: Option<Duration>,
+    pub time_slow_rejecting: Duration,
     #[cfg(feature = "detailed_statistics")]
-    pub time_slow_accepting: Option<Duration>,
+    pub time_slow_accepting: Duration,
 }
 
 /// A struct for returning statistics
@@ -237,9 +237,9 @@ impl AddAssign<BloomQueryStats> for Statistics {
         self.counts.slow_accepts += rhs.slow_accepts;
         #[cfg(feature = "detailed_statistics")]
         {
-            self.times.fast_rejecting += rhs.time_fast_rejecting.unwrap_or_default();
-            self.times.slow_rejecting += rhs.time_slow_rejecting.unwrap_or_default();
-            self.times.slow_accepting += rhs.time_slow_accepting.unwrap_or_default();
+            self.times.fast_rejecting += rhs.time_fast_rejecting;
+            self.times.slow_rejecting += rhs.time_slow_rejecting;
+            self.times.slow_accepting += rhs.time_slow_accepting;
         }
     }
 }
@@ -478,9 +478,9 @@ where
         slow_rejects: usize::from(!matched),
         slow_accepts: usize::from(matched),
         #[cfg(feature = "detailed_statistics")]
-        time_slow_rejecting: (!matched).then_some(duration),
+        time_slow_rejecting: if !matched { duration } else { Duration::default() },
         #[cfg(feature = "detailed_statistics")]
-        time_slow_accepting: matched.then_some(duration),
+        time_slow_accepting: if matched { duration } else { Duration::default() },
         ..BloomQueryStats::default()
     };
     (
@@ -514,9 +514,9 @@ where
         slow_rejects: usize::from(!matched),
         slow_accepts: usize::from(matched),
         #[cfg(feature = "detailed_statistics")]
-        time_slow_rejecting: (!matched).then_some(duration),
+        time_slow_rejecting: if !matched { duration } else { Duration::default() },
         #[cfg(feature = "detailed_statistics")]
-        time_slow_accepting: matched.then_some(duration),
+        time_slow_accepting: if matched { duration } else { Duration::default() },
         ..BloomQueryStats::default()
     };
     (
@@ -550,7 +550,7 @@ where
                 let stats = BloomQueryStats {
                     fast_rejects: 1,
                     #[cfg(feature = "detailed_statistics")]
-                    time_fast_rejecting: Some(fast_reject_duration),
+                    time_fast_rejecting: fast_reject_duration,
                     ..BloomQueryStats::default()
                 };
                 return (KleeneValue::False, stats);
@@ -580,9 +580,9 @@ where
         #[cfg(feature = "detailed_statistics")]
         not_matched_result_counts,
         #[cfg(feature = "detailed_statistics")]
-        time_slow_rejecting: (!is_slow_accept).then_some(slow_match_duration),
+        time_slow_rejecting: if !is_slow_accept { slow_match_duration } else { Duration::default() },
         #[cfg(feature = "detailed_statistics")]
-        time_slow_accepting: is_slow_accept.then_some(slow_match_duration),
+        time_slow_accepting: if is_slow_accept { slow_match_duration } else { Duration::default() },
         ..BloomQueryStats::default()
     };
     (
