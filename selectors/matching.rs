@@ -113,7 +113,7 @@ pub struct ScopeProximityStats {
     pub slow_accepts: usize,
     #[cfg(feature = "detailed_statistics")]
     pub slow_reject_not_matched_result_counts: NotMatchedResultCounts,
-    #[cfg(not(feature = "detailed_statistics"))]
+    #[cfg(feature = "time_fast_rejecting")]
     pub time_fast_rejecting: Duration, // Non-optional, since `fast_rejects` will tell us whether there were any.
     #[cfg(feature = "detailed_statistics")]
     pub time_slow_rejecting: Duration,
@@ -130,7 +130,7 @@ impl AddAssign<BloomQueryStats> for ScopeProximityStats {
         if rhs.slow_rejects > 0 {
             self.slow_reject_not_matched_result_counts += rhs.not_matched_result_counts;
         }
-        #[cfg(not(feature = "detailed_statistics"))]
+        #[cfg(feature = "time_fast_rejecting")]
         {
             self.time_fast_rejecting += rhs.time_fast_rejecting;
         }
@@ -150,7 +150,7 @@ pub struct BloomQueryStats {
     pub slow_accepts: usize,
     #[cfg(feature = "detailed_statistics")]
     pub not_matched_result_counts: NotMatchedResultCounts,
-    #[cfg(not(feature = "detailed_statistics"))]
+    #[cfg(feature = "time_fast_rejecting")]
     pub time_fast_rejecting: Duration,
     #[cfg(feature = "detailed_statistics")]
     pub time_slow_rejecting: Duration,
@@ -208,7 +208,7 @@ pub struct TimingStats {
     #[cfg(feature = "detailed_statistics")]
     /// Time spent querying the selector map
     pub querying_selector_map: Duration,
-    #[cfg(not(feature = "detailed_statistics"))]
+    #[cfg(feature = "time_fast_rejecting")]
     /// Time spent fast rejecting a selector
     pub fast_rejecting: Duration,
     #[cfg(feature = "detailed_statistics")]
@@ -238,7 +238,7 @@ impl AddAssign<BloomQueryStats> for Statistics {
         self.counts.fast_rejects += rhs.fast_rejects;
         self.counts.slow_rejects += rhs.slow_rejects;
         self.counts.slow_accepts += rhs.slow_accepts;
-        #[cfg(not(feature = "detailed_statistics"))]
+        #[cfg(feature = "time_fast_rejecting")]
         {
             self.times.fast_rejecting += rhs.time_fast_rejecting;
         }
@@ -255,7 +255,7 @@ impl AddAssign<ScopeProximityStats> for Statistics {
         self.counts.fast_rejects += rhs.fast_rejects;
         self.counts.slow_rejects += rhs.slow_rejects;
         self.counts.slow_accepts += rhs.slow_accepts;
-        #[cfg(not(feature = "detailed_statistics"))]
+        #[cfg(feature = "time_fast_rejecting")]
         {
             self.times.fast_rejecting += rhs.time_fast_rejecting;
         }
@@ -550,15 +550,15 @@ where
     // Use the bloom filter to fast-reject.
     if let Some(hashes) = hashes {
         if let Some(filter) = context.bloom_filter {
-            #[cfg(not(feature = "detailed_statistics"))]
+            #[cfg(feature = "time_fast_rejecting")]
             let start = Start::now();
             let may_match = selector_may_match(hashes, filter);
-            #[cfg(not(feature = "detailed_statistics"))]
+            #[cfg(feature = "time_fast_rejecting")]
             let fast_reject_duration = start.elapsed();
             if !may_match {
                 let stats = BloomQueryStats {
                     fast_rejects: 1,
-                    #[cfg(not(feature = "detailed_statistics"))]
+                    #[cfg(feature = "time_fast_rejecting")]
                     time_fast_rejecting: fast_reject_duration,
                     ..BloomQueryStats::default()
                 };
