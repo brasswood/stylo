@@ -757,6 +757,33 @@ impl SelectorMap<UniversalBucketRule> {
                 }
             }
         };
+        if element.is_root() {
+            for entry in self.root.iter() {
+                check_entry(entry);
+            }
+        }
+        if let Some(id) = element.id() {
+            if let Some(entries) = self.id_hash.get(id, quirks_mode) {
+                for entry in entries.iter() {
+                    check_entry(entry);
+                }
+            }
+        }
+        if element
+            .state()
+            .intersects(ElementState::RARE_PSEUDO_CLASS_STATES.complement())
+        {
+            for entry in self.common_pseudo_classes.iter() {
+                check_entry(entry);
+            }
+        }
+        element.each_class(|class| {
+            if let Some(entries) = self.class_hash.get(&class, quirks_mode) {
+                for entry in entries.iter() {
+                    check_entry(entry);
+                }
+            }
+        });
         self.lookup(element, quirks_mode, None, |entry| {
             check_entry(entry);
             true
