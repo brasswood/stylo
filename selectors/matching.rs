@@ -541,15 +541,15 @@ where
     // Use the bloom filter to fast-reject.
     if let Some(hashes) = hashes {
         if let Some(filter) = context.bloom_filter {
-            #[cfg(feature = "detailed_statistics")]
+            #[cfg(not(feature = "detailed_statistics"))]
             let start = Start::now();
             let may_match = selector_may_match(hashes, filter);
-            #[cfg(feature = "detailed_statistics")]
+            #[cfg(not(feature = "detailed_statistics"))]
             let fast_reject_duration = start.elapsed();
             if !may_match {
                 let stats = BloomQueryStats {
                     fast_rejects: 1,
-                    #[cfg(feature = "detailed_statistics")]
+                    #[cfg(not(feature = "detailed_statistics"))]
                     time_fast_rejecting: fast_reject_duration,
                     ..BloomQueryStats::default()
                 };
