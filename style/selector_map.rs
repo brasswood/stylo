@@ -22,7 +22,7 @@ use atomic_refcell::AtomicRef;
 use dom::ElementState;
 use precomputed_hash::PrecomputedHash;
 use selectors::{Element, OpaqueElement};
-use selectors::matching::{MatchingContext, SelectorStats, Statistics, matches_selector, matches_selector_at_offset_as_subject};
+use selectors::matching::{BloomQueryStats, MatchingContext, SelectorStats, Statistics, matches_selector, matches_selector_at_offset_as_subject};
 use selectors::parser::{Combinator, Component, Selector, SelectorIter};
 use smallvec::SmallVec;
 use std::collections::hash_map;
@@ -721,50 +721,27 @@ impl SelectorMap<UniversalTailRule> {
     }
 }
 
-fn try_bless_universal_bucket_rule<'a, E>(
+fn match_bless_universal_bucket_rule<'a, E>(
     entry: &'a UniversalBucketRule,
     element: E,
     element_depth: usize,
     bless_list: &mut SmallVec<[(&'a UniversalBucketRule, usize); 16]>,
-    seen: &mut SmallVec<[&'a UniversalBucketRule; 4]>,
     matching_context: &mut MatchingContext<E::Impl>,
-) -> Option<tsc_timer::Duration>
+) -> BloomQueryStats
 where
     E: SelectorMapElement + StyleSharingElement,
 {
-    let is_active = bless_list.iter().any(|(active, last_depth)| {
-        active.matches_descendants
-            && *last_depth >= element_depth
-            && active.rule.source_order == entry.rule.source_order
-            && active.rule.selector == entry.rule.selector
-    });
-    let already_seen = seen.iter().any(|candidate| {
-        candidate.rule.source_order == entry.rule.source_order
-            && candidate.rule.selector == entry.rule.selector
-    });
-    if is_active || already_seen {
-        return None;
-    }
-    seen.push(entry);
-    #[cfg(feature = "detailed_statistics")]
-    let start = Start::now();
-    let (matched, _) = matches_selector_at_offset_as_subject(
+    let (matched, stats) = matches_selector_at_offset_as_subject(
         &entry.rule.selector,
         entry.activation_offset,
         &element,
         matching_context,
     );
-    #[cfg(feature = "detailed_statistics")]
-    let duration = start.elapsed();
     if matched {
         let last_depth = if entry.matches_descendants { usize::MAX } else { element_depth + 1 };
         bless_list.push((entry, last_depth));
     }
-    #[cfg(feature = "detailed_statistics")]
-    let duration = duration;
-    #[cfg(not(feature = "detailed_statistics"))]
-    let duration = tsc_timer::Duration::default();
-    Some(duration)
+    stats
 }
 
 impl SelectorMap<UniversalBucketRule> {
@@ -781,34 +758,51 @@ impl SelectorMap<UniversalBucketRule> {
     {
         #[cfg(feature = "detailed_statistics")]
         let start = Start::now();
-        #[cfg(feature = "detailed_statistics")]
-        let mut matching_time = tsc_timer::Duration::from_cycles(0);
         let mut hits = 0;
         let mut stats = Statistics::default();
         let mut seen: SmallVec<[&UniversalBucketRule; 4]> = SmallVec::new();
         self.lookup(element, matching_context.quirks_mode(), None, |entry| {
-            if let Some(_duration) = try_bless_universal_bucket_rule(
+            let is_active = bless_list.iter().any(|(active, last_depth)| {
+                active.matches_descendants
+                    && *last_depth >= element_depth
+                    && active.rule.source_order == entry.rule.source_order
+                    && active.rule.selector == entry.rule.selector
+            });
+            let already_seen = seen.iter().any(|candidate| {
+                candidate.rule.source_order == entry.rule.source_order
+                    && candidate.rule.selector == entry.rule.selector
+            });
+            if is_active || already_seen {
+                return true;
+            }
+            hits += 1;
+            seen.push(entry);
+            #[cfg(not(feature = "detailed_statistics"))]
+            match_bless_universal_bucket_rule(
                 entry,
                 element,
                 element_depth,
                 bless_list,
-                &mut seen,
                 matching_context,
-            ) {
-                hits += 1;
-                #[cfg(feature = "detailed_statistics")]
-                {
-                    matching_time += _duration;
-                }
-            }
+            );
             true
         });
+
+        stats.counts.tail_selector_map_hits = hits;
+
         #[cfg(feature = "detailed_statistics")]
         {
-            stats.times._time_inside_buckets = matching_time;
-            stats.times.querying_selector_map = start.elapsed() - matching_time;
+            stats.times.querying_selector_map = start.elapsed();
+            for entry in seen {
+                stats += match_bless_universal_bucket_rule(
+                    entry,
+                    element,
+                    element_depth,
+                    bless_list,
+                    matching_context,
+                );
+            }
         }
-        stats.counts.tail_selector_map_hits = hits;
         stats
     }
 }
