@@ -594,7 +594,6 @@ impl SelectorMap<Rule> {
         #[cfg(feature = "detailed_statistics")]
         {
             stats.times.querying_selector_map = start.elapsed();
-            // TODO: Finish timed stage traversal in follow-up commits.
             let candidate_rules = staged_rules.as_slice();
             if let Some(stage_oracle) = stage_oracle.filter(|stages| stages.len() == candidate_rules.len()) {
                 staged_rule_buffers.fast_rejecting.clear();
@@ -629,6 +628,23 @@ impl SelectorMap<Rule> {
                             debug_html_str,
                         );
                     }
+                }
+            } else {
+                stats += SelectorMap::get_matching_rules_with_oracle(
+                    element,
+                    candidate_rules.iter().copied(),
+                    matching_rules_list,
+                    matching_selectors.as_deref_mut(),
+                    selector_stats.as_deref_mut(),
+                    matching_context,
+                    cascade_level,
+                    cascade_data,
+                    stylist,
+                    skip_universal_tails,
+                    debug_html_str,
+                    stage_oracle_output,
+                );
+            }
         }
         stats
     }
