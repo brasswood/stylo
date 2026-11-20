@@ -293,6 +293,8 @@ impl SelectorMap<Rule> {
     where
         E: SelectorMapElement,
     {
+        #[cfg(feature = "detailed_statistics")]
+        let mut staged_rule_buffers = StagedRuleBuffers::with_capacity(self.len());
         self.get_all_matching_rules_with_universal_tails(
             element,
             rule_hash_target,
@@ -306,6 +308,9 @@ impl SelectorMap<Rule> {
             false,
             false,
             debug_html_str,
+            #[cfg(feature = "detailed_statistics")]
+            Some(&mut staged_rule_buffers),
+            #[cfg(not(feature = "detailed_statistics"))]
             None,
             None,
             None,
@@ -331,8 +336,9 @@ impl SelectorMap<Rule> {
         skip_universal_tails: bool,
         skip_universal_buckets: bool,
         debug_html_str: Option<&str>,
-        // TODO: Use the supplied buffers and per-element stage oracle.
-        mut staged_rule_buffers: Option<&mut StagedRuleBuffers<'selectormap>>,
+        // These buffers are reused across elements by the detailed-statistics
+        // traversal; callers outside that path can omit them.
+        staged_rule_buffers: Option<&mut StagedRuleBuffers<'selectormap>>,
         stage_oracle: Option<&[MatchStage]>,
         stage_oracle_output: Option<&mut Vec<MatchStage>>,
     ) -> Statistics
@@ -350,7 +356,14 @@ impl SelectorMap<Rule> {
         #[cfg(feature = "detailed_statistics")]
         let start = Start::now();
         #[cfg(feature = "detailed_statistics")]
-        let mut staged_rules: Vec<&Rule> = Vec::with_capacity(self.len());
+        let staged_rule_buffers = staged_rule_buffers
+            .expect("detailed selector matching requires preallocated rule buffers");
+        #[cfg(feature = "detailed_statistics")]
+        staged_rule_buffers.candidates.clear();
+        #[cfg(feature = "detailed_statistics")]
+        let staged_rules = &mut staged_rule_buffers.candidates;
+        #[cfg(not(feature = "detailed_statistics"))]
+        let _ = (staged_rule_buffers, stage_oracle, stage_oracle_output);
 
         if rule_hash_target.is_root() {
             hits += self.root.len();
