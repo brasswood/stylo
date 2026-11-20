@@ -24,9 +24,9 @@ use log::debug;
 use smallvec::SmallVec;
 use std::borrow::Borrow;
 use std::ops::AddAssign;
-// #[cfg(feature = "detailed_statistics")]
-use tsc_timer::Start;
 use tsc_timer::Duration;
+#[cfg(feature = "detailed_statistics")]
+use tsc_timer::Start;
 
 pub use crate::context::*;
 
@@ -139,7 +139,7 @@ pub struct ScopeProximityStats {
     pub slow_accepts: usize,
     #[cfg(feature = "detailed_statistics")]
     pub slow_reject_not_matched_result_counts: NotMatchedResultCounts,
-    #[cfg(feature = "time_fast_rejecting")]
+    #[cfg(feature = "detailed_statistics")]
     pub time_fast_rejecting: Duration, // Non-optional, since `fast_rejects` will tell us whether there were any.
     #[cfg(feature = "detailed_statistics")]
     pub time_slow_rejecting: Duration,
@@ -156,7 +156,7 @@ impl AddAssign<BloomQueryStats> for ScopeProximityStats {
         if rhs.slow_rejects > 0 {
             self.slow_reject_not_matched_result_counts += rhs.not_matched_result_counts;
         }
-        #[cfg(feature = "time_fast_rejecting")]
+        #[cfg(feature = "detailed_statistics")]
         {
             self.time_fast_rejecting += rhs.time_fast_rejecting;
         }
@@ -176,7 +176,7 @@ pub struct BloomQueryStats {
     pub slow_accepts: usize,
     #[cfg(feature = "detailed_statistics")]
     pub not_matched_result_counts: NotMatchedResultCounts,
-    #[cfg(feature = "time_fast_rejecting")]
+    #[cfg(feature = "detailed_statistics")]
     pub time_fast_rejecting: Duration,
     #[cfg(feature = "detailed_statistics")]
     pub time_slow_rejecting: Duration,
@@ -234,7 +234,7 @@ pub struct TimingStats {
     #[cfg(feature = "detailed_statistics")]
     /// Time spent querying the selector map
     pub querying_selector_map: Duration,
-    #[cfg(feature = "time_fast_rejecting")]
+    #[cfg(feature = "detailed_statistics")]
     /// Time spent fast rejecting a selector
     pub fast_rejecting: Duration,
     #[cfg(feature = "detailed_statistics")]
@@ -264,7 +264,7 @@ impl AddAssign<BloomQueryStats> for Statistics {
         self.counts.fast_rejects += rhs.fast_rejects;
         self.counts.slow_rejects += rhs.slow_rejects;
         self.counts.slow_accepts += rhs.slow_accepts;
-        #[cfg(feature = "time_fast_rejecting")]
+        #[cfg(feature = "detailed_statistics")]
         {
             self.times.fast_rejecting += rhs.time_fast_rejecting;
         }
@@ -281,7 +281,7 @@ impl AddAssign<ScopeProximityStats> for Statistics {
         self.counts.fast_rejects += rhs.fast_rejects;
         self.counts.slow_rejects += rhs.slow_rejects;
         self.counts.slow_accepts += rhs.slow_accepts;
-        #[cfg(feature = "time_fast_rejecting")]
+        #[cfg(feature = "detailed_statistics")]
         {
             self.times.fast_rejecting += rhs.time_fast_rejecting;
         }
@@ -501,26 +501,17 @@ where
 {
     if let Some(hashes) = hashes {
         if let Some(filter) = context.bloom_filter {
-            #[cfg(feature = "time_fast_rejecting")]
-            let start = {
-                #[cfg(feature = "detailed_statistics")]
-                {
-                    context.matching_stage().is_none().then(Start::now)
-                }
-                #[cfg(not(feature = "detailed_statistics"))]
-                {
-                    Some(Start::now())
-                }
-            };
+            #[cfg(feature = "detailed_statistics")]
+            let start = context.matching_stage().is_none().then(Start::now);
             let may_match = selector_may_match(hashes, filter);
-            #[cfg(feature = "time_fast_rejecting")]
+            #[cfg(feature = "detailed_statistics")]
             let duration = start.map_or(Duration::default(), |start| start.elapsed());
             if !may_match {
                 return (
                     false,
                     BloomQueryStats {
                         fast_rejects: 1,
-                        #[cfg(feature = "time_fast_rejecting")]
+                        #[cfg(feature = "detailed_statistics")]
                         time_fast_rejecting: duration,
                         ..BloomQueryStats::default()
                     },
@@ -606,25 +597,16 @@ where
     // Use the bloom filter to fast-reject.
     if let Some(hashes) = hashes {
         if let Some(filter) = context.bloom_filter {
-            #[cfg(feature = "time_fast_rejecting")]
-            let start = {
-                #[cfg(feature = "detailed_statistics")]
-                {
-                    context.matching_stage().is_none().then(Start::now)
-                }
-                #[cfg(not(feature = "detailed_statistics"))]
-                {
-                    Some(Start::now())
-                }
-            };
+            #[cfg(feature = "detailed_statistics")]
+            let start = context.matching_stage().is_none().then(Start::now);
             let may_match = selector_may_match(hashes, filter);
-            #[cfg(feature = "time_fast_rejecting")]
+            #[cfg(feature = "detailed_statistics")]
             let fast_reject_duration =
                 start.map_or(Duration::default(), |start| start.elapsed());
             if !may_match {
                 let stats = BloomQueryStats {
                     fast_rejects: 1,
-                    #[cfg(feature = "time_fast_rejecting")]
+                    #[cfg(feature = "detailed_statistics")]
                     time_fast_rejecting: fast_reject_duration,
                     ..BloomQueryStats::default()
                 };
