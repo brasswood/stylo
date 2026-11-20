@@ -853,40 +853,51 @@ impl SelectorMap<UniversalTailRule> {
         element: E,
         matching_selectors: &mut SmallVec<[&'selectormap Selector<SelectorImpl>; 16]>,
         matching_context: &mut MatchingContext<E::Impl>,
+        candidates: Option<&mut Vec<&'selectormap UniversalTailRule>>,
+        stage_oracle: Option<&[MatchStage]>,
+        mut stage_oracle_output: Option<&mut Vec<MatchStage>>,
     ) -> Statistics
     where
         E: SelectorMapElement + StyleSharingElement,
     {
         #[cfg(feature = "detailed_statistics")]
         let start = Start::now();
-        #[cfg(feature = "detailed_statistics")]
-        let mut matching_time = tsc_timer::Duration::from_cycles(0);
         let mut hits = 0;
         let mut stats = Statistics::default();
-        self.lookup(element, matching_context.quirks_mode(), None, |entry| {
-            hits += 1;
-            #[cfg(feature = "detailed_statistics")]
-            let match_start = Start::now();
-            let (matched, match_stats) = matches_selector_at_offset_as_subject(
-                &entry.rule.selector,
-                entry.activation_offset,
-                &element,
-                matching_context,
-            );
-            #[cfg(feature = "detailed_statistics")]
-            {
-                matching_time += match_start.elapsed();
-            }
-            stats += match_stats;
-            if matched && !matching_selectors.contains(&&entry.rule.selector) {
-                matching_selectors.push(&entry.rule.selector);
-            }
-            true
-        });
+        // TODO: Complete the oracle-driven stage batches in follow-up commits.
+        #[cfg(feature = "detailed_statistics")]
+        let candidates = candidates.expect("staged matching requires a reusable candidate buffer");
         #[cfg(feature = "detailed_statistics")]
         {
-            stats.times._time_inside_buckets = matching_time;
-            stats.times.querying_selector_map = start.elapsed() - matching_time;
+            candidates.clear();
+            self.lookup(element, matching_context.quirks_mode(), None, |entry| {
+                hits += 1;
+                candidates.push(entry);
+                true
+            });
+        }
+        #[cfg(not(feature = "detailed_statistics"))]
+        {
+            let _ = (candidates, stage_oracle, stage_oracle_output);
+            self.lookup(element, matching_context.quirks_mode(), None, |entry| {
+                hits += 1;
+                let (matched, match_stats) = matches_selector_at_offset_as_subject(
+                    &entry.rule.selector,
+                    entry.activation_offset,
+                    Some(&entry.activation_hashes),
+                    &element,
+                    matching_context,
+                );
+                stats += match_stats;
+                if matched && !matching_selectors.contains(&&entry.rule.selector) {
+                    matching_selectors.push(&entry.rule.selector);
+                }
+                true
+            });
+        }
+        #[cfg(feature = "detailed_statistics")]
+        {
+            stats.times.querying_selector_map = start.elapsed();
         }
         stats.counts.tail_selector_map_hits = hits;
         stats
