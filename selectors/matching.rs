@@ -98,6 +98,32 @@ pub enum SelectorStats {
     ScopeProximity(ScopeProximityStats),
 }
 
+/// The stage an oracle predicts for a selector match.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MatchStage {
+    /// The bloom filter rejects the selector.
+    FastReject,
+    /// The bloom filter allows matching, but the selector does not match.
+    SlowReject,
+    /// The selector matches after the bloom filter allows matching.
+    SlowAccept,
+}
+
+/// Classifies aggregate matching counts for staged selector matching.
+pub fn match_stage_from_counts(
+    fast_rejects: usize,
+    slow_rejects: usize,
+    slow_accepts: usize,
+) -> MatchStage {
+    if slow_accepts > 0 {
+        MatchStage::SlowAccept
+    } else if fast_rejects > 0 && slow_rejects == 0 {
+        MatchStage::FastReject
+    } else {
+        MatchStage::SlowReject
+    }
+}
+
 impl Default for SelectorStats {
     fn default() -> SelectorStats {
         SelectorStats::Bloom(BloomQueryStats::default())
