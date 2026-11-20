@@ -685,7 +685,7 @@ impl SelectorMap<Rule> {
 
     pub(crate) fn get_matching_rules_with_oracle<'rule, E>(
         element: E,
-        rules: &'rule [Rule],
+        rules: impl IntoIterator<Item = &'rule Rule>,
         matching_rules: &mut ApplicableDeclarationList,
         mut matching_selectors: Option<&mut SmallVec<[&'rule Selector<SelectorImpl>; 16]>>,
         mut selector_stats: Option<&mut SmallVec<[(&'rule Selector<SelectorImpl>, SelectorStats); 16]>>,
