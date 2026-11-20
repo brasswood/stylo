@@ -487,17 +487,47 @@ where
 /// the subject of the selector.
 ///
 /// This is useful when an optimization has already established the semantics
-/// of the removed right-hand portion. Ancestor hashes and fail caches cannot be
-/// reused because both are computed relative to the original subject.
+/// of the removed right-hand portion. Any ancestor hashes must be computed
+/// relative to `offset`, not reused from the original subject.
 pub fn matches_selector_at_offset_as_subject<E>(
     selector: &Selector<E::Impl>,
     offset: usize,
+    hashes: Option<&AncestorHashes>,
     element: &E,
     context: &mut MatchingContext<E::Impl>,
 ) -> (bool, BloomQueryStats)
 where
     E: Element,
 {
+    if let Some(hashes) = hashes {
+        if let Some(filter) = context.bloom_filter {
+            #[cfg(feature = "time_fast_rejecting")]
+            let start = {
+                #[cfg(feature = "detailed_statistics")]
+                {
+                    context.matching_stage().is_none().then(Start::now)
+                }
+                #[cfg(not(feature = "detailed_statistics"))]
+                {
+                    Some(Start::now())
+                }
+            };
+            let may_match = selector_may_match(hashes, filter);
+            #[cfg(feature = "time_fast_rejecting")]
+            let duration = start.map_or(Duration::default(), |start| start.elapsed());
+            if !may_match {
+                return (
+                    false,
+                    BloomQueryStats {
+                        fast_rejects: 1,
+                        #[cfg(feature = "time_fast_rejecting")]
+                        time_fast_rejecting: duration,
+                        ..BloomQueryStats::default()
+                    },
+                );
+            }
+        }
+    }
     #[cfg(feature = "detailed_statistics")]
     let start = context.matching_stage().is_none().then(Start::now);
     let does_match = matches_complex_selector(
