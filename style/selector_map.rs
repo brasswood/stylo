@@ -632,6 +632,44 @@ impl SelectorMap<Rule> {
         )
     }
 
+    #[cfg(feature = "detailed_statistics")]
+    fn get_matching_rules_for_stage<'rule, E>(
+        stage: MatchStage,
+        element: E,
+        rules: &'rule [Rule],
+        matching_rules: &mut ApplicableDeclarationList,
+        matching_selectors: Option<&mut SmallVec<[&'rule Selector<SelectorImpl>; 16]>>,
+        selector_stats: Option<&mut SmallVec<[(&'rule Selector<SelectorImpl>, SelectorStats); 16]>>,
+        matching_context: &mut MatchingContext<E::Impl>,
+        cascade_level: CascadeLevel,
+        cascade_data: &CascadeData,
+        stylist: &Stylist,
+        skip_universal_tails: bool,
+        debug_html_str: Option<&str>,
+    ) -> Statistics
+    where
+        E: SelectorMapElement,
+    {
+        let start = Start::now();
+        matching_context.set_matching_stage(Some(stage));
+        let mut stats = Self::get_matching_rules(
+            element, rules, matching_rules, matching_selectors, selector_stats,
+            matching_context, cascade_level, cascade_data, stylist,
+            skip_universal_tails, debug_html_str,
+        );
+        matching_context.set_matching_stage(None);
+        let duration = start.elapsed();
+        match stage {
+            MatchStage::FastReject => {
+                #[cfg(feature = "time_fast_rejecting")]
+                { stats.times.fast_rejecting += duration; }
+            }
+            MatchStage::SlowReject => stats.times.slow_rejecting += duration,
+            MatchStage::SlowAccept => stats.times.slow_accepting += duration,
+        }
+        stats
+    }
+
     pub(crate) fn get_matching_rules_with_oracle<'rule, E>(
         element: E,
         rules: &'rule [Rule],
