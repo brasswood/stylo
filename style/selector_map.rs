@@ -887,7 +887,7 @@ impl SelectorMap<UniversalTailRule> {
                     &element,
                     matching_context,
                 );
-                stats += match_stats;
+                stats += ActivationMatchStats(match_stats);
                 if matched && !matching_selectors.contains(&&entry.rule.selector) {
                     matching_selectors.push(&entry.rule.selector);
                 }
@@ -919,7 +919,7 @@ impl SelectorMap<UniversalTailRule> {
                         &element,
                         matching_context,
                     );
-                    stats += match_stats;
+                    stats += ActivationMatchStats(match_stats);
                     if matched && !matching_selectors.contains(&&entry.rule.selector) {
                         matching_selectors.push(&entry.rule.selector);
                     }
@@ -942,7 +942,7 @@ impl SelectorMap<UniversalTailRule> {
                     &element,
                     matching_context,
                 );
-                stats += match_stats;
+                stats += ActivationMatchStats(match_stats);
                 if let Some(output) = stage_oracle_output.as_deref_mut() {
                     output.push(match_stage_from_counts(
                         match_stats.fast_rejects,
@@ -1021,13 +1021,15 @@ impl SelectorMap<UniversalBucketRule> {
             hits += 1;
             seen.push(entry);
             #[cfg(not(feature = "detailed_statistics"))]
-            match_bless_universal_bucket_rule(
-                entry,
-                element,
-                element_depth,
-                bless_list,
-                matching_context,
-            );
+            {
+                stats += match_bless_universal_bucket_rule(
+                    entry,
+                    element,
+                    element_depth,
+                    bless_list,
+                    matching_context,
+                );
+            }
             true
         });
 
@@ -1075,9 +1077,9 @@ impl SelectorMap<UniversalBucketRule> {
                     );
                     if let Some(output) = stage_oracle_output.as_deref_mut() {
                         output.push(match_stage_from_counts(
-                            entry_stats.fast_rejects,
-                            entry_stats.slow_rejects,
-                            entry_stats.slow_accepts,
+                            entry_stats.0.fast_rejects,
+                            entry_stats.0.slow_rejects,
+                            entry_stats.0.slow_accepts,
                         ));
                     }
                     stats += entry_stats;
