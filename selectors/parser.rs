@@ -786,16 +786,15 @@ fn collect_ancestor_hashes<Impl: SelectorImpl>(
 }
 
 impl AncestorHashes {
-    pub fn new<Impl: SelectorImpl>(
-        selector: &Selector<Impl>,
+    fn from_iter<Impl: SelectorImpl>(
+        iter: SelectorIter<Impl>,
         quirks_mode: QuirksMode,
         use_edge_selector_optimization: bool,
     ) -> Self {
-        // Compute ancestor hashes for the bloom filter.
         let mut hashes = [0u32; 4];
         let mut len = 0;
         collect_ancestor_hashes(
-            selector.iter(),
+            iter,
             quirks_mode,
             use_edge_selector_optimization,
             &mut hashes,
@@ -803,8 +802,6 @@ impl AncestorHashes {
         );
         debug_assert!(len <= 4);
 
-        // Now, pack the fourth hash (if it exists) into the upper byte of each of
-        // the other three hashes.
         if len == 4 {
             let fourth = hashes[3];
             hashes[0] |= (fourth & 0x000000ff) << 24;
@@ -815,6 +812,33 @@ impl AncestorHashes {
         AncestorHashes {
             packed_hashes: [hashes[0], hashes[1], hashes[2]],
         }
+    }
+
+    pub fn new<Impl: SelectorImpl>(
+        selector: &Selector<Impl>,
+        quirks_mode: QuirksMode,
+        use_edge_selector_optimization: bool,
+    ) -> Self {
+        Self::from_iter(
+            selector.iter(),
+            quirks_mode,
+            use_edge_selector_optimization,
+        )
+    }
+
+    /// Computes bloom-filter hashes for a selector treated as the subject at
+    /// `offset`, rather than at its original rightmost compound.
+    pub fn new_from_offset<Impl: SelectorImpl>(
+        selector: &Selector<Impl>,
+        offset: usize,
+        quirks_mode: QuirksMode,
+        use_edge_selector_optimization: bool,
+    ) -> Self {
+        Self::from_iter(
+            selector.iter_from(offset),
+            quirks_mode,
+            use_edge_selector_optimization,
+        )
     }
 
     /// Returns the fourth hash, reassembled from parts.
