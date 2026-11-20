@@ -594,19 +594,41 @@ impl SelectorMap<Rule> {
         #[cfg(feature = "detailed_statistics")]
         {
             stats.times.querying_selector_map = start.elapsed();
-            stats += SelectorMap::get_matching_rules(
-                element,
-                &staged_rules,
-                matching_rules_list,
-                matching_selectors.as_deref_mut(),
-                selector_stats.as_deref_mut(),
-                matching_context,
-                cascade_level,
-                cascade_data,
-                stylist,
-                skip_universal_tails,
-                debug_html_str,
-            );
+            // TODO: Finish timed stage traversal in follow-up commits.
+            let candidate_rules = staged_rules.as_slice();
+            if let Some(stage_oracle) = stage_oracle.filter(|stages| stages.len() == candidate_rules.len()) {
+                staged_rule_buffers.fast_rejecting.clear();
+                staged_rule_buffers.slow_rejecting.clear();
+                staged_rule_buffers.slow_accepting.clear();
+                for (rule, stage) in candidate_rules.iter().zip(stage_oracle) {
+                    match stage {
+                        MatchStage::FastReject => staged_rule_buffers.fast_rejecting.push(rule),
+                        MatchStage::SlowReject => staged_rule_buffers.slow_rejecting.push(rule),
+                        MatchStage::SlowAccept => staged_rule_buffers.slow_accepting.push(rule),
+                    }
+                }
+
+                for (stage, rules) in [
+                    (MatchStage::FastReject, &staged_rule_buffers.fast_rejecting),
+                    (MatchStage::SlowReject, &staged_rule_buffers.slow_rejecting),
+                    (MatchStage::SlowAccept, &staged_rule_buffers.slow_accepting),
+                ] {
+                    if !rules.is_empty() {
+                        stats += SelectorMap::get_matching_rules_for_stage(
+                            stage,
+                            element,
+                            rules.iter().copied(),
+                            matching_rules_list,
+                            matching_selectors.as_deref_mut(),
+                            selector_stats.as_deref_mut(),
+                            matching_context,
+                            cascade_level,
+                            cascade_data,
+                            stylist,
+                            skip_universal_tails,
+                            debug_html_str,
+                        );
+                    }
         }
         stats
     }
