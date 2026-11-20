@@ -1036,14 +1036,41 @@ impl SelectorMap<UniversalBucketRule> {
         #[cfg(feature = "detailed_statistics")]
         {
             stats.times.querying_selector_map = start.elapsed();
-            for entry in seen {
-                stats += match_bless_universal_bucket_rule(
-                    entry,
-                    element,
-                    element_depth,
-                    bless_list,
-                    matching_context,
-                );
+            // TODO: Finish staged bucket evaluation in follow-up commits.
+            if let Some(stages) = stage_oracle.filter(|stages| stages.len() == seen.len()) {
+                for stage in [
+                    MatchStage::FastReject,
+                    MatchStage::SlowReject,
+                    MatchStage::SlowAccept,
+                ] {
+                    let stage_start = Start::now();
+                    matching_context.set_matching_stage(Some(stage));
+                    for (entry, candidate_stage) in seen.iter().zip(stages) {
+                        if *candidate_stage == stage {
+                            stats += match_bless_universal_bucket_rule(
+                                entry,
+                                element,
+                                element_depth,
+                                bless_list,
+                                matching_context,
+                            );
+                        }
+                    }
+                    matching_context.set_matching_stage(None);
+                    let duration = stage_start.elapsed();
+                    stats.times._time_inside_buckets += duration;
+                    match stage {
+                        MatchStage::FastReject => stats.times.fast_rejecting += duration,
+                        MatchStage::SlowReject => stats.times.slow_rejecting += duration,
+                        MatchStage::SlowAccept => stats.times.slow_accepting += duration,
+                    }
+                }
+            } else {
+                for entry in seen {
+                    let entry_stats = match_bless_universal_bucket_rule(
+                        entry,
+                        element,
+                        element_depth,
             }
         }
         stats
