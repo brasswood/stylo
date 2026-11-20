@@ -1036,7 +1036,6 @@ impl SelectorMap<UniversalBucketRule> {
         #[cfg(feature = "detailed_statistics")]
         {
             stats.times.querying_selector_map = start.elapsed();
-            // TODO: Finish staged bucket evaluation in follow-up commits.
             if let Some(stages) = stage_oracle.filter(|stages| stages.len() == seen.len()) {
                 for stage in [
                     MatchStage::FastReject,
@@ -1071,8 +1070,23 @@ impl SelectorMap<UniversalBucketRule> {
                         entry,
                         element,
                         element_depth,
+                        bless_list,
+                        matching_context,
+                    );
+                    if let Some(output) = stage_oracle_output.as_deref_mut() {
+                        output.push(match_stage_from_counts(
+                            entry_stats.fast_rejects,
+                            entry_stats.slow_rejects,
+                            entry_stats.slow_accepts,
+                        ));
+                    }
+                    stats += entry_stats;
+                }
             }
         }
+
+        #[cfg(not(feature = "detailed_statistics"))]
+        let _ = (stage_oracle, stage_oracle_output);
         stats
     }
 }
