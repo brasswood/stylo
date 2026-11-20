@@ -864,7 +864,6 @@ impl SelectorMap<UniversalTailRule> {
         let start = Start::now();
         let mut hits = 0;
         let mut stats = Statistics::default();
-        // TODO: Complete the oracle-driven stage batches in follow-up commits.
         #[cfg(feature = "detailed_statistics")]
         let candidates = candidates.expect("staged matching requires a reusable candidate buffer");
         #[cfg(feature = "detailed_statistics")]
@@ -934,6 +933,29 @@ impl SelectorMap<UniversalTailRule> {
                     MatchStage::SlowAccept => stats.times.slow_accepting += duration,
                 }
             }
+        } else {
+            for entry in candidates.iter() {
+                let (matched, match_stats) = matches_selector_at_offset_as_subject(
+                    &entry.rule.selector,
+                    entry.activation_offset,
+                    Some(&entry.activation_hashes),
+                    &element,
+                    matching_context,
+                );
+                stats += match_stats;
+                if let Some(output) = stage_oracle_output.as_deref_mut() {
+                    output.push(match_stage_from_counts(
+                        match_stats.fast_rejects,
+                        match_stats.slow_rejects,
+                        match_stats.slow_accepts,
+                    ));
+                }
+                if matched && !matching_selectors.contains(&&entry.rule.selector) {
+                    matching_selectors.push(&entry.rule.selector);
+                }
+            }
+        }
+
         stats.counts.tail_selector_map_hits = hits;
         stats
     }
@@ -952,6 +974,7 @@ where
     let (matched, stats) = matches_selector_at_offset_as_subject(
         &entry.rule.selector,
         entry.activation_offset,
+        Some(&entry.activation_hashes),
         &element,
         matching_context,
     );
