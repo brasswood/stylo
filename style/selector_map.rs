@@ -306,6 +306,9 @@ impl SelectorMap<Rule> {
             false,
             false,
             debug_html_str,
+            None,
+            None,
+            None,
         )
     }
 
@@ -328,6 +331,10 @@ impl SelectorMap<Rule> {
         skip_universal_tails: bool,
         skip_universal_buckets: bool,
         debug_html_str: Option<&str>,
+        // TODO: Use the supplied buffers and per-element stage oracle.
+        mut staged_rule_buffers: Option<&mut StagedRuleBuffers<'selectormap>>,
+        stage_oracle: Option<&[MatchStage]>,
+        stage_oracle_output: Option<&mut Vec<MatchStage>>,
     ) -> Statistics
     where
         E: SelectorMapElement,
