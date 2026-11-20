@@ -649,7 +649,7 @@ impl SelectorMap<Rule> {
     fn get_matching_rules_for_stage<'rule, E>(
         stage: MatchStage,
         element: E,
-        rules: &'rule [Rule],
+        rules: impl Iterator<Item = &'rule Rule>,
         matching_rules: &mut ApplicableDeclarationList,
         matching_selectors: Option<&mut SmallVec<[&'rule Selector<SelectorImpl>; 16]>>,
         selector_stats: Option<&mut SmallVec<[(&'rule Selector<SelectorImpl>, SelectorStats); 16]>>,
@@ -665,18 +665,25 @@ impl SelectorMap<Rule> {
     {
         let start = Start::now();
         matching_context.set_matching_stage(Some(stage));
-        let mut stats = Self::get_matching_rules(
-            element, rules, matching_rules, matching_selectors, selector_stats,
-            matching_context, cascade_level, cascade_data, stylist,
-            skip_universal_tails, debug_html_str,
+        let mut stats = Self::get_matching_rules_with_oracle(
+            element,
+            rules,
+            matching_rules,
+            matching_selectors,
+            selector_stats,
+            matching_context,
+            cascade_level,
+            cascade_data,
+            stylist,
+            skip_universal_tails,
+            debug_html_str,
+            None,
         );
         matching_context.set_matching_stage(None);
         let duration = start.elapsed();
+        stats.times._time_inside_buckets += duration;
         match stage {
-            MatchStage::FastReject => {
-                #[cfg(feature = "time_fast_rejecting")]
-                { stats.times.fast_rejecting += duration; }
-            }
+            MatchStage::FastReject => stats.times.fast_rejecting += duration,
             MatchStage::SlowReject => stats.times.slow_rejecting += duration,
             MatchStage::SlowAccept => stats.times.slow_accepting += duration,
         }
@@ -703,7 +710,7 @@ impl SelectorMap<Rule> {
         use selectors::matching::IncludeStartingStyle;
 
         #[cfg(feature = "detailed_statistics")]
-        let start = Start::now();
+        let start = matching_context.matching_stage().is_none().then(Start::now);
         let include_starting_style = matches!(
             matching_context.include_starting_style,
             IncludeStartingStyle::Yes
@@ -792,7 +799,9 @@ impl SelectorMap<Rule> {
         }
         #[cfg(feature = "detailed_statistics")]
         {
-            acc_stats.times._time_inside_buckets = start.elapsed();
+            if let Some(start) = start {
+                acc_stats.times._time_inside_buckets = start.elapsed();
+            }
         }
         acc_stats
     }
