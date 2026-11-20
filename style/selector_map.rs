@@ -22,7 +22,7 @@ use atomic_refcell::AtomicRef;
 use dom::ElementState;
 use precomputed_hash::PrecomputedHash;
 use selectors::{Element, OpaqueElement};
-use selectors::matching::{BloomQueryStats, MatchStage, MatchingContext, SelectorStats, Statistics, matches_selector, matches_selector_at_offset_as_subject};
+use selectors::matching::{BloomQueryStats, MatchStage, MatchingContext, SelectorStats, Statistics, match_stage_from_counts, matches_selector, matches_selector_at_offset_as_subject};
 use selectors::parser::{Combinator, Component, Selector, SelectorIter};
 use smallvec::SmallVec;
 use std::collections::hash_map;
@@ -622,7 +622,6 @@ impl SelectorMap<Rule> {
             _skip_universal_tails,
             debug_html_str,
             None,
-            None,
         )
     }
 
@@ -638,9 +637,7 @@ impl SelectorMap<Rule> {
         stylist: &Stylist,
         _skip_universal_tails: bool,
         debug_html_str: Option<&str>,
-        // TODO: Consume these oracle slices in the staged matching pass.
-        stage_oracle: Option<&[MatchStage]>,
-        stage_oracle_output: Option<&mut Vec<MatchStage>>,
+        mut stage_oracle_output: Option<&mut Vec<MatchStage>>,
     ) -> Statistics
     where
         E: SelectorMapElement,
@@ -671,6 +668,13 @@ impl SelectorMap<Rule> {
                     selector_stats.push((&rule.selector, SelectorStats::Bloom(bloom_stats)));
                 }
                 acc_stats += bloom_stats;
+                if let Some(output) = stage_oracle_output.as_deref_mut() {
+                    output.push(match_stage_from_counts(
+                        bloom_stats.fast_rejects,
+                        bloom_stats.slow_rejects,
+                        bloom_stats.slow_accepts,
+                    ));
+                }
                 if !res {
                     continue;
                 }
@@ -682,6 +686,13 @@ impl SelectorMap<Rule> {
                     selector_stats.push((&rule.selector, SelectorStats::ScopeProximity(scope_proximity_stats)));
                 }
                 acc_stats += scope_proximity_stats;
+                if let Some(output) = stage_oracle_output.as_deref_mut() {
+                    output.push(match_stage_from_counts(
+                        scope_proximity_stats.fast_rejects,
+                        scope_proximity_stats.slow_rejects,
+                        scope_proximity_stats.slow_accepts,
+                    ));
+                }
                 if result == ScopeProximity::infinity() {
                     continue;
                 }
