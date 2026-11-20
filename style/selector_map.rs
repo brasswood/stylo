@@ -22,7 +22,7 @@ use atomic_refcell::AtomicRef;
 use dom::ElementState;
 use precomputed_hash::PrecomputedHash;
 use selectors::{Element, OpaqueElement};
-use selectors::matching::{BloomQueryStats, MatchingContext, SelectorStats, Statistics, matches_selector, matches_selector_at_offset_as_subject};
+use selectors::matching::{BloomQueryStats, MatchStage, MatchingContext, SelectorStats, Statistics, matches_selector, matches_selector_at_offset_as_subject};
 use selectors::parser::{Combinator, Component, Selector, SelectorIter};
 use smallvec::SmallVec;
 use std::collections::hash_map;
@@ -585,6 +585,42 @@ impl SelectorMap<Rule> {
         stylist: &Stylist,
         _skip_universal_tails: bool,
         debug_html_str: Option<&str>,
+    ) -> Statistics
+    where
+        E: SelectorMapElement,
+    {
+        Self::get_matching_rules_with_oracle(
+            element,
+            rules,
+            matching_rules,
+            matching_selectors,
+            selector_stats,
+            matching_context,
+            cascade_level,
+            cascade_data,
+            stylist,
+            _skip_universal_tails,
+            debug_html_str,
+            None,
+            None,
+        )
+    }
+
+    pub(crate) fn get_matching_rules_with_oracle<'rule, E>(
+        element: E,
+        rules: &'rule [Rule],
+        matching_rules: &mut ApplicableDeclarationList,
+        mut matching_selectors: Option<&mut SmallVec<[&'rule Selector<SelectorImpl>; 16]>>,
+        mut selector_stats: Option<&mut SmallVec<[(&'rule Selector<SelectorImpl>, SelectorStats); 16]>>,
+        matching_context: &mut MatchingContext<E::Impl>,
+        cascade_level: CascadeLevel,
+        cascade_data: &CascadeData,
+        stylist: &Stylist,
+        _skip_universal_tails: bool,
+        debug_html_str: Option<&str>,
+        // TODO: Consume these oracle slices in the staged matching pass.
+        stage_oracle: Option<&[MatchStage]>,
+        stage_oracle_output: Option<&mut Vec<MatchStage>>,
     ) -> Statistics
     where
         E: SelectorMapElement,
