@@ -499,7 +499,7 @@ where
     E: Element,
 {
     #[cfg(feature = "detailed_statistics")]
-    let start = Start::now();
+    let start = context.matching_stage().is_none().then(Start::now);
     let does_match = matches_complex_selector(
         selector.iter_from(offset),
         element,
@@ -507,7 +507,7 @@ where
         SubjectOrPseudoElement::Yes,
     );
     #[cfg(feature = "detailed_statistics")]
-    let duration = start.elapsed();
+    let duration = start.map_or(Duration::default(), |start| start.elapsed());
     let matched = does_match == KleeneValue::True;
     let stats = BloomQueryStats {
         slow_rejects: usize::from(!matched),
@@ -534,7 +534,7 @@ where
     E: Element,
 {
     #[cfg(feature = "detailed_statistics")]
-    let start = Start::now();
+    let start = context.matching_stage().is_none().then(Start::now);
     let mut selector_iter = selector.iter();
     let result = matches_compound_selector(
         &mut selector_iter,
@@ -543,7 +543,7 @@ where
         SubjectOrPseudoElement::Yes,
     );
     #[cfg(feature = "detailed_statistics")]
-    let duration = start.elapsed();
+    let duration = start.map_or(Duration::default(), |start| start.elapsed());
     let matched = result == KleeneValue::True;
     let stats = BloomQueryStats {
         slow_rejects: usize::from(!matched),
@@ -577,10 +577,20 @@ where
     if let Some(hashes) = hashes {
         if let Some(filter) = context.bloom_filter {
             #[cfg(feature = "time_fast_rejecting")]
-            let start = Start::now();
+            let start = {
+                #[cfg(feature = "detailed_statistics")]
+                {
+                    context.matching_stage().is_none().then(Start::now)
+                }
+                #[cfg(not(feature = "detailed_statistics"))]
+                {
+                    Some(Start::now())
+                }
+            };
             let may_match = selector_may_match(hashes, filter);
             #[cfg(feature = "time_fast_rejecting")]
-            let fast_reject_duration = start.elapsed();
+            let fast_reject_duration =
+                start.map_or(Duration::default(), |start| start.elapsed());
             if !may_match {
                 let stats = BloomQueryStats {
                     fast_rejects: 1,
@@ -593,7 +603,7 @@ where
         }
     }
     #[cfg(feature = "detailed_statistics")]
-    let start = Start::now();
+    let start = context.matching_stage().is_none().then(Start::now);
     let does_match = matches_complex_selector(
         selector.iter_from(offset),
         element,
@@ -607,7 +617,7 @@ where
     #[cfg(feature = "detailed_statistics")]
     let not_matched_result_counts = context.take_not_matched_result_counts();
     #[cfg(feature = "detailed_statistics")]
-    let slow_match_duration = start.elapsed();
+    let slow_match_duration = start.map_or(Duration::default(), |start| start.elapsed());
     let is_slow_accept = does_match == KleeneValue::True;
     let stats = BloomQueryStats {
         slow_rejects: usize::from(!is_slow_accept),
