@@ -52,7 +52,8 @@ gecko_debug = []
 gecko_refcount_logging = []
 nsstring = []
 debug_element = []
-detailed_statistics = ["selectors/detailed_statistics"]
+detailed_statistics = ["selectors/detailed_statistics", "selectors/time_fast_rejecting"]
+time_fast_rejecting = ["selectors/time_fast_rejecting"]
 
 [dependencies]
 app_units = "0.7.8"
