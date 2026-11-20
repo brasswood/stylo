@@ -255,6 +255,26 @@ impl<T> SelectorMap<T> {
     }
 }
 
+/// Reusable buffers for collecting and staging selector-map rule hits.
+pub struct StagedRuleBuffers<'a> {
+    candidates: Vec<&'a Rule>,
+    fast_rejecting: Vec<&'a Rule>,
+    slow_rejecting: Vec<&'a Rule>,
+    slow_accepting: Vec<&'a Rule>,
+}
+
+impl<'a> StagedRuleBuffers<'a> {
+    /// Creates buffers sized for the selector map's maximum candidate count.
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self {
+            candidates: Vec::with_capacity(capacity),
+            fast_rejecting: Vec::with_capacity(capacity),
+            slow_rejecting: Vec::with_capacity(capacity),
+            slow_accepting: Vec::with_capacity(capacity),
+        }
+    }
+}
+
 impl SelectorMap<Rule> {
     /// Appends all rules in this map that match the element.
     pub fn get_all_matching_rules<'selectormap, E>(
