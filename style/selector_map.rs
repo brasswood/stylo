@@ -993,6 +993,8 @@ impl SelectorMap<UniversalBucketRule> {
         element_depth: usize,
         bless_list: &mut SmallVec<[(&'selectormap UniversalBucketRule, usize); 16]>,
         matching_context: &mut MatchingContext<E::Impl>,
+        stage_oracle: Option<&[MatchStage]>,
+        mut stage_oracle_output: Option<&mut Vec<MatchStage>>,
     ) -> Statistics
     where
         E: SelectorMapElement + StyleSharingElement,
