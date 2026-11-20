@@ -22,7 +22,7 @@ use atomic_refcell::AtomicRef;
 use dom::ElementState;
 use precomputed_hash::PrecomputedHash;
 use selectors::{Element, OpaqueElement};
-use selectors::matching::{BloomQueryStats, MatchStage, MatchingContext, SelectorStats, Statistics, match_stage_from_counts, matches_selector, matches_selector_at_offset_as_subject};
+use selectors::matching::{ActivationMatchStats, MatchStage, MatchingContext, SelectorStats, Statistics, match_stage_from_counts, matches_selector, matches_selector_at_offset_as_subject};
 use selectors::parser::{Combinator, Component, Selector, SelectorIter};
 use smallvec::SmallVec;
 use std::collections::hash_map;
@@ -967,7 +967,7 @@ fn match_bless_universal_bucket_rule<'a, E>(
     element_depth: usize,
     bless_list: &mut SmallVec<[(&'a UniversalBucketRule, usize); 16]>,
     matching_context: &mut MatchingContext<E::Impl>,
-) -> BloomQueryStats
+) -> ActivationMatchStats
 where
     E: SelectorMapElement + StyleSharingElement,
 {
@@ -982,7 +982,7 @@ where
         let last_depth = if entry.matches_descendants { usize::MAX } else { element_depth + 1 };
         bless_list.push((entry, last_depth));
     }
-    stats
+    ActivationMatchStats(stats)
 }
 
 impl SelectorMap<UniversalBucketRule> {

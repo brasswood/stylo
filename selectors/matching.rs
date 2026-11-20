@@ -184,6 +184,11 @@ pub struct BloomQueryStats {
     pub time_slow_accepting: Duration,
 }
 
+
+/// A struct for activation selector matching stats
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ActivationMatchStats(pub BloomQueryStats); // easy
+
 /// A struct for returning statistics
 #[derive(Default, Debug, Div, Clone, Copy, Add, AddAssign, PartialEq, Eq)]
 pub struct Statistics {
@@ -218,6 +223,12 @@ pub struct CountingStats {
     pub slow_rejects: usize,
     /// Number of slow accepts
     pub slow_accepts: usize,
+    /// Number of fast rejects of activation selectors
+    pub activation_fast_rejects: usize,
+    /// Number of slow rejects of activation selectors
+    pub activation_slow_rejects: usize,
+    /// Number of slow accepts of activation selectors
+    pub activation_slow_accepts: usize,
 }
 
 /// A sub-struct for timing statistics
@@ -290,6 +301,21 @@ impl AddAssign<ScopeProximityStats> for Statistics {
             self.times.slow_rejecting += rhs.time_slow_rejecting;
             self.times.slow_accepting += rhs.time_slow_accepting;
         }
+    }
+}
+
+impl AddAssign<ActivationMatchStats> for Statistics {
+    fn add_assign(&mut self, rhs: ActivationMatchStats) {
+        self.counts.activation_fast_rejects += rhs.0.fast_rejects;
+        self.counts.activation_slow_rejects += rhs.0.slow_rejects;
+        self.counts.activation_slow_accepts += rhs.0.slow_accepts;
+        #[cfg(feature = "detailed_statistics")]
+        {
+            self.times.fast_rejecting += rhs.0.time_fast_rejecting;
+            self.times.slow_rejecting += rhs.0.time_slow_rejecting;
+            self.times.slow_accepting += rhs.0.time_slow_accepting;
+        }
+
     }
 }
 
