@@ -899,6 +899,41 @@ impl SelectorMap<UniversalTailRule> {
         {
             stats.times.querying_selector_map = start.elapsed();
         }
+
+        #[cfg(feature = "detailed_statistics")]
+        if let Some(stages) = stage_oracle.filter(|stages| stages.len() == candidates.len()) {
+            for stage in [
+                MatchStage::FastReject,
+                MatchStage::SlowReject,
+                MatchStage::SlowAccept,
+            ] {
+                let stage_start = Start::now();
+                matching_context.set_matching_stage(Some(stage));
+                for (entry, candidate_stage) in candidates.iter().zip(stages) {
+                    if *candidate_stage != stage {
+                        continue;
+                    }
+                    let (matched, match_stats) = matches_selector_at_offset_as_subject(
+                        &entry.rule.selector,
+                        entry.activation_offset,
+                        Some(&entry.activation_hashes),
+                        &element,
+                        matching_context,
+                    );
+                    stats += match_stats;
+                    if matched && !matching_selectors.contains(&&entry.rule.selector) {
+                        matching_selectors.push(&entry.rule.selector);
+                    }
+                }
+                matching_context.set_matching_stage(None);
+                let duration = stage_start.elapsed();
+                stats.times._time_inside_buckets += duration;
+                match stage {
+                    MatchStage::FastReject => stats.times.fast_rejecting += duration,
+                    MatchStage::SlowReject => stats.times.slow_rejecting += duration,
+                    MatchStage::SlowAccept => stats.times.slow_accepting += duration,
+                }
+            }
         stats.counts.tail_selector_map_hits = hits;
         stats
     }
