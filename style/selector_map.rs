@@ -612,7 +612,6 @@ impl SelectorMap<Rule> {
                     .map(|filter| !selector_may_match(&rule.hashes, filter))
                     .unwrap_or(false);
                 staged_rule_buffers.bloom_rejects.push(rejected);
-                // TODO(staging): finish passing Bloom results to the matcher next.
             }
             stats.times.checking_bloom_filter = bloom_start.elapsed();
             stats += SelectorMap::get_matching_rules_with_bloom_results(
@@ -669,7 +668,6 @@ impl SelectorMap<Rule> {
         )
     }
 
-    // TODO(staging): complete this Bloom-result matcher in the next change.
     fn get_matching_rules_with_bloom_results<'rule, E>(
         element: E,
         rules: impl IntoIterator<Item = (&'rule Rule, bool)>,
