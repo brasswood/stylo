@@ -673,28 +673,6 @@ impl SelectorMap<Rule> {
     fn get_matching_rules_with_bloom_results<'rule, E>(
         element: E,
         rules: impl IntoIterator<Item = (&'rule Rule, bool)>,
-            matching_context,
-            cascade_level,
-            cascade_data,
-            stylist,
-            skip_universal_tails,
-            debug_html_str,
-            None,
-        );
-        matching_context.set_matching_stage(None);
-        let duration = start.elapsed();
-        stats.times._time_inside_buckets += duration;
-        match stage {
-            MatchStage::FastReject => stats.times.fast_rejecting += duration,
-            MatchStage::SlowReject => stats.times.slow_rejecting += duration,
-            MatchStage::SlowAccept => stats.times.slow_accepting += duration,
-        }
-        stats
-    }
-
-    pub(crate) fn get_matching_rules_with_oracle<'rule, E>(
-        element: E,
-        rules: impl IntoIterator<Item = &'rule Rule>,
         matching_rules: &mut ApplicableDeclarationList,
         mut matching_selectors: Option<&mut SmallVec<[&'rule Selector<SelectorImpl>; 16]>>,
         mut selector_stats: Option<&mut SmallVec<[(&'rule Selector<SelectorImpl>, SelectorStats); 16]>>,
@@ -703,8 +681,8 @@ impl SelectorMap<Rule> {
         cascade_data: &CascadeData,
         stylist: &Stylist,
         _skip_universal_tails: bool,
-        debug_html_str: Option<&str>,
-        mut stage_oracle_output: Option<&mut Vec<MatchStage>>,
+        _debug_html_str: Option<&str>,
+        bloom_already_checked: bool,
     ) -> Statistics
     where
         E: SelectorMapElement,
@@ -712,16 +690,43 @@ impl SelectorMap<Rule> {
         use selectors::matching::IncludeStartingStyle;
 
         #[cfg(feature = "detailed_statistics")]
-        let start = matching_context.matching_stage().is_none().then(Start::now);
+        let start = Start::now();
+        let previous_bloom_filter = if bloom_already_checked {
+            let bloom_filter = matching_context.bloom_filter;
+            matching_context.bloom_filter = None;
+            Some(bloom_filter)
+        } else {
+            None
+        };
         let include_starting_style = matches!(
             matching_context.include_starting_style,
             IncludeStartingStyle::Yes
         );
         let mut acc_stats = Statistics::default();
-        for rule in rules {
+        for (rule, bloom_rejected) in rules {
             #[cfg(feature = "debug_element")]
-            if let Some(html_str) = debug_html_str {
+            if let Some(html_str) = _debug_html_str {
                 debug_element_selector(element, html_str, &rule.selector);
+            }
+            if bloom_rejected {
+                let bloom_stats = BloomQueryStats {
+                    fast_rejects: 1,
+                    ..BloomQueryStats::default()
+                };
+                if rule.scope_condition_id == ScopeConditionId::none() {
+                    acc_stats += bloom_stats;
+                    if let Some(selector_stats) = selector_stats.as_deref_mut() {
+                        selector_stats.push((&rule.selector, SelectorStats::Bloom(bloom_stats)));
+                    }
+                } else {
+                    let mut scope_stats = ScopeProximityStats::default();
+                    scope_stats.fast_rejects = 1;
+                    acc_stats += scope_stats;
+                    if let Some(selector_stats) = selector_stats.as_deref_mut() {
+                        selector_stats.push((&rule.selector, SelectorStats::ScopeProximity(scope_stats)));
+                    }
+                }
+                continue;
             }
             let scope_proximity = if rule.scope_condition_id == ScopeConditionId::none() {
                 let (res, bloom_stats) = matches_selector(
