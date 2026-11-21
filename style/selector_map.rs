@@ -740,13 +740,6 @@ impl SelectorMap<Rule> {
                     selector_stats.push((&rule.selector, SelectorStats::Bloom(bloom_stats)));
                 }
                 acc_stats += bloom_stats;
-                if let Some(output) = stage_oracle_output.as_deref_mut() {
-                    output.push(match_stage_from_counts(
-                        bloom_stats.fast_rejects,
-                        bloom_stats.slow_rejects,
-                        bloom_stats.slow_accepts,
-                    ));
-                }
                 if !res {
                     continue;
                 }
@@ -758,13 +751,6 @@ impl SelectorMap<Rule> {
                     selector_stats.push((&rule.selector, SelectorStats::ScopeProximity(scope_proximity_stats)));
                 }
                 acc_stats += scope_proximity_stats;
-                if let Some(output) = stage_oracle_output.as_deref_mut() {
-                    output.push(match_stage_from_counts(
-                        scope_proximity_stats.fast_rejects,
-                        scope_proximity_stats.slow_rejects,
-                        scope_proximity_stats.slow_accepts,
-                    ));
-                }
                 if result == ScopeProximity::infinity() {
                     continue;
                 }
@@ -806,9 +792,10 @@ impl SelectorMap<Rule> {
         }
         #[cfg(feature = "detailed_statistics")]
         {
-            if let Some(start) = start {
-                acc_stats.times._time_inside_buckets = start.elapsed();
-            }
+            acc_stats.times._time_inside_buckets = start.elapsed();
+        }
+        if let Some(bloom_filter) = previous_bloom_filter {
+            matching_context.bloom_filter = bloom_filter;
         }
         acc_stats
     }
