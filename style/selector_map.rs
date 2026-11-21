@@ -809,31 +809,28 @@ impl SelectorMap<UniversalTailRule> {
         element: E,
         matching_selectors: &mut SmallVec<[&'selectormap Selector<SelectorImpl>; 16]>,
         matching_context: &mut MatchingContext<E::Impl>,
-        candidates: Option<&mut Vec<&'selectormap UniversalTailRule>>,
-        stage_oracle: Option<&[MatchStage]>,
-        mut stage_oracle_output: Option<&mut Vec<MatchStage>>,
+        #[cfg(feature = "detailed_statistics")]
+        candidates: &mut Vec<Option<&'selectormap UniversalTailRule>>,
     ) -> Statistics
     where
         E: SelectorMapElement + StyleSharingElement,
     {
+        // TODO(staging): remove the remaining oracle plumbing in the next change.
         #[cfg(feature = "detailed_statistics")]
         let start = Start::now();
         let mut hits = 0;
         let mut stats = Statistics::default();
         #[cfg(feature = "detailed_statistics")]
-        let candidates = candidates.expect("staged matching requires a reusable candidate buffer");
-        #[cfg(feature = "detailed_statistics")]
         {
             candidates.clear();
             self.lookup(element, matching_context.quirks_mode(), None, |entry| {
                 hits += 1;
-                candidates.push(entry);
+                candidates.push(Some(entry));
                 true
             });
         }
         #[cfg(not(feature = "detailed_statistics"))]
         {
-            let _ = (candidates, stage_oracle, stage_oracle_output);
             self.lookup(element, matching_context.quirks_mode(), None, |entry| {
                 hits += 1;
                 let (matched, match_stats) = matches_selector_at_offset_as_subject(
@@ -856,41 +853,28 @@ impl SelectorMap<UniversalTailRule> {
         }
 
         #[cfg(feature = "detailed_statistics")]
-        if let Some(stages) = stage_oracle.filter(|stages| stages.len() == candidates.len()) {
-            for stage in [
-                MatchStage::FastReject,
-                MatchStage::SlowReject,
-                MatchStage::SlowAccept,
-            ] {
-                let stage_start = Start::now();
-                matching_context.set_matching_stage(Some(stage));
-                for (entry, candidate_stage) in candidates.iter().zip(stages) {
-                    if *candidate_stage != stage {
-                        continue;
-                    }
-                    let (matched, match_stats) = matches_selector_at_offset_as_subject(
-                        &entry.rule.selector,
-                        entry.activation_offset,
-                        Some(&entry.activation_hashes),
-                        &element,
-                        matching_context,
-                    );
-                    stats += ActivationMatchStats(match_stats);
-                    if matched && !matching_selectors.contains(&&entry.rule.selector) {
-                        matching_selectors.push(&entry.rule.selector);
-                    }
-                }
-                matching_context.set_matching_stage(None);
-                let duration = stage_start.elapsed();
-                stats.times._time_inside_buckets += duration;
-                match stage {
-                    MatchStage::FastReject => stats.times.fast_rejecting += duration,
-                    MatchStage::SlowReject => stats.times.slow_rejecting += duration,
-                    MatchStage::SlowAccept => stats.times.slow_accepting += duration,
+        {
+            let bloom_filter = matching_context.bloom_filter;
+            let bloom_start = Start::now();
+            for candidate in candidates.iter_mut() {
+                let entry = candidate.as_ref().copied().expect("candidate was just collected");
+                if bloom_filter
+                    .map(|filter| !selector_may_match(&entry.activation_hashes, filter))
+                    .unwrap_or(false)
+                {
+                    *candidate = None;
+                    stats += ActivationMatchStats(BloomQueryStats {
+                        fast_rejects: 1,
+                        ..BloomQueryStats::default()
+                    });
                 }
             }
-        } else {
-            for entry in candidates.iter() {
+            stats.times.checking_bloom_filter += bloom_start.elapsed();
+
+            let bloom_filter = matching_context.bloom_filter;
+            matching_context.bloom_filter = None;
+            let matching_start = Start::now();
+            for entry in candidates.iter().flatten() {
                 let (matched, match_stats) = matches_selector_at_offset_as_subject(
                     &entry.rule.selector,
                     entry.activation_offset,
