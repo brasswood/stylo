@@ -370,14 +370,9 @@ impl SelectorMap<Rule> {
         #[cfg(feature = "detailed_statistics")]
         let start = Start::now();
         #[cfg(feature = "detailed_statistics")]
-        let staged_rule_buffers = staged_rule_buffers
-            .expect("detailed selector matching requires preallocated rule buffers");
-        #[cfg(feature = "detailed_statistics")]
         staged_rule_buffers.candidates.clear();
         #[cfg(feature = "detailed_statistics")]
         let staged_rules = &mut staged_rule_buffers.candidates;
-        #[cfg(not(feature = "detailed_statistics"))]
-        let _ = (staged_rule_buffers, stage_oracle, stage_oracle_output);
 
         if rule_hash_target.is_root() {
             hits += self.root.len();
