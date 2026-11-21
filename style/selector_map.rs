@@ -815,7 +815,6 @@ impl SelectorMap<UniversalTailRule> {
     where
         E: SelectorMapElement + StyleSharingElement,
     {
-        // TODO(staging): remove the remaining oracle plumbing in the next change.
         #[cfg(feature = "detailed_statistics")]
         let start = Start::now();
         let mut hits = 0;
@@ -883,17 +882,12 @@ impl SelectorMap<UniversalTailRule> {
                     matching_context,
                 );
                 stats += ActivationMatchStats(match_stats);
-                if let Some(output) = stage_oracle_output.as_deref_mut() {
-                    output.push(match_stage_from_counts(
-                        match_stats.fast_rejects,
-                        match_stats.slow_rejects,
-                        match_stats.slow_accepts,
-                    ));
-                }
                 if matched && !matching_selectors.contains(&&entry.rule.selector) {
                     matching_selectors.push(&entry.rule.selector);
                 }
             }
+            stats.times._time_inside_buckets += matching_start.elapsed();
+            matching_context.bloom_filter = bloom_filter;
         }
 
         stats.counts.tail_selector_map_hits = hits;
