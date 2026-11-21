@@ -613,28 +613,36 @@ impl SelectorMap<Rule> {
                     .unwrap_or(false);
                 staged_rule_buffers.bloom_rejects.push(rejected);
                 // TODO(staging): finish passing Bloom results to the matcher next.
-                    selector_stats.as_deref_mut(),
-                    matching_context,
-                    cascade_level,
-                    cascade_data,
-                    stylist,
-                    skip_universal_tails,
-                    debug_html_str,
-                    stage_oracle_output,
-                );
             }
+            stats.times.checking_bloom_filter = bloom_start.elapsed();
+            stats += SelectorMap::get_matching_rules_with_bloom_results(
+                element,
+                candidate_rules
+                    .iter()
+                    .copied()
+                    .zip(staged_rule_buffers.bloom_rejects.iter().copied()),
+                matching_rules_list,
+                matching_selectors.as_deref_mut(),
+                selector_stats.as_deref_mut(),
+                matching_context,
+                cascade_level,
+                cascade_data,
+                stylist,
+                skip_universal_tails,
+                debug_html_str,
+                true,
+            );
         }
         stats
     }
 
     /// Adds rules in `rules` that match `element` to the `matching_rules` list.
-    /// Returns number of fast-rejects from the bloom filter.
     pub(crate) fn get_matching_rules<'rule, E>(
         element: E,
         rules: &'rule [Rule],
         matching_rules: &mut ApplicableDeclarationList,
-        mut matching_selectors: Option<&mut SmallVec<[&'rule Selector<SelectorImpl>; 16]>>,
-        mut selector_stats: Option<&mut SmallVec<[(&'rule Selector<SelectorImpl>, SelectorStats); 16]>>,
+        matching_selectors: Option<&mut SmallVec<[&'rule Selector<SelectorImpl>; 16]>>,
+        selector_stats: Option<&mut SmallVec<[(&'rule Selector<SelectorImpl>, SelectorStats); 16]>>,
         matching_context: &mut MatchingContext<E::Impl>,
         cascade_level: CascadeLevel,
         cascade_data: &CascadeData,
@@ -645,9 +653,9 @@ impl SelectorMap<Rule> {
     where
         E: SelectorMapElement,
     {
-        Self::get_matching_rules_with_oracle(
+        Self::get_matching_rules_with_bloom_results(
             element,
-            rules,
+            rules.iter().map(|rule| (rule, false)),
             matching_rules,
             matching_selectors,
             selector_stats,
@@ -657,36 +665,14 @@ impl SelectorMap<Rule> {
             stylist,
             _skip_universal_tails,
             debug_html_str,
-            None,
+            false,
         )
     }
 
-    #[cfg(feature = "detailed_statistics")]
-    fn get_matching_rules_for_stage<'rule, E>(
-        stage: MatchStage,
+    // TODO(staging): complete this Bloom-result matcher in the next change.
+    fn get_matching_rules_with_bloom_results<'rule, E>(
         element: E,
-        rules: impl Iterator<Item = &'rule Rule>,
-        matching_rules: &mut ApplicableDeclarationList,
-        matching_selectors: Option<&mut SmallVec<[&'rule Selector<SelectorImpl>; 16]>>,
-        selector_stats: Option<&mut SmallVec<[(&'rule Selector<SelectorImpl>, SelectorStats); 16]>>,
-        matching_context: &mut MatchingContext<E::Impl>,
-        cascade_level: CascadeLevel,
-        cascade_data: &CascadeData,
-        stylist: &Stylist,
-        skip_universal_tails: bool,
-        debug_html_str: Option<&str>,
-    ) -> Statistics
-    where
-        E: SelectorMapElement,
-    {
-        let start = Start::now();
-        matching_context.set_matching_stage(Some(stage));
-        let mut stats = Self::get_matching_rules_with_oracle(
-            element,
-            rules,
-            matching_rules,
-            matching_selectors,
-            selector_stats,
+        rules: impl IntoIterator<Item = (&'rule Rule, bool)>,
             matching_context,
             cascade_level,
             cascade_data,
