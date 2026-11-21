@@ -604,46 +604,15 @@ impl SelectorMap<Rule> {
         {
             stats.times.querying_selector_map = start.elapsed();
             let candidate_rules = staged_rules.as_slice();
-            if let Some(stage_oracle) = stage_oracle.filter(|stages| stages.len() == candidate_rules.len()) {
-                staged_rule_buffers.fast_rejecting.clear();
-                staged_rule_buffers.slow_rejecting.clear();
-                staged_rule_buffers.slow_accepting.clear();
-                for (rule, stage) in candidate_rules.iter().zip(stage_oracle) {
-                    match stage {
-                        MatchStage::FastReject => staged_rule_buffers.fast_rejecting.push(rule),
-                        MatchStage::SlowReject => staged_rule_buffers.slow_rejecting.push(rule),
-                        MatchStage::SlowAccept => staged_rule_buffers.slow_accepting.push(rule),
-                    }
-                }
-
-                for (stage, rules) in [
-                    (MatchStage::FastReject, &staged_rule_buffers.fast_rejecting),
-                    (MatchStage::SlowReject, &staged_rule_buffers.slow_rejecting),
-                    (MatchStage::SlowAccept, &staged_rule_buffers.slow_accepting),
-                ] {
-                    if !rules.is_empty() {
-                        stats += SelectorMap::get_matching_rules_for_stage(
-                            stage,
-                            element,
-                            rules.iter().copied(),
-                            matching_rules_list,
-                            matching_selectors.as_deref_mut(),
-                            selector_stats.as_deref_mut(),
-                            matching_context,
-                            cascade_level,
-                            cascade_data,
-                            stylist,
-                            skip_universal_tails,
-                            debug_html_str,
-                        );
-                    }
-                }
-            } else {
-                stats += SelectorMap::get_matching_rules_with_oracle(
-                    element,
-                    candidate_rules.iter().copied(),
-                    matching_rules_list,
-                    matching_selectors.as_deref_mut(),
+            staged_rule_buffers.bloom_rejects.clear();
+            let bloom_filter = matching_context.bloom_filter;
+            let bloom_start = Start::now();
+            for rule in candidate_rules {
+                let rejected = bloom_filter
+                    .map(|filter| !selector_may_match(&rule.hashes, filter))
+                    .unwrap_or(false);
+                staged_rule_buffers.bloom_rejects.push(rejected);
+                // TODO(staging): finish passing Bloom results to the matcher next.
                     selector_stats.as_deref_mut(),
                     matching_context,
                     cascade_level,
