@@ -22,7 +22,9 @@ use atomic_refcell::AtomicRef;
 use dom::ElementState;
 use precomputed_hash::PrecomputedHash;
 use selectors::{Element, OpaqueElement};
-use selectors::matching::{ActivationMatchStats, MatchStage, MatchingContext, SelectorStats, Statistics, match_stage_from_counts, matches_selector, matches_selector_at_offset_as_subject};
+use selectors::matching::{ActivationMatchStats, BloomQueryStats, MatchingContext, ScopeProximityStats, SelectorStats, Statistics, matches_selector, matches_selector_at_offset_as_subject};
+#[cfg(feature = "detailed_statistics")]
+use selectors::matching::selector_may_match;
 use selectors::parser::{Combinator, Component, Selector, SelectorIter};
 use smallvec::SmallVec;
 use std::collections::hash_map;
@@ -253,24 +255,42 @@ impl<T> SelectorMap<T> {
     pub fn len(&self) -> usize {
         self.count
     }
+
+    /// Returns an upper bound on the number of entries a lookup can return.
+    #[cfg(feature = "detailed_statistics")]
+    pub fn max_candidate_count(&self) -> usize {
+        [
+            self.root.len(),
+            self.id_hash.iter().map(|(_, rules)| rules.len()).sum(),
+            self.common_pseudo_classes.len(),
+            self.class_hash.iter().map(|(_, rules)| rules.len()).sum(),
+            self.local_name_hash.iter().map(|(_, rules)| rules.len()).sum(),
+            self.attribute_hash.iter().map(|(_, rules)| rules.len()).sum(),
+            self.namespace_hash.iter().map(|(_, rules)| rules.len()).sum(),
+            self.rare_pseudo_classes.len(),
+            self.other.len(),
+            self.universal_tails.len(),
+            self.universal_buckets.len(),
+        ]
+        .into_iter()
+        .sum()
+    }
 }
 
-/// Reusable buffers for collecting and staging selector-map rule hits.
+/// Reusable buffers for collecting selector-map rule hits and bloom results.
+#[cfg(feature = "detailed_statistics")]
 pub struct StagedRuleBuffers<'a> {
     candidates: Vec<&'a Rule>,
-    fast_rejecting: Vec<&'a Rule>,
-    slow_rejecting: Vec<&'a Rule>,
-    slow_accepting: Vec<&'a Rule>,
+    bloom_rejects: Vec<bool>,
 }
 
+#[cfg(feature = "detailed_statistics")]
 impl<'a> StagedRuleBuffers<'a> {
     /// Creates buffers sized for the selector map's maximum candidate count.
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
             candidates: Vec::with_capacity(capacity),
-            fast_rejecting: Vec::with_capacity(capacity),
-            slow_rejecting: Vec::with_capacity(capacity),
-            slow_accepting: Vec::with_capacity(capacity),
+            bloom_rejects: Vec::with_capacity(capacity),
         }
     }
 }
@@ -294,7 +314,7 @@ impl SelectorMap<Rule> {
         E: SelectorMapElement,
     {
         #[cfg(feature = "detailed_statistics")]
-        let mut staged_rule_buffers = StagedRuleBuffers::with_capacity(self.len());
+        let mut staged_rule_buffers = StagedRuleBuffers::with_capacity(self.max_candidate_count());
         self.get_all_matching_rules_with_universal_tails(
             element,
             rule_hash_target,
@@ -309,11 +329,7 @@ impl SelectorMap<Rule> {
             false,
             debug_html_str,
             #[cfg(feature = "detailed_statistics")]
-            Some(&mut staged_rule_buffers),
-            #[cfg(not(feature = "detailed_statistics"))]
-            None,
-            None,
-            None,
+            &mut staged_rule_buffers,
         )
     }
 
@@ -336,11 +352,9 @@ impl SelectorMap<Rule> {
         skip_universal_tails: bool,
         skip_universal_buckets: bool,
         debug_html_str: Option<&str>,
-        // These buffers are reused across elements by the detailed-statistics
-        // traversal; callers outside that path can omit them.
-        staged_rule_buffers: Option<&mut StagedRuleBuffers<'selectormap>>,
-        stage_oracle: Option<&[MatchStage]>,
-        stage_oracle_output: Option<&mut Vec<MatchStage>>,
+        // Reused by the detailed-statistics traversal to avoid per-element allocations.
+        #[cfg(feature = "detailed_statistics")]
+        staged_rule_buffers: &mut StagedRuleBuffers<'selectormap>,
     ) -> Statistics
     where
         E: SelectorMapElement,
