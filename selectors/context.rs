@@ -4,7 +4,8 @@
 
 use crate::attr::CaseSensitivity;
 use crate::bloom::BloomFilter;
-use crate::matching::{MatchStage, SelectorMatchingResult};
+#[cfg(feature = "detailed_statistics")]
+use crate::matching::SelectorMatchingResult;
 use crate::nth_index_cache::{NthIndexCache, NthIndexCacheInner};
 use crate::parser::{Selector, SelectorImpl};
 use crate::relative_selector::cache::RelativeSelectorCache;
@@ -237,9 +238,6 @@ where
     pub selector_caches: &'a mut SelectorCaches,
     #[cfg(feature = "detailed_statistics")]
     not_matched_result_counts: NotMatchedResultCounts,
-    #[cfg(feature = "detailed_statistics")]
-    matching_stage: Option<MatchStage>,
-
     classes_and_ids_case_sensitivity: CaseSensitivity,
     _impl: ::std::marker::PhantomData<Impl>,
 }
@@ -301,8 +299,6 @@ where
             selector_caches,
             #[cfg(feature = "detailed_statistics")]
             not_matched_result_counts: NotMatchedResultCounts::default(),
-            #[cfg(feature = "detailed_statistics")]
-            matching_stage: None,
             _impl: ::std::marker::PhantomData,
         }
     }
@@ -360,18 +356,6 @@ where
     #[inline]
     pub fn take_not_matched_result_counts(&mut self) -> NotMatchedResultCounts {
         ::std::mem::take(&mut self.not_matched_result_counts)
-    }
-
-    #[cfg(feature = "detailed_statistics")]
-    #[inline]
-    pub fn set_matching_stage(&mut self, stage: Option<MatchStage>) {
-        self.matching_stage = stage;
-    }
-
-    #[cfg(feature = "detailed_statistics")]
-    #[inline]
-    pub fn matching_stage(&self) -> Option<MatchStage> {
-        self.matching_stage
     }
 
     /// Whether or not we're matching to invalidate.
