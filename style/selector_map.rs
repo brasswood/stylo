@@ -927,8 +927,6 @@ impl SelectorMap<UniversalBucketRule> {
         element_depth: usize,
         bless_list: &mut SmallVec<[(&'selectormap UniversalBucketRule, usize); 16]>,
         matching_context: &mut MatchingContext<E::Impl>,
-        stage_oracle: Option<&[MatchStage]>,
-        mut stage_oracle_output: Option<&mut Vec<MatchStage>>,
     ) -> Statistics
     where
         E: SelectorMapElement + StyleSharingElement,
@@ -937,7 +935,7 @@ impl SelectorMap<UniversalBucketRule> {
         let start = Start::now();
         let mut hits = 0;
         let mut stats = Statistics::default();
-        let mut seen: SmallVec<[&UniversalBucketRule; 4]> = SmallVec::new();
+        let mut seen: SmallVec<[Option<&UniversalBucketRule>; 4]> = SmallVec::new();
         self.lookup(element, matching_context.quirks_mode(), None, |entry| {
             let is_active = bless_list.iter().any(|(active, last_depth)| {
                 active.matches_descendants
@@ -945,7 +943,7 @@ impl SelectorMap<UniversalBucketRule> {
                     && active.rule.source_order == entry.rule.source_order
                     && active.rule.selector == entry.rule.selector
             });
-            let already_seen = seen.iter().any(|candidate| {
+            let already_seen = seen.iter().flatten().any(|candidate| {
                 candidate.rule.source_order == entry.rule.source_order
                     && candidate.rule.selector == entry.rule.selector
             });
@@ -953,7 +951,7 @@ impl SelectorMap<UniversalBucketRule> {
                 return true;
             }
             hits += 1;
-            seen.push(entry);
+            seen.push(Some(entry));
             #[cfg(not(feature = "detailed_statistics"))]
             {
                 stats += match_bless_universal_bucket_rule(
@@ -972,41 +970,20 @@ impl SelectorMap<UniversalBucketRule> {
         #[cfg(feature = "detailed_statistics")]
         {
             stats.times.querying_selector_map = start.elapsed();
-            if let Some(stages) = stage_oracle.filter(|stages| stages.len() == seen.len()) {
-                for stage in [
-                    MatchStage::FastReject,
-                    MatchStage::SlowReject,
-                    MatchStage::SlowAccept,
-                ] {
-                    let stage_start = Start::now();
-                    matching_context.set_matching_stage(Some(stage));
-                    for (entry, candidate_stage) in seen.iter().zip(stages) {
-                        if *candidate_stage == stage {
-                            stats += match_bless_universal_bucket_rule(
-                                entry,
-                                element,
-                                element_depth,
-                                bless_list,
-                                matching_context,
-                            );
-                        }
-                    }
-                    matching_context.set_matching_stage(None);
-                    let duration = stage_start.elapsed();
-                    stats.times._time_inside_buckets += duration;
-                    match stage {
-                        MatchStage::FastReject => stats.times.fast_rejecting += duration,
-                        MatchStage::SlowReject => stats.times.slow_rejecting += duration,
-                        MatchStage::SlowAccept => stats.times.slow_accepting += duration,
-                    }
-                }
-            } else {
-                for entry in seen {
-                    let entry_stats = match_bless_universal_bucket_rule(
-                        entry,
-                        element,
-                        element_depth,
-                        bless_list,
+            // TODO(staging): finish the Bloom-only replacement of the oracle path next.
+            let bloom_filter = matching_context.bloom_filter;
+            let bloom_start = Start::now();
+            for candidate in seen.iter_mut() {
+                let entry = candidate.expect("candidate was just collected");
+                if bloom_filter
+                    .map(|filter| !selector_may_match(&entry.activation_hashes, filter))
+                    .unwrap_or(false)
+                {
+                    *candidate = None;
+                    stats += ActivationMatchStats(BloomQueryStats {
+                        fast_rejects: 1,
+                        ..BloomQueryStats::default()
+                    });
                         matching_context,
                     );
                     if let Some(output) = stage_oracle_output.as_deref_mut() {
