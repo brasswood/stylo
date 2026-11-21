@@ -970,7 +970,6 @@ impl SelectorMap<UniversalBucketRule> {
         #[cfg(feature = "detailed_statistics")]
         {
             stats.times.querying_selector_map = start.elapsed();
-            // TODO(staging): finish the Bloom-only replacement of the oracle path next.
             let bloom_filter = matching_context.bloom_filter;
             let bloom_start = Start::now();
             for candidate in seen.iter_mut() {
@@ -984,22 +983,26 @@ impl SelectorMap<UniversalBucketRule> {
                         fast_rejects: 1,
                         ..BloomQueryStats::default()
                     });
-                        matching_context,
-                    );
-                    if let Some(output) = stage_oracle_output.as_deref_mut() {
-                        output.push(match_stage_from_counts(
-                            entry_stats.0.fast_rejects,
-                            entry_stats.0.slow_rejects,
-                            entry_stats.0.slow_accepts,
-                        ));
-                    }
-                    stats += entry_stats;
                 }
             }
+            stats.times.checking_bloom_filter += bloom_start.elapsed();
+
+            let bloom_filter = matching_context.bloom_filter;
+            matching_context.bloom_filter = None;
+            let matching_start = Start::now();
+            for entry in seen.iter().flatten() {
+                stats += match_bless_universal_bucket_rule(
+                    entry,
+                    element,
+                    element_depth,
+                    bless_list,
+                    matching_context,
+                );
+            }
+            stats.times._time_inside_buckets += matching_start.elapsed();
+            matching_context.bloom_filter = bloom_filter;
         }
 
-        #[cfg(not(feature = "detailed_statistics"))]
-        let _ = (stage_oracle, stage_oracle_output);
         stats
     }
 }
