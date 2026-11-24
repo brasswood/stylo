@@ -260,6 +260,19 @@ impl AddAssign<ScopeProximityStats> for Statistics {
     }
 }
 
+impl AddAssign<ActivationMatchStats> for Statistics {
+    fn add_assign(&mut self, rhs: ActivationMatchStats) {
+        self.counts.activation_fast_rejects += rhs.0.fast_rejects;
+        self.counts.activation_slow_rejects += rhs.0.slow_rejects;
+        self.counts.activation_slow_accepts += rhs.0.slow_accepts;
+        #[cfg(feature = "detailed_statistics")]
+        {
+            self.times.slow_rejecting += rhs.0.time_slow_rejecting;
+            self.times.slow_accepting += rhs.0.time_slow_accepting;
+        }
+    }
+}
+
 impl ElementSelectorFlags {
     /// Returns the subset of flags that apply to the element.
     pub fn for_self(self) -> ElementSelectorFlags {
