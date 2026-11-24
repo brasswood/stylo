@@ -832,8 +832,29 @@ impl SelectorMap<UniversalTailRule> {
         }
         #[cfg(not(feature = "detailed_statistics"))]
         {
-            // TODO: keep per-entry tail matching in the non-detailed path.
+            self.lookup(element, matching_context.quirks_mode(), None, |entry| {
+                hits += 1;
+                let (matched, match_stats) = matches_selector_at_offset_as_subject(
+                    &entry.rule.selector,
+                    entry.activation_offset,
+                    Some(&entry.activation_hashes),
+                    &element,
+                    matching_context,
+                );
+                stats += ActivationMatchStats(match_stats);
+                if matched && !matching_selectors.contains(&&entry.rule.selector) {
+                    matching_selectors.push(&entry.rule.selector);
+                }
+                true
+            });
         }
+        #[cfg(feature = "detailed_statistics")]
+        {
+            stats.times.querying_selector_map = start.elapsed();
+        }
+
+        #[cfg(feature = "detailed_statistics")]
+        {
         stats.counts.tail_selector_map_hits = hits;
         stats
     }
