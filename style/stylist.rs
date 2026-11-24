@@ -3863,7 +3863,16 @@ impl CascadeData {
                 if !matches_featureless_host_only && rule.is_blessable_universal_tail() {
                     if let Some(offset) = rule.universal_tail_activation_offset() {
                         self.universal_tail_rules.insert(
-                            UniversalTailRule::new(rule.clone(), offset),
+                            UniversalTailRule::new(
+                                rule.clone(),
+                                offset,
+                                AncestorHashes::new_from_offset(
+                                    &rule.selector,
+                                    offset,
+                                    quirks_mode,
+                                    self.use_edge_selector_optimization,
+                                ),
+                            ),
                             quirks_mode,
                         )?;
                     }
@@ -3876,6 +3885,12 @@ impl CascadeData {
                             UniversalBucketRule::new(
                                 rule.clone(),
                                 offset,
+                                AncestorHashes::new_from_offset(
+                                    &rule.selector,
+                                    offset,
+                                    quirks_mode,
+                                    self.use_edge_selector_optimization,
+                                ),
                                 matches_descendants,
                             ),
                             quirks_mode,
@@ -4893,13 +4908,15 @@ impl Rule {
 pub struct UniversalTailRule {
     pub(crate) rule: Rule,
     pub(crate) activation_offset: usize,
+    pub(crate) activation_hashes: AncestorHashes,
 }
 
 impl UniversalTailRule {
-    fn new(rule: Rule, activation_offset: usize) -> Self {
+    fn new(rule: Rule, activation_offset: usize, activation_hashes: AncestorHashes) -> Self {
         Self {
             rule,
             activation_offset,
+            activation_hashes,
         }
     }
 }
@@ -4916,14 +4933,21 @@ pub struct UniversalBucketRule {
     /// The original style rule.
     pub rule: Rule,
     pub(crate) activation_offset: usize,
+    pub(crate) activation_hashes: AncestorHashes,
     pub(crate) matches_descendants: bool,
 }
 
 impl UniversalBucketRule {
-    fn new(rule: Rule, activation_offset: usize, matches_descendants: bool) -> Self {
+    fn new(
+        rule: Rule,
+        activation_offset: usize,
+        activation_hashes: AncestorHashes,
+        matches_descendants: bool,
+    ) -> Self {
         Self {
             rule,
             activation_offset,
+            activation_hashes,
             matches_descendants,
         }
     }
