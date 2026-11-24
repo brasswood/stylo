@@ -311,6 +311,8 @@ impl SelectorMap<Rule> {
     where
         E: SelectorMapElement,
     {
+        #[cfg(feature = "detailed_statistics")]
+        let mut staged_rule_buffers = StagedRuleBuffers::with_capacity(self.max_candidate_count());
         self.get_all_matching_rules_with_universal_tails(
             element,
             rule_hash_target,
@@ -324,6 +326,8 @@ impl SelectorMap<Rule> {
             false,
             false,
             debug_html_str,
+            #[cfg(feature = "detailed_statistics")]
+            &mut staged_rule_buffers,
         )
     }
 
@@ -346,6 +350,9 @@ impl SelectorMap<Rule> {
         skip_universal_tails: bool,
         skip_universal_buckets: bool,
         debug_html_str: Option<&str>,
+        // Reused by the detailed-statistics traversal to avoid per-element allocations.
+        #[cfg(feature = "detailed_statistics")]
+        staged_rule_buffers: &mut StagedRuleBuffers<'selectormap>,
     ) -> Statistics
     where
         E: SelectorMapElement,
@@ -360,10 +367,18 @@ impl SelectorMap<Rule> {
 
         #[cfg(feature = "detailed_statistics")]
         let start = Start::now();
+        #[cfg(feature = "detailed_statistics")]
+        staged_rule_buffers.candidates.clear();
+        #[cfg(feature = "detailed_statistics")]
+        let staged_rules = &mut staged_rule_buffers.candidates;
+        // TODO: collect all matching bucket candidates before running any selectors.
 
         if rule_hash_target.is_root() {
             hits += self.root.len();
-            stats += SelectorMap::get_matching_rules(
+            #[cfg(feature = "detailed_statistics")]
+            staged_rules.extend(self.root.iter());
+            #[cfg(not(feature = "detailed_statistics"))]
+            let _ = stats += SelectorMap::get_matching_rules(
                 element,
                 &self.root,
                 matching_rules_list,
