@@ -22,7 +22,9 @@ use atomic_refcell::AtomicRef;
 use dom::ElementState;
 use precomputed_hash::PrecomputedHash;
 use selectors::{Element, OpaqueElement};
-use selectors::matching::{MatchingContext, SelectorStats, Statistics, matches_selector, matches_selector_at_offset_as_subject};
+use selectors::matching::{ActivationMatchStats, BloomQueryStats, MatchingContext, ScopeProximityStats, SelectorStats, Statistics, matches_selector, matches_selector_at_offset_as_subject};
+#[cfg(feature = "detailed_statistics")]
+use selectors::matching::selector_may_match;
 use selectors::parser::{Combinator, Component, Selector, SelectorIter};
 use smallvec::SmallVec;
 use std::collections::hash_map;
@@ -562,7 +564,10 @@ impl SelectorMap<Rule> {
         );
         if !skip_universal_tails {
             hits += self.universal_tails.len();
-            stats += SelectorMap::get_matching_rules(
+            #[cfg(feature = "detailed_statistics")]
+            staged_rules.extend(self.universal_tails.iter());
+            #[cfg(not(feature = "detailed_statistics"))]
+            let _ = stats += SelectorMap::get_matching_rules(
                 element,
                 &self.universal_tails,
                 matching_rules_list,
@@ -578,7 +583,10 @@ impl SelectorMap<Rule> {
         }
         if !skip_universal_buckets {
             hits += self.universal_buckets.len();
-            stats += SelectorMap::get_matching_rules(
+            #[cfg(feature = "detailed_statistics")]
+            staged_rules.extend(self.universal_buckets.iter());
+            #[cfg(not(feature = "detailed_statistics"))]
+            let _ = stats += SelectorMap::get_matching_rules(
                 element,
                 &self.universal_buckets,
                 matching_rules_list,
@@ -592,11 +600,37 @@ impl SelectorMap<Rule> {
                 debug_html_str,
             );
         }
-        #[cfg(feature = "detailed_statistics")]
-        let duration = start.elapsed();
+        stats.counts.selector_map_hits = hits;
         #[cfg(feature = "detailed_statistics")]
         {
-            stats.times.querying_selector_map = duration - stats.times._time_inside_buckets;
+            stats.times.querying_selector_map = start.elapsed();
+            let candidate_rules = staged_rules.as_slice();
+            staged_rule_buffers.bloom_rejects.clear();
+            let bloom_filter = matching_context.bloom_filter;
+            let bloom_start = Start::now();
+            for rule in candidate_rules {
+                let rejected = bloom_filter
+                    .map(|filter| !selector_may_match(&rule.hashes, filter))
+                    .unwrap_or(false);
+                staged_rule_buffers.bloom_rejects.push(rejected);
+            }
+            stats.times.checking_bloom_filter = bloom_start.elapsed();
+            // TODO: implement the per-selector matcher that consumes these Bloom results.
+            stats += SelectorMap::get_matching_rules_with_bloom_results(
+                element,
+                candidate_rules
+                    .iter()
+                    .copied()
+                    .zip(staged_rule_buffers.bloom_rejects.iter().copied()),
+                matching_rules_list,
+                matching_selectors.as_deref_mut(),
+                selector_stats.as_deref_mut(),
+                matching_context,
+                cascade_level,
+                cascade_data,
+                stylist,
+                skip_universal_tails,
+                debug_html_str,
         }
         stats.counts.selector_map_hits = hits;
         stats
