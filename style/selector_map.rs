@@ -896,50 +896,28 @@ impl SelectorMap<UniversalTailRule> {
     }
 }
 
-fn try_bless_universal_bucket_rule<'a, E>(
+fn match_bless_universal_bucket_rule<'a, E>(
     entry: &'a UniversalBucketRule,
     element: E,
     element_depth: usize,
     bless_list: &mut SmallVec<[(&'a UniversalBucketRule, usize); 16]>,
-    seen: &mut SmallVec<[&'a UniversalBucketRule; 4]>,
     matching_context: &mut MatchingContext<E::Impl>,
-) -> Option<tsc_timer::Duration>
+) -> ActivationMatchStats
 where
     E: SelectorMapElement + StyleSharingElement,
 {
-    let is_active = bless_list.iter().any(|(active, last_depth)| {
-        active.matches_descendants
-            && *last_depth >= element_depth
-            && active.rule.source_order == entry.rule.source_order
-            && active.rule.selector == entry.rule.selector
-    });
-    let already_seen = seen.iter().any(|candidate| {
-        candidate.rule.source_order == entry.rule.source_order
-            && candidate.rule.selector == entry.rule.selector
-    });
-    if is_active || already_seen {
-        return None;
-    }
-    seen.push(entry);
-    #[cfg(feature = "detailed_statistics")]
-    let start = Start::now();
-    let (matched, _) = matches_selector_at_offset_as_subject(
+    let (matched, stats) = matches_selector_at_offset_as_subject(
         &entry.rule.selector,
         entry.activation_offset,
+        Some(&entry.activation_hashes),
         &element,
         matching_context,
     );
-    #[cfg(feature = "detailed_statistics")]
-    let duration = start.elapsed();
     if matched {
         let last_depth = if entry.matches_descendants { usize::MAX } else { element_depth + 1 };
         bless_list.push((entry, last_depth));
     }
-    #[cfg(feature = "detailed_statistics")]
-    let duration = duration;
-    #[cfg(not(feature = "detailed_statistics"))]
-    let duration = tsc_timer::Duration::default();
-    Some(duration)
+    ActivationMatchStats(stats)
 }
 
 impl SelectorMap<UniversalBucketRule> {
@@ -961,6 +939,7 @@ impl SelectorMap<UniversalBucketRule> {
         let mut hits = 0;
         let mut stats = Statistics::default();
         let mut seen: SmallVec<[&UniversalBucketRule; 4]> = SmallVec::new();
+        // TODO: batch unique candidates and update the per-rule matcher calls.
         self.lookup(element, matching_context.quirks_mode(), None, |entry| {
             if let Some(_duration) = try_bless_universal_bucket_rule(
                 entry,
