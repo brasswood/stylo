@@ -24,9 +24,9 @@ use log::debug;
 use smallvec::SmallVec;
 use std::borrow::Borrow;
 use std::ops::AddAssign;
-// #[cfg(feature = "detailed_statistics")]
-use tsc_timer::Start;
 use tsc_timer::Duration;
+#[cfg(feature = "detailed_statistics")]
+use tsc_timer::Start;
 
 pub use crate::context::*;
 
@@ -113,8 +113,6 @@ pub struct ScopeProximityStats {
     pub slow_accepts: usize,
     #[cfg(feature = "detailed_statistics")]
     pub slow_reject_not_matched_result_counts: NotMatchedResultCounts,
-    #[cfg(feature = "time_fast_rejecting")]
-    pub time_fast_rejecting: Duration, // Non-optional, since `fast_rejects` will tell us whether there were any.
     #[cfg(feature = "detailed_statistics")]
     pub time_slow_rejecting: Duration,
     #[cfg(feature = "detailed_statistics")]
@@ -129,10 +127,6 @@ impl AddAssign<BloomQueryStats> for ScopeProximityStats {
         #[cfg(feature = "detailed_statistics")]
         if rhs.slow_rejects > 0 {
             self.slow_reject_not_matched_result_counts += rhs.not_matched_result_counts;
-        }
-        #[cfg(feature = "time_fast_rejecting")]
-        {
-            self.time_fast_rejecting += rhs.time_fast_rejecting;
         }
         #[cfg(feature = "detailed_statistics")]
         {
@@ -150,13 +144,14 @@ pub struct BloomQueryStats {
     pub slow_accepts: usize,
     #[cfg(feature = "detailed_statistics")]
     pub not_matched_result_counts: NotMatchedResultCounts,
-    #[cfg(feature = "time_fast_rejecting")]
-    pub time_fast_rejecting: Duration,
     #[cfg(feature = "detailed_statistics")]
     pub time_slow_rejecting: Duration,
     #[cfg(feature = "detailed_statistics")]
     pub time_slow_accepting: Duration,
 }
+/// A struct for activation selector matching stats
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ActivationMatchStats(pub BloomQueryStats);
 
 /// A struct for returning statistics
 #[derive(Default, Debug, Div, Clone, Copy, Add, AddAssign, PartialEq, Eq)]
@@ -192,6 +187,12 @@ pub struct CountingStats {
     pub slow_rejects: usize,
     /// Number of slow accepts
     pub slow_accepts: usize,
+    /// Number of fast rejects of activation selectors
+    pub activation_fast_rejects: usize,
+    /// Number of slow rejects of activation selectors
+    pub activation_slow_rejects: usize,
+    /// Number of slow accepts of activation selectors
+    pub activation_slow_accepts: usize,
 }
 
 /// A sub-struct for timing statistics
@@ -208,9 +209,9 @@ pub struct TimingStats {
     #[cfg(feature = "detailed_statistics")]
     /// Time spent querying the selector map
     pub querying_selector_map: Duration,
-    #[cfg(feature = "time_fast_rejecting")]
-    /// Time spent fast rejecting a selector
-    pub fast_rejecting: Duration,
+    #[cfg(feature = "detailed_statistics")]
+    /// Time spent checking the bloom filter for a batch of selectors
+    pub checking_bloom_filter: Duration,
     #[cfg(feature = "detailed_statistics")]
     /// Time spent slow rejecting a selector after all of the following happen:
     /// - Style sharing fails
@@ -238,10 +239,6 @@ impl AddAssign<BloomQueryStats> for Statistics {
         self.counts.fast_rejects += rhs.fast_rejects;
         self.counts.slow_rejects += rhs.slow_rejects;
         self.counts.slow_accepts += rhs.slow_accepts;
-        #[cfg(feature = "time_fast_rejecting")]
-        {
-            self.times.fast_rejecting += rhs.time_fast_rejecting;
-        }
         #[cfg(feature = "detailed_statistics")]
         {
             self.times.slow_rejecting += rhs.time_slow_rejecting;
@@ -255,10 +252,6 @@ impl AddAssign<ScopeProximityStats> for Statistics {
         self.counts.fast_rejects += rhs.fast_rejects;
         self.counts.slow_rejects += rhs.slow_rejects;
         self.counts.slow_accepts += rhs.slow_accepts;
-        #[cfg(feature = "time_fast_rejecting")]
-        {
-            self.times.fast_rejecting += rhs.time_fast_rejecting;
-        }
         #[cfg(feature = "detailed_statistics")]
         {
             self.times.slow_rejecting += rhs.time_slow_rejecting;
@@ -461,17 +454,32 @@ where
 /// the subject of the selector.
 ///
 /// This is useful when an optimization has already established the semantics
-/// of the removed right-hand portion. Ancestor hashes and fail caches cannot be
-/// reused because both are computed relative to the original subject.
+/// of the removed right-hand portion. Any ancestor hashes must be computed
+/// relative to `offset`, not reused from the original subject.
 pub fn matches_selector_at_offset_as_subject<E>(
     selector: &Selector<E::Impl>,
     offset: usize,
+    hashes: Option<&AncestorHashes>,
     element: &E,
     context: &mut MatchingContext<E::Impl>,
 ) -> (bool, BloomQueryStats)
 where
     E: Element,
 {
+    if let Some(hashes) = hashes {
+        if let Some(filter) = context.bloom_filter {
+            let may_match = selector_may_match(hashes, filter);
+            if !may_match {
+                return (
+                    false,
+                    BloomQueryStats {
+                        fast_rejects: 1,
+                        ..BloomQueryStats::default()
+                    },
+                );
+            }
+        }
+    }
     #[cfg(feature = "detailed_statistics")]
     let start = Start::now();
     let does_match = matches_complex_selector(
@@ -550,16 +558,10 @@ where
     // Use the bloom filter to fast-reject.
     if let Some(hashes) = hashes {
         if let Some(filter) = context.bloom_filter {
-            #[cfg(feature = "time_fast_rejecting")]
-            let start = Start::now();
             let may_match = selector_may_match(hashes, filter);
-            #[cfg(feature = "time_fast_rejecting")]
-            let fast_reject_duration = start.elapsed();
             if !may_match {
                 let stats = BloomQueryStats {
                     fast_rejects: 1,
-                    #[cfg(feature = "time_fast_rejecting")]
-                    time_fast_rejecting: fast_reject_duration,
                     ..BloomQueryStats::default()
                 };
                 return (KleeneValue::False, stats);
