@@ -373,7 +373,6 @@ impl SelectorMap<Rule> {
         staged_rule_buffers.candidates.clear();
         #[cfg(feature = "detailed_statistics")]
         let staged_rules = &mut staged_rule_buffers.candidates;
-        // TODO: pass collected candidates through batched Bloom checks and matching.
 
         if rule_hash_target.is_root() {
             hits += self.root.len();
@@ -615,7 +614,6 @@ impl SelectorMap<Rule> {
                 staged_rule_buffers.bloom_rejects.push(rejected);
             }
             stats.times.checking_bloom_filter = bloom_start.elapsed();
-            // TODO: implement the per-selector matcher that consumes these Bloom results.
             stats += SelectorMap::get_matching_rules_with_bloom_results(
                 element,
                 candidate_rules
@@ -689,9 +687,6 @@ impl SelectorMap<Rule> {
     {
         use selectors::matching::IncludeStartingStyle;
 
-        #[cfg(feature = "detailed_statistics")]
-        let start = Start::now();
-        // TODO: restore the Bloom filter after the staged matching pass.
         let previous_bloom_filter = if bloom_already_checked {
             let bloom_filter = matching_context.bloom_filter;
             matching_context.bloom_filter = None;
@@ -793,7 +788,8 @@ impl SelectorMap<Rule> {
         }
         #[cfg(feature = "detailed_statistics")]
         {
-            acc_stats.times._time_inside_buckets = start.elapsed();
+            acc_stats.times._time_inside_buckets =
+                acc_stats.times.slow_rejecting + acc_stats.times.slow_accepting;
         }
         if let Some(bloom_filter) = previous_bloom_filter {
             matching_context.bloom_filter = bloom_filter;
@@ -873,7 +869,6 @@ impl SelectorMap<UniversalTailRule> {
 
             let bloom_filter = matching_context.bloom_filter;
             matching_context.bloom_filter = None;
-            let matching_start = Start::now();
             for entry in candidates.iter().flatten() {
                 let (matched, match_stats) = matches_selector_at_offset_as_subject(
                     &entry.rule.selector,
@@ -887,7 +882,8 @@ impl SelectorMap<UniversalTailRule> {
                     matching_selectors.push(&entry.rule.selector);
                 }
             }
-            stats.times._time_inside_buckets += matching_start.elapsed();
+            stats.times._time_inside_buckets =
+                stats.times.slow_rejecting + stats.times.slow_accepting;
             matching_context.bloom_filter = bloom_filter;
         }
 
@@ -934,12 +930,9 @@ impl SelectorMap<UniversalBucketRule> {
     {
         #[cfg(feature = "detailed_statistics")]
         let start = Start::now();
-        #[cfg(feature = "detailed_statistics")]
-        let mut matching_time = tsc_timer::Duration::from_cycles(0);
         let mut hits = 0;
         let mut stats = Statistics::default();
         let mut seen: SmallVec<[Option<&UniversalBucketRule>; 4]> = SmallVec::new();
-        // TODO: run the staged Bloom and matching passes in detailed_statistics.
         self.lookup(element, matching_context.quirks_mode(), None, |entry| {
             let is_active = bless_list.iter().any(|(active, last_depth)| {
                 active.matches_descendants
@@ -968,12 +961,45 @@ impl SelectorMap<UniversalBucketRule> {
             }
             true
         });
+
+        stats.counts.tail_selector_map_hits = hits;
+
         #[cfg(feature = "detailed_statistics")]
         {
-            stats.times._time_inside_buckets = matching_time;
-            stats.times.querying_selector_map = start.elapsed() - matching_time;
+            stats.times.querying_selector_map = start.elapsed();
+            let bloom_filter = matching_context.bloom_filter;
+            let bloom_start = Start::now();
+            for candidate in seen.iter_mut() {
+                let entry = candidate.expect("candidate was just collected");
+                if bloom_filter
+                    .map(|filter| !selector_may_match(&entry.activation_hashes, filter))
+                    .unwrap_or(false)
+                {
+                    *candidate = None;
+                    stats += ActivationMatchStats(BloomQueryStats {
+                        fast_rejects: 1,
+                        ..BloomQueryStats::default()
+                    });
+                }
+            }
+            stats.times.checking_bloom_filter += bloom_start.elapsed();
+
+            let bloom_filter = matching_context.bloom_filter;
+            matching_context.bloom_filter = None;
+            for entry in seen.iter().flatten() {
+                stats += match_bless_universal_bucket_rule(
+                    entry,
+                    element,
+                    element_depth,
+                    bless_list,
+                    matching_context,
+                );
+            }
+            stats.times._time_inside_buckets =
+                stats.times.slow_rejecting + stats.times.slow_accepting;
+            matching_context.bloom_filter = bloom_filter;
         }
-        stats.counts.tail_selector_map_hits = hits;
+
         stats
     }
 }
