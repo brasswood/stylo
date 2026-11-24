@@ -631,19 +631,19 @@ impl SelectorMap<Rule> {
                 stylist,
                 skip_universal_tails,
                 debug_html_str,
+                true,
+            );
         }
-        stats.counts.selector_map_hits = hits;
         stats
     }
 
     /// Adds rules in `rules` that match `element` to the `matching_rules` list.
-    /// Returns number of fast-rejects from the bloom filter.
     pub(crate) fn get_matching_rules<'rule, E>(
         element: E,
         rules: &'rule [Rule],
         matching_rules: &mut ApplicableDeclarationList,
-        mut matching_selectors: Option<&mut SmallVec<[&'rule Selector<SelectorImpl>; 16]>>,
-        mut selector_stats: Option<&mut SmallVec<[(&'rule Selector<SelectorImpl>, SelectorStats); 16]>>,
+        matching_selectors: Option<&mut SmallVec<[&'rule Selector<SelectorImpl>; 16]>>,
+        selector_stats: Option<&mut SmallVec<[(&'rule Selector<SelectorImpl>, SelectorStats); 16]>>,
         matching_context: &mut MatchingContext<E::Impl>,
         cascade_level: CascadeLevel,
         cascade_data: &CascadeData,
@@ -654,10 +654,47 @@ impl SelectorMap<Rule> {
     where
         E: SelectorMapElement,
     {
+        Self::get_matching_rules_with_bloom_results(
+            element,
+            rules.iter().map(|rule| (rule, false)),
+            matching_rules,
+            matching_selectors,
+            selector_stats,
+            matching_context,
+            cascade_level,
+            cascade_data,
+            stylist,
+            _skip_universal_tails,
+            debug_html_str,
+            false,
+        )
+    }
+
+    fn get_matching_rules_with_bloom_results<'rule, E>(
+        element: E,
+        rules: impl IntoIterator<Item = (&'rule Rule, bool)>,
+        matching_rules: &mut ApplicableDeclarationList,
+        mut matching_selectors: Option<&mut SmallVec<[&'rule Selector<SelectorImpl>; 16]>>,
+        mut selector_stats: Option<&mut SmallVec<[(&'rule Selector<SelectorImpl>, SelectorStats); 16]>>,
+        matching_context: &mut MatchingContext<E::Impl>,
+        cascade_level: CascadeLevel,
+        cascade_data: &CascadeData,
+        stylist: &Stylist,
+        _skip_universal_tails: bool,
+        _debug_html_str: Option<&str>,
+        bloom_already_checked: bool,
+    ) -> Statistics
+    where
+        E: SelectorMapElement,
+    {
         use selectors::matching::IncludeStartingStyle;
 
         #[cfg(feature = "detailed_statistics")]
         let start = Start::now();
+        // TODO: restore the Bloom filter after the staged matching pass.
+        let previous_bloom_filter = if bloom_already_checked {
+            let bloom_filter = matching_context.bloom_filter;
+            matching_context.bloom_filter = None;
         let include_starting_style = matches!(
             matching_context.include_starting_style,
             IncludeStartingStyle::Yes
