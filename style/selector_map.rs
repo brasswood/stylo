@@ -695,15 +695,39 @@ impl SelectorMap<Rule> {
         let previous_bloom_filter = if bloom_already_checked {
             let bloom_filter = matching_context.bloom_filter;
             matching_context.bloom_filter = None;
+            Some(bloom_filter)
+        } else {
+            None
+        };
         let include_starting_style = matches!(
             matching_context.include_starting_style,
             IncludeStartingStyle::Yes
         );
         let mut acc_stats = Statistics::default();
-        for rule in rules {
+        for (rule, bloom_rejected) in rules {
             #[cfg(feature = "debug_element")]
-            if let Some(html_str) = debug_html_str {
+            if let Some(html_str) = _debug_html_str {
                 debug_element_selector(element, html_str, &rule.selector);
+            }
+            if bloom_rejected {
+                let bloom_stats = BloomQueryStats {
+                    fast_rejects: 1,
+                    ..BloomQueryStats::default()
+                };
+                if rule.scope_condition_id == ScopeConditionId::none() {
+                    acc_stats += bloom_stats;
+                    if let Some(selector_stats) = selector_stats.as_deref_mut() {
+                        selector_stats.push((&rule.selector, SelectorStats::Bloom(bloom_stats)));
+                    }
+                } else {
+                    let mut scope_stats = ScopeProximityStats::default();
+                    scope_stats.fast_rejects = 1;
+                    acc_stats += scope_stats;
+                    if let Some(selector_stats) = selector_stats.as_deref_mut() {
+                        selector_stats.push((&rule.selector, SelectorStats::ScopeProximity(scope_stats)));
+                    }
+                }
+                continue;
             }
             let scope_proximity = if rule.scope_condition_id == ScopeConditionId::none() {
                 let (res, bloom_stats) = matches_selector(
@@ -771,6 +795,9 @@ impl SelectorMap<Rule> {
         {
             acc_stats.times._time_inside_buckets = start.elapsed();
         }
+        if let Some(bloom_filter) = previous_bloom_filter {
+            matching_context.bloom_filter = bloom_filter;
+        }
         acc_stats
     }
 }
@@ -783,40 +810,29 @@ impl SelectorMap<UniversalTailRule> {
         element: E,
         matching_selectors: &mut SmallVec<[&'selectormap Selector<SelectorImpl>; 16]>,
         matching_context: &mut MatchingContext<E::Impl>,
+        #[cfg(feature = "detailed_statistics")]
+        candidates: &mut Vec<Option<&'selectormap UniversalTailRule>>,
     ) -> Statistics
     where
         E: SelectorMapElement + StyleSharingElement,
     {
         #[cfg(feature = "detailed_statistics")]
         let start = Start::now();
-        #[cfg(feature = "detailed_statistics")]
-        let mut matching_time = tsc_timer::Duration::from_cycles(0);
         let mut hits = 0;
         let mut stats = Statistics::default();
-        self.lookup(element, matching_context.quirks_mode(), None, |entry| {
-            hits += 1;
-            #[cfg(feature = "detailed_statistics")]
-            let match_start = Start::now();
-            let (matched, match_stats) = matches_selector_at_offset_as_subject(
-                &entry.rule.selector,
-                entry.activation_offset,
-                &element,
-                matching_context,
-            );
-            #[cfg(feature = "detailed_statistics")]
-            {
-                matching_time += match_start.elapsed();
-            }
-            stats += match_stats;
-            if matched && !matching_selectors.contains(&&entry.rule.selector) {
-                matching_selectors.push(&entry.rule.selector);
-            }
-            true
-        });
         #[cfg(feature = "detailed_statistics")]
         {
-            stats.times._time_inside_buckets = matching_time;
-            stats.times.querying_selector_map = start.elapsed() - matching_time;
+            candidates.clear();
+            self.lookup(element, matching_context.quirks_mode(), None, |entry| {
+                hits += 1;
+                candidates.push(Some(entry));
+                true
+            });
+            // TODO: check the collected candidates with Bloom before matching.
+        }
+        #[cfg(not(feature = "detailed_statistics"))]
+        {
+            // TODO: keep per-entry tail matching in the non-detailed path.
         }
         stats.counts.tail_selector_map_hits = hits;
         stats
