@@ -253,6 +253,44 @@ impl<T> SelectorMap<T> {
     pub fn len(&self) -> usize {
         self.count
     }
+
+    /// Returns an upper bound on the number of entries a lookup can return.
+    #[cfg(feature = "detailed_statistics")]
+    pub fn max_candidate_count(&self) -> usize {
+        [
+            self.root.len(),
+            self.id_hash.iter().map(|(_, rules)| rules.len()).sum(),
+            self.common_pseudo_classes.len(),
+            self.class_hash.iter().map(|(_, rules)| rules.len()).sum(),
+            self.local_name_hash.iter().map(|(_, rules)| rules.len()).sum(),
+            self.attribute_hash.iter().map(|(_, rules)| rules.len()).sum(),
+            self.namespace_hash.iter().map(|(_, rules)| rules.len()).sum(),
+            self.rare_pseudo_classes.len(),
+            self.other.len(),
+            self.universal_tails.len(),
+            self.universal_buckets.len(),
+        ]
+        .into_iter()
+        .sum()
+    }
+}
+
+/// Reusable buffers for collecting selector-map rule hits and bloom results.
+#[cfg(feature = "detailed_statistics")]
+pub struct StagedRuleBuffers<'a> {
+    candidates: Vec<&'a Rule>,
+    bloom_rejects: Vec<bool>,
+}
+
+#[cfg(feature = "detailed_statistics")]
+impl<'a> StagedRuleBuffers<'a> {
+    /// Creates buffers sized for the selector map's maximum candidate count.
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self {
+            candidates: Vec::with_capacity(capacity),
+            bloom_rejects: Vec::with_capacity(capacity),
+        }
+    }
 }
 
 impl SelectorMap<Rule> {
