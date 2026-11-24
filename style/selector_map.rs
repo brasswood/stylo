@@ -938,22 +938,33 @@ impl SelectorMap<UniversalBucketRule> {
         let mut matching_time = tsc_timer::Duration::from_cycles(0);
         let mut hits = 0;
         let mut stats = Statistics::default();
-        let mut seen: SmallVec<[&UniversalBucketRule; 4]> = SmallVec::new();
-        // TODO: batch unique candidates and update the per-rule matcher calls.
+        let mut seen: SmallVec<[Option<&UniversalBucketRule>; 4]> = SmallVec::new();
+        // TODO: run the staged Bloom and matching passes in detailed_statistics.
         self.lookup(element, matching_context.quirks_mode(), None, |entry| {
-            if let Some(_duration) = try_bless_universal_bucket_rule(
-                entry,
-                element,
-                element_depth,
-                bless_list,
-                &mut seen,
-                matching_context,
-            ) {
-                hits += 1;
-                #[cfg(feature = "detailed_statistics")]
-                {
-                    matching_time += _duration;
-                }
+            let is_active = bless_list.iter().any(|(active, last_depth)| {
+                active.matches_descendants
+                    && *last_depth >= element_depth
+                    && active.rule.source_order == entry.rule.source_order
+                    && active.rule.selector == entry.rule.selector
+            });
+            let already_seen = seen.iter().flatten().any(|candidate| {
+                candidate.rule.source_order == entry.rule.source_order
+                    && candidate.rule.selector == entry.rule.selector
+            });
+            if is_active || already_seen {
+                return true;
+            }
+            hits += 1;
+            seen.push(Some(entry));
+            #[cfg(not(feature = "detailed_statistics"))]
+            {
+                stats += match_bless_universal_bucket_rule(
+                    entry,
+                    element,
+                    element_depth,
+                    bless_list,
+                    matching_context,
+                );
             }
             true
         });
