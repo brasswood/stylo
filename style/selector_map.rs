@@ -828,7 +828,6 @@ impl SelectorMap<UniversalTailRule> {
                 candidates.push(Some(entry));
                 true
             });
-            // TODO: check the collected candidates with Bloom before matching.
         }
         #[cfg(not(feature = "detailed_statistics"))]
         {
@@ -855,6 +854,43 @@ impl SelectorMap<UniversalTailRule> {
 
         #[cfg(feature = "detailed_statistics")]
         {
+            let bloom_filter = matching_context.bloom_filter;
+            let bloom_start = Start::now();
+            for candidate in candidates.iter_mut() {
+                let entry = candidate.as_ref().copied().expect("candidate was just collected");
+                if bloom_filter
+                    .map(|filter| !selector_may_match(&entry.activation_hashes, filter))
+                    .unwrap_or(false)
+                {
+                    *candidate = None;
+                    stats += ActivationMatchStats(BloomQueryStats {
+                        fast_rejects: 1,
+                        ..BloomQueryStats::default()
+                    });
+                }
+            }
+            stats.times.checking_bloom_filter += bloom_start.elapsed();
+
+            let bloom_filter = matching_context.bloom_filter;
+            matching_context.bloom_filter = None;
+            let matching_start = Start::now();
+            for entry in candidates.iter().flatten() {
+                let (matched, match_stats) = matches_selector_at_offset_as_subject(
+                    &entry.rule.selector,
+                    entry.activation_offset,
+                    Some(&entry.activation_hashes),
+                    &element,
+                    matching_context,
+                );
+                stats += ActivationMatchStats(match_stats);
+                if matched && !matching_selectors.contains(&&entry.rule.selector) {
+                    matching_selectors.push(&entry.rule.selector);
+                }
+            }
+            stats.times._time_inside_buckets += matching_start.elapsed();
+            matching_context.bloom_filter = bloom_filter;
+        }
+
         stats.counts.tail_selector_map_hits = hits;
         stats
     }
