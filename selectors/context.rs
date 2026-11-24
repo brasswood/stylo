@@ -4,6 +4,7 @@
 
 use crate::attr::CaseSensitivity;
 use crate::bloom::BloomFilter;
+#[cfg(feature = "detailed_statistics")]
 use crate::matching::SelectorMatchingResult;
 use crate::nth_index_cache::{NthIndexCache, NthIndexCacheInner};
 use crate::parser::{Selector, SelectorImpl};
