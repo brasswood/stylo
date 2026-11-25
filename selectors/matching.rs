@@ -323,32 +323,29 @@ where
     statistics.times.fast_rejecting += start.elapsed();
 }
 
-/// Removes bloom-rejected candidates from an optional-candidate staging slice.
+/// Stages selector candidates through the bloom filter as one timed batch.
 #[cfg(feature = "detailed_statistics")]
-pub fn filter_optional_selector_candidates_by_bloom<Candidate>(
-    candidates: &mut [Option<&Candidate>],
-    bloom_filter: Option<&BloomFilter>,
+pub fn matches_selector<'a, Impl, Candidate>(
+    candidates: impl IntoIterator<Item = &'a Candidate>,
+    context: &MatchingContext<Impl>,
     statistics: &mut Statistics,
     is_activation: bool,
-    mut hashes_for: impl FnMut(&Candidate) -> Option<&AncestorHashes>,
-) {
-    let start = Start::now();
-    for candidate in candidates {
-        if candidate
-            .as_ref()
-            .is_some_and(|candidate| {
-                !check_selector_bloom_filter(
-                    hashes_for(candidate),
-                    bloom_filter,
-                    statistics,
-                    is_activation,
-                )
-            })
-        {
-            *candidate = None;
-        }
-    }
-    statistics.times.fast_rejecting += start.elapsed();
+    selector_for: impl FnMut(&'a Candidate) -> &'a Selector<Impl>,
+    hashes_for: impl FnMut(&'a Candidate) -> Option<&'a AncestorHashes>,
+    slow_match_candidates: &mut Vec<(&'a Selector<Impl>, &'a Candidate)>,
+)
+where
+    Impl: SelectorImpl,
+{
+    matches_selector_kleene(
+        candidates,
+        context,
+        statistics,
+        is_activation,
+        selector_for,
+        hashes_for,
+        slow_match_candidates,
+    );
 }
 
 /// A result of selector matching, includes 3 failure types,
