@@ -348,6 +348,34 @@ where
     );
 }
 
+/// Stages offset-selector candidates through the bloom filter in place.
+#[cfg(feature = "detailed_statistics")]
+pub fn matches_selector_at_offset_as_subject<'a, Impl, Candidate>(
+    candidates: &mut [Option<(&'a Selector<Impl>, &'a Candidate)>],
+    context: &MatchingContext<Impl>,
+    statistics: &mut Statistics,
+    mut hashes_for: impl FnMut(&'a Candidate) -> Option<&'a AncestorHashes>,
+)
+where
+    Impl: SelectorImpl,
+{
+    let start = Start::now();
+    for candidate in candidates {
+        let rejected = candidate.as_ref().is_some_and(|(_, candidate)| {
+            !check_selector_bloom_filter(
+                hashes_for(candidate),
+                context.bloom_filter,
+                statistics,
+                true,
+            )
+        });
+        if rejected {
+            *candidate = None;
+        }
+    }
+    statistics.times.fast_rejecting += start.elapsed();
+}
+
 /// A result of selector matching, includes 3 failure types,
 ///
 ///   NotMatchedAndRestartFromClosestLaterSibling
