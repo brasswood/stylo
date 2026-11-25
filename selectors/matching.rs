@@ -426,15 +426,26 @@ impl From<SelectorMatchingResult> for KleeneValue {
 #[cfg_attr(not(feature = "debug_element"), inline(always))]
 
 pub fn matches_selector<'a, E>(
+    selector: &'a Selector<E::Impl>,
     offset: usize,
     hashes: Option<&AncestorHashes>,
     element: &E,
     context: &mut MatchingContext<E::Impl>,
-) -> (bool, BloomQueryStats)
+    statistics: &mut Statistics,
+    per_match_stats: Option<&mut PerMatchStats<'a, E::Impl>>,
+) -> bool
 where
     E: Element,
 {
-    let (result, stats) = matches_selector_kleene(selector, offset, hashes, element, context);
+    let result = matches_selector_kleene(
+        selector,
+        offset,
+        hashes,
+        element,
+        context,
+        statistics,
+        per_match_stats,
+    );
     if cfg!(debug_assertions) && result == KleeneValue::Unknown {
         debug_assert!(
             context
@@ -443,7 +454,7 @@ where
             "How did we return unknown?"
         );
     }
-    (result.to_bool(true), stats)
+    result.to_bool(true)
 }
 
 /// Matches a selector from an interior offset while treating that compound as
@@ -452,29 +463,20 @@ where
 /// This is useful when an optimization has already established the semantics
 /// of the removed right-hand portion. Any ancestor hashes must be computed
 /// relative to `offset`, not reused from the original subject.
-pub fn matches_selector_at_offset_as_subject<E>(
-    selector: &Selector<E::Impl>,
+pub fn matches_selector_at_offset_as_subject<'a, E>(
+    selector: &'a Selector<E::Impl>,
     offset: usize,
     hashes: Option<&AncestorHashes>,
     element: &E,
     context: &mut MatchingContext<E::Impl>,
-) -> (bool, BloomQueryStats)
+    statistics: &mut Statistics,
+    per_match_stats: Option<&mut PerMatchStats<'a, E::Impl>>,
+) -> bool
 where
     E: Element,
 {
-    if let Some(hashes) = hashes {
-        if let Some(filter) = context.bloom_filter {
-            let may_match = selector_may_match(hashes, filter);
-            if !may_match {
-                return (
-                    false,
-                    BloomQueryStats {
-                        fast_rejects: 1,
-                        ..BloomQueryStats::default()
-                    },
-                );
-            }
-        }
+    if !check_selector_bloom_filter(hashes, context.bloom_filter, statistics, true) {
+        return false;
     }
     #[cfg(feature = "detailed_statistics")]
     let start = Start::now();
@@ -486,28 +488,21 @@ where
     );
     #[cfg(feature = "detailed_statistics")]
     let duration = start.elapsed();
+    #[cfg(not(feature = "detailed_statistics"))]
+    let duration = Duration::default();
     let matched = does_match == KleeneValue::True;
-    let stats = BloomQueryStats {
-        slow_rejects: usize::from(!matched),
-        slow_accepts: usize::from(matched),
-        #[cfg(feature = "detailed_statistics")]
-        time_slow_rejecting: if !matched { duration } else { Duration::default() },
-        #[cfg(feature = "detailed_statistics")]
-        time_slow_accepting: if matched { duration } else { Duration::default() },
-        ..BloomQueryStats::default()
-    };
-    (
-        does_match.to_bool(true),
-        stats,
-    )
+    record_slow_match(selector, matched, duration, statistics, per_match_stats, true);
+    does_match.to_bool(true)
 }
 
 /// Matches only the rightmost compound selector, treating it as the subject.
-pub fn matches_rightmost_compound<E>(
-    selector: &Selector<E::Impl>,
+pub fn matches_rightmost_compound<'a, E>(
+    selector: &'a Selector<E::Impl>,
     element: &E,
     context: &mut MatchingContext<E::Impl>,
-) -> (bool, BloomQueryStats)
+    statistics: &mut Statistics,
+    per_match_stats: Option<&mut PerMatchStats<'a, E::Impl>>,
+) -> bool
 where
     E: Element,
 {
@@ -522,12 +517,9 @@ where
     );
     #[cfg(feature = "detailed_statistics")]
     let duration = start.elapsed();
+    #[cfg(not(feature = "detailed_statistics"))]
+    let duration = Duration::default();
     let matched = result == KleeneValue::True;
-    let stats = BloomQueryStats {
-        slow_rejects: usize::from(!matched),
-        slow_accepts: usize::from(matched),
-        #[cfg(feature = "detailed_statistics")]
-        time_slow_rejecting: if !matched { duration } else { Duration::default() },
         #[cfg(feature = "detailed_statistics")]
         time_slow_accepting: if matched { duration } else { Duration::default() },
         ..BloomQueryStats::default()
