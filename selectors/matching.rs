@@ -181,24 +181,6 @@ pub struct TimingStats {
     pub _time_inside_buckets: Duration,
 }
 
-            self.times.slow_accepting += rhs.time_slow_accepting;
-        }
-    }
-}
-
-impl AddAssign<ActivationMatchStats> for Statistics {
-    fn add_assign(&mut self, rhs: ActivationMatchStats) {
-        self.counts.activation_fast_rejects += rhs.0.fast_rejects;
-        self.counts.activation_slow_rejects += rhs.0.slow_rejects;
-        self.counts.activation_slow_accepts += rhs.0.slow_accepts;
-        #[cfg(feature = "detailed_statistics")]
-        {
-            self.times.slow_rejecting += rhs.0.time_slow_rejecting;
-            self.times.slow_accepting += rhs.0.time_slow_accepting;
-        }
-    }
-}
-
 impl ElementSelectorFlags {
     /// Returns the subset of flags that apply to the element.
     pub fn for_self(self) -> ElementSelectorFlags {
@@ -237,8 +219,17 @@ where
 {
     // This is pretty much any(..) but manually inlined because the compiler
     // refuses to do so from querySelector / querySelectorAll.
+    let mut statistics = Statistics::default();
     for selector in selector_list.slice() {
-        let matches = matches_selector(selector, 0, None, element, context).0;
+        let matches = matches_selector(
+            selector,
+            0,
+            None,
+            element,
+            context,
+            &mut statistics,
+            None,
+        );
         if matches {
             return true;
         }
@@ -277,6 +268,36 @@ pub fn selector_may_match(hashes: &AncestorHashes, bf: &BloomFilter) -> bool {
     fourth == 0 || bf.might_contain_hash(fourth)
 }
 
+/// Checks a selector's ancestor hashes and records a fast reject.
+#[inline(always)]
+pub fn check_selector_bloom_filter(
+    hashes: Option<&AncestorHashes>,
+    bloom_filter: Option<&BloomFilter>,
+    statistics: &mut Statistics,
+    is_activation: bool,
+) -> bool {
+    let rejected = hashes
+        .zip(bloom_filter)
+        .is_some_and(|(hashes, filter)| !selector_may_match(hashes, filter));
+    if rejected {
+        if is_activation {
+            statistics.counts.activation_fast_rejects += 1;
+        } else {
+            statistics.counts.fast_rejects += 1;
+        }
+    }
+    !rejected
+}
+
+/// Checks a batch of selector candidates and retains those that reach slow matching.
+#[cfg(feature = "detailed_statistics")]
+pub fn filter_selector_candidates_by_bloom<'a, Candidate>(
+    candidates: impl IntoIterator<Item = &'a Candidate>,
+    bloom_filter: Option<&BloomFilter>,
+    statistics: &mut Statistics,
+    is_activation: bool,
+    mut hashes_for: impl FnMut(&'a Candidate) -> Option<&'a AncestorHashes>,
+    slow_match_candidates: &mut Vec<&'a Candidate>,
 /// A result of selector matching, includes 3 failure types,
 ///
 ///   NotMatchedAndRestartFromClosestLaterSibling
