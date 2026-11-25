@@ -685,59 +685,51 @@ impl SelectorMap<Rule> {
         }
         #[cfg(not(feature = "detailed_statistics"))]
         for rule in rules {
+            Self::match_rule(
+                rule,
+                element,
+                matching_rules,
+                matching_selectors.as_deref_mut(),
+                per_match_stats.as_deref_mut(),
+                matching_context,
+                cascade_level,
+                cascade_data,
+                stylist,
+                include_starting_style,
+                _debug_html_str,
+                &mut stats,
+            );
+        }
+
+        #[cfg(feature = "detailed_statistics")]
+        {
+            stats.times._time_inside_buckets =
+                stats.times.slow_rejecting + stats.times.slow_accepting;
+        }
+        stats
     }
 
-    fn get_matching_rules_with_bloom_results<'rule, E>(
+    fn match_rule<'rule, E>(
+        rule: &'rule Rule,
         element: E,
-        rules: impl IntoIterator<Item = (&'rule Rule, bool)>,
         matching_rules: &mut ApplicableDeclarationList,
         mut matching_selectors: Option<&mut SmallVec<[&'rule Selector<SelectorImpl>; 16]>>,
-        mut selector_stats: Option<&mut SmallVec<[(&'rule Selector<SelectorImpl>, SelectorStats); 16]>>,
+        per_match_stats: Option<&mut PerMatchStats<'rule, SelectorImpl>>,
         matching_context: &mut MatchingContext<E::Impl>,
         cascade_level: CascadeLevel,
         cascade_data: &CascadeData,
         stylist: &Stylist,
-        _skip_universal_tails: bool,
+        include_starting_style: bool,
         _debug_html_str: Option<&str>,
-        bloom_already_checked: bool,
-    ) -> Statistics
-    where
+        stats: &mut Statistics,
+    ) where
         E: SelectorMapElement,
     {
-        use selectors::matching::IncludeStartingStyle;
+        #[cfg(feature = "debug_element")]
+        if let Some(html_str) = _debug_html_str {
+            debug_element_selector(element, html_str, &rule.selector);
+        }
 
-        let previous_bloom_filter = if bloom_already_checked {
-            let bloom_filter = matching_context.bloom_filter;
-            matching_context.bloom_filter = None;
-            Some(bloom_filter)
-        } else {
-            None
-        };
-        let include_starting_style = matches!(
-            matching_context.include_starting_style,
-            IncludeStartingStyle::Yes
-        );
-        let mut acc_stats = Statistics::default();
-        for (rule, bloom_rejected) in rules {
-            #[cfg(feature = "debug_element")]
-            if let Some(html_str) = _debug_html_str {
-                debug_element_selector(element, html_str, &rule.selector);
-            }
-            if bloom_rejected {
-                let bloom_stats = BloomQueryStats {
-                    fast_rejects: 1,
-                    ..BloomQueryStats::default()
-                };
-                if rule.scope_condition_id == ScopeConditionId::none() {
-                    acc_stats += bloom_stats;
-                    if let Some(selector_stats) = selector_stats.as_deref_mut() {
-                        selector_stats.push((&rule.selector, SelectorStats::Bloom(bloom_stats)));
-                    }
-                } else {
-                    let mut scope_stats = ScopeProximityStats::default();
-                    scope_stats.fast_rejects = 1;
-                    acc_stats += scope_stats;
-                    if let Some(selector_stats) = selector_stats.as_deref_mut() {
                         selector_stats.push((&rule.selector, SelectorStats::ScopeProximity(scope_stats)));
                     }
                 }
