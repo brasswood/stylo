@@ -889,7 +889,7 @@ fn match_bless_universal_bucket_rule<'a, E>(
 where
     E: SelectorMapElement + StyleSharingElement,
 {
-    let matched = matches_selector_at_offset_as_subject(
+    let matched = matches_selector_at_offset_as_subject_single(
         &entry.rule.selector,
         entry.activation_offset,
         Some(&entry.activation_hashes),
@@ -921,7 +921,8 @@ impl SelectorMap<UniversalBucketRule> {
         let start = Start::now();
         let mut hits = 0;
         let mut stats = Statistics::default();
-        let mut seen: SmallVec<[Option<&UniversalBucketRule>; 4]> = SmallVec::new();
+        let mut seen: SmallVec<[Option<(&Selector<SelectorImpl>, &UniversalBucketRule)>; 4]> =
+            SmallVec::new();
         self.lookup(element, matching_context.quirks_mode(), None, |entry| {
             let is_active = bless_list.iter().any(|(active, last_depth)| {
                 active.matches_descendants
@@ -930,14 +931,14 @@ impl SelectorMap<UniversalBucketRule> {
                     && active.rule.selector == entry.rule.selector
             });
             let already_seen = seen.iter().flatten().any(|candidate| {
-                candidate.rule.source_order == entry.rule.source_order
-                    && candidate.rule.selector == entry.rule.selector
+                candidate.1.rule.source_order == entry.rule.source_order
+                    && candidate.1.rule.selector == entry.rule.selector
             });
             if is_active || already_seen {
                 return true;
             }
             hits += 1;
-            seen.push(Some(entry));
+            seen.push(Some((&entry.rule.selector, entry)));
             #[cfg(not(feature = "detailed_statistics"))]
             {
                 match_bless_universal_bucket_rule(
@@ -958,17 +959,16 @@ impl SelectorMap<UniversalBucketRule> {
         #[cfg(feature = "detailed_statistics")]
         {
             stats.times.querying_selector_map = start.elapsed();
-            filter_optional_selector_candidates_by_bloom(
+            matches_selector_at_offset_as_subject(
                 seen.as_mut_slice(),
-                matching_context.bloom_filter,
+                matching_context,
                 &mut stats,
-                true,
                 |entry| Some(&entry.activation_hashes),
             );
 
             let bloom_filter = matching_context.bloom_filter;
             matching_context.bloom_filter = None;
-            for entry in seen.iter().flatten() {
+            for (_, entry) in seen.iter().flatten() {
                 match_bless_universal_bucket_rule(
                     entry,
                     element,
