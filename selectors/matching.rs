@@ -298,6 +298,45 @@ pub fn filter_selector_candidates_by_bloom<'a, Candidate>(
     is_activation: bool,
     mut hashes_for: impl FnMut(&'a Candidate) -> Option<&'a AncestorHashes>,
     slow_match_candidates: &mut Vec<&'a Candidate>,
+) {
+    let start = Start::now();
+    slow_match_candidates.clear();
+    for candidate in candidates {
+        if check_selector_bloom_filter(hashes_for(candidate), bloom_filter, statistics, is_activation) {
+            slow_match_candidates.push(candidate);
+        }
+    }
+    statistics.times.fast_rejecting += start.elapsed();
+}
+
+/// Removes bloom-rejected candidates from an optional-candidate staging slice.
+#[cfg(feature = "detailed_statistics")]
+pub fn filter_optional_selector_candidates_by_bloom<Candidate>(
+    candidates: &mut [Option<&Candidate>],
+    bloom_filter: Option<&BloomFilter>,
+    statistics: &mut Statistics,
+    is_activation: bool,
+    mut hashes_for: impl FnMut(&Candidate) -> Option<&AncestorHashes>,
+) {
+    let start = Start::now();
+    for candidate in candidates {
+        if candidate
+            .as_ref()
+            .is_some_and(|candidate| {
+                !check_selector_bloom_filter(
+                    hashes_for(candidate),
+                    bloom_filter,
+                    statistics,
+                    is_activation,
+                )
+            })
+        {
+            *candidate = None;
+        }
+    }
+    statistics.times.fast_rejecting += start.elapsed();
+}
+
 /// A result of selector matching, includes 3 failure types,
 ///
 ///   NotMatchedAndRestartFromClosestLaterSibling
@@ -377,8 +416,6 @@ impl From<SelectorMatchingResult> for KleeneValue {
 }
 
 /// Matches a selector, fast-rejecting against a bloom filter.
-/// Returns whether the selector matched, whether we fast-rejected, and the time
-/// spent slow-rejecting.
 ///
 /// We accept an offset to allow consumers to represent and match against
 /// partial selectors (indexed from the right). We use this API design, rather
@@ -388,8 +425,7 @@ impl From<SelectorMatchingResult> for KleeneValue {
 /// (which the caller can store inline with the selector pointer).
 #[cfg_attr(not(feature = "debug_element"), inline(always))]
 
-pub fn matches_selector<E>(
-    selector: &Selector<E::Impl>,
+pub fn matches_selector<'a, E>(
     offset: usize,
     hashes: Option<&AncestorHashes>,
     element: &E,
