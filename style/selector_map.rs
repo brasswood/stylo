@@ -22,9 +22,14 @@ use atomic_refcell::AtomicRef;
 use dom::ElementState;
 use precomputed_hash::PrecomputedHash;
 use selectors::{Element, OpaqueElement};
-use selectors::matching::{ActivationMatchStats, BloomQueryStats, MatchingContext, ScopeProximityStats, SelectorStats, Statistics, matches_selector, matches_selector_at_offset_as_subject};
 #[cfg(feature = "detailed_statistics")]
-use selectors::matching::selector_may_match;
+use selectors::matching::{
+    filter_optional_selector_candidates_by_bloom, filter_selector_candidates_by_bloom,
+};
+use selectors::matching::{
+    matches_selector, matches_selector_at_offset_as_subject, MatchingContext, PerMatchStats,
+    Statistics,
+};
 use selectors::parser::{Combinator, Component, Selector, SelectorIter};
 use smallvec::SmallVec;
 use std::collections::hash_map;
@@ -281,7 +286,7 @@ impl<T> SelectorMap<T> {
 #[cfg(feature = "detailed_statistics")]
 pub struct StagedRuleBuffers<'a> {
     candidates: Vec<&'a Rule>,
-    bloom_rejects: Vec<bool>,
+    slow_match_candidates: Vec<&'a Rule>,
 }
 
 #[cfg(feature = "detailed_statistics")]
@@ -290,7 +295,7 @@ impl<'a> StagedRuleBuffers<'a> {
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
             candidates: Vec::with_capacity(capacity),
-            bloom_rejects: Vec::with_capacity(capacity),
+            slow_match_candidates: Vec::with_capacity(capacity),
         }
     }
 }
@@ -303,7 +308,7 @@ impl SelectorMap<Rule> {
         rule_hash_target: E,
         matching_rules_list: &mut ApplicableDeclarationList,
         matching_selectors: Option<&mut SmallVec<[&'selectormap Selector<SelectorImpl>; 16]>>,
-        selector_stats: Option<&mut SmallVec<[(&'selectormap Selector<SelectorImpl>, SelectorStats); 16]>>,
+        per_match_stats: Option<&mut PerMatchStats<'selectormap, SelectorImpl>>,
         matching_context: &mut MatchingContext<E::Impl>,
         cascade_level: CascadeLevel,
         cascade_data: &CascadeData,
@@ -320,7 +325,7 @@ impl SelectorMap<Rule> {
             rule_hash_target,
             matching_rules_list,
             matching_selectors,
-            selector_stats,
+            per_match_stats,
             matching_context,
             cascade_level,
             cascade_data,
@@ -344,7 +349,7 @@ impl SelectorMap<Rule> {
         rule_hash_target: E,
         matching_rules_list: &mut ApplicableDeclarationList,
         mut matching_selectors: Option<&mut SmallVec<[&'selectormap Selector<SelectorImpl> ; 16]>>,
-        mut selector_stats: Option<&mut SmallVec<[(&'selectormap Selector<SelectorImpl>, SelectorStats); 16]>>,
+        mut per_match_stats: Option<&mut PerMatchStats<'selectormap, SelectorImpl>>,
         matching_context: &mut MatchingContext<E::Impl>,
         cascade_level: CascadeLevel,
         cascade_data: &CascadeData,
@@ -384,7 +389,7 @@ impl SelectorMap<Rule> {
                 &self.root,
                 matching_rules_list,
                 matching_selectors.as_deref_mut(),
-                selector_stats.as_deref_mut(),
+                per_match_stats.as_deref_mut(),
                 matching_context,
                 cascade_level,
                 cascade_data,
@@ -405,7 +410,7 @@ impl SelectorMap<Rule> {
                     rules,
                     matching_rules_list,
                     matching_selectors.as_deref_mut(),
-                    selector_stats.as_deref_mut(),
+                    per_match_stats.as_deref_mut(),
                     matching_context,
                     cascade_level,
                     cascade_data,
@@ -427,7 +432,7 @@ impl SelectorMap<Rule> {
                 &self.common_pseudo_classes,
                 matching_rules_list,
                 matching_selectors.as_deref_mut(),
-                selector_stats.as_deref_mut(),
+                per_match_stats.as_deref_mut(),
                 matching_context,
                 cascade_level,
                 cascade_data,
@@ -448,7 +453,7 @@ impl SelectorMap<Rule> {
                     rules,
                     matching_rules_list,
                     matching_selectors.as_deref_mut(),
-                    selector_stats.as_deref_mut(),
+                    per_match_stats.as_deref_mut(),
                     matching_context,
                     cascade_level,
                     cascade_data,
@@ -470,7 +475,7 @@ impl SelectorMap<Rule> {
                     rules,
                     matching_rules_list,
                     matching_selectors.as_deref_mut(),
-                    selector_stats.as_deref_mut(),
+                    per_match_stats.as_deref_mut(),
                     matching_context,
                     cascade_level,
                     cascade_data,
@@ -491,7 +496,7 @@ impl SelectorMap<Rule> {
                 rules,
                 matching_rules_list,
                 matching_selectors.as_deref_mut(),
-                selector_stats.as_deref_mut(),
+                per_match_stats.as_deref_mut(),
                 matching_context,
                 cascade_level,
                 cascade_data,
@@ -514,7 +519,7 @@ impl SelectorMap<Rule> {
                 &self.rare_pseudo_classes,
                 matching_rules_list,
                 matching_selectors.as_deref_mut(),
-                selector_stats.as_deref_mut(),
+                per_match_stats.as_deref_mut(),
                 matching_context,
                 cascade_level,
                 cascade_data,
@@ -534,7 +539,7 @@ impl SelectorMap<Rule> {
                 rules,
                 matching_rules_list,
                 matching_selectors.as_deref_mut(),
-                selector_stats.as_deref_mut(),
+                per_match_stats.as_deref_mut(),
                 matching_context,
                 cascade_level,
                 cascade_data,
@@ -553,7 +558,7 @@ impl SelectorMap<Rule> {
             &self.other,
             matching_rules_list,
             matching_selectors.as_deref_mut(),
-            selector_stats.as_deref_mut(),
+            per_match_stats.as_deref_mut(),
             matching_context,
             cascade_level,
             cascade_data,
@@ -571,7 +576,7 @@ impl SelectorMap<Rule> {
                 &self.universal_tails,
                 matching_rules_list,
                 matching_selectors.as_deref_mut(),
-                selector_stats.as_deref_mut(),
+                per_match_stats.as_deref_mut(),
                 matching_context,
                 cascade_level,
                 cascade_data,
@@ -590,7 +595,7 @@ impl SelectorMap<Rule> {
                 &self.universal_buckets,
                 matching_rules_list,
                 matching_selectors.as_deref_mut(),
-                selector_stats.as_deref_mut(),
+                per_match_stats.as_deref_mut(),
                 matching_context,
                 cascade_level,
                 cascade_data,
@@ -604,32 +609,19 @@ impl SelectorMap<Rule> {
         {
             stats.times.querying_selector_map = start.elapsed();
             let candidate_rules = staged_rules.as_slice();
-            staged_rule_buffers.bloom_rejects.clear();
-            let bloom_filter = matching_context.bloom_filter;
-            let bloom_start = Start::now();
-            for rule in candidate_rules {
-                let rejected = bloom_filter
-                    .map(|filter| !selector_may_match(&rule.hashes, filter))
-                    .unwrap_or(false);
-                staged_rule_buffers.bloom_rejects.push(rejected);
-            }
-            stats.times.checking_bloom_filter = bloom_start.elapsed();
-            stats += SelectorMap::get_matching_rules_with_bloom_results(
+            stats += SelectorMap::get_matching_rules(
                 element,
-                candidate_rules
-                    .iter()
-                    .copied()
-                    .zip(staged_rule_buffers.bloom_rejects.iter().copied()),
+                candidate_rules.iter().copied(),
+                &mut staged_rule_buffers.slow_match_candidates,
                 matching_rules_list,
                 matching_selectors.as_deref_mut(),
-                selector_stats.as_deref_mut(),
+                per_match_stats.as_deref_mut(),
                 matching_context,
                 cascade_level,
                 cascade_data,
                 stylist,
                 skip_universal_tails,
                 debug_html_str,
-                true,
             );
         }
         stats
@@ -638,21 +630,21 @@ impl SelectorMap<Rule> {
     /// Adds rules in `rules` that match `element` to the `matching_rules` list.
     pub(crate) fn get_matching_rules<'rule, E>(
         element: E,
-        rules: &'rule [Rule],
+        rules: impl IntoIterator<Item = &'rule Rule>,
+        #[cfg(feature = "detailed_statistics")] slow_match_candidates: &mut Vec<&'rule Rule>,
         matching_rules: &mut ApplicableDeclarationList,
-        matching_selectors: Option<&mut SmallVec<[&'rule Selector<SelectorImpl>; 16]>>,
-        selector_stats: Option<&mut SmallVec<[(&'rule Selector<SelectorImpl>, SelectorStats); 16]>>,
+        mut matching_selectors: Option<&mut SmallVec<[&'rule Selector<SelectorImpl>; 16]>>,
+        mut per_match_stats: Option<&mut PerMatchStats<'rule, SelectorImpl>>,
         matching_context: &mut MatchingContext<E::Impl>,
         cascade_level: CascadeLevel,
         cascade_data: &CascadeData,
         stylist: &Stylist,
         _skip_universal_tails: bool,
-        debug_html_str: Option<&str>,
+        _debug_html_str: Option<&str>,
     ) -> Statistics
     where
         E: SelectorMapElement,
     {
-        Self::get_matching_rules_with_bloom_results(
             element,
             rules.iter().map(|rule| (rule, false)),
             matching_rules,
