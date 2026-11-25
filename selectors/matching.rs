@@ -291,21 +291,33 @@ pub fn check_selector_bloom_filter(
     !rejected
 }
 
-/// Checks a batch of selector candidates and retains those that reach slow matching.
+/// Stages selector candidates through the bloom filter as one timed batch.
+///
+/// The candidates that pass are retained in `slow_match_candidates` for their
+/// individual slow matches.
 #[cfg(feature = "detailed_statistics")]
-pub fn filter_selector_candidates_by_bloom<'a, Candidate>(
+pub fn matches_selector_kleene<'a, Impl, Candidate>(
     candidates: impl IntoIterator<Item = &'a Candidate>,
-    bloom_filter: Option<&BloomFilter>,
+    context: &MatchingContext<Impl>,
     statistics: &mut Statistics,
     is_activation: bool,
+    mut selector_for: impl FnMut(&'a Candidate) -> &'a Selector<Impl>,
     mut hashes_for: impl FnMut(&'a Candidate) -> Option<&'a AncestorHashes>,
-    slow_match_candidates: &mut Vec<&'a Candidate>,
-) {
+    slow_match_candidates: &mut Vec<(&'a Selector<Impl>, &'a Candidate)>,
+)
+where
+    Impl: SelectorImpl,
+{
     let start = Start::now();
     slow_match_candidates.clear();
     for candidate in candidates {
-        if check_selector_bloom_filter(hashes_for(candidate), bloom_filter, statistics, is_activation) {
-            slow_match_candidates.push(candidate);
+        if check_selector_bloom_filter(
+            hashes_for(candidate),
+            context.bloom_filter,
+            statistics,
+            is_activation,
+        ) {
+            slow_match_candidates.push((selector_for(candidate), candidate));
         }
     }
     statistics.times.fast_rejecting += start.elapsed();
