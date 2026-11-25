@@ -98,24 +98,7 @@ pub struct SlowMatchStats {
     pub duration: Duration,
 }
 
-}
-
-/// A struct for bloom filter querying stats
-#[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
-pub struct BloomQueryStats {
-    pub fast_rejects: usize,
-    pub slow_rejects: usize,
-    pub slow_accepts: usize,
-    #[cfg(feature = "detailed_statistics")]
-    pub not_matched_result_counts: NotMatchedResultCounts,
-    #[cfg(feature = "detailed_statistics")]
-    pub time_slow_rejecting: Duration,
-    #[cfg(feature = "detailed_statistics")]
-    pub time_slow_accepting: Duration,
-}
-/// A struct for activation selector matching stats
-#[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ActivationMatchStats(pub BloomQueryStats);
+pub type PerMatchStats<'a, Impl> = Vec<(&'a Selector<Impl>, SlowMatchStats)>;
 
 /// A struct for returning statistics
 #[derive(Default, Debug, Div, Clone, Copy, Add, AddAssign, PartialEq, Eq)]
@@ -175,7 +158,7 @@ pub struct TimingStats {
     pub querying_selector_map: Duration,
     #[cfg(feature = "detailed_statistics")]
     /// Time spent checking the bloom filter for a batch of selectors
-    pub checking_bloom_filter: Duration,
+    pub fast_rejecting: Duration,
     #[cfg(feature = "detailed_statistics")]
     /// Time spent slow rejecting a selector after all of the following happen:
     /// - Style sharing fails
@@ -198,27 +181,6 @@ pub struct TimingStats {
     pub _time_inside_buckets: Duration,
 }
 
-impl AddAssign<BloomQueryStats> for Statistics {
-    fn add_assign(&mut self, rhs: BloomQueryStats) {
-        self.counts.fast_rejects += rhs.fast_rejects;
-        self.counts.slow_rejects += rhs.slow_rejects;
-        self.counts.slow_accepts += rhs.slow_accepts;
-        #[cfg(feature = "detailed_statistics")]
-        {
-            self.times.slow_rejecting += rhs.time_slow_rejecting;
-            self.times.slow_accepting += rhs.time_slow_accepting;
-        }
-    }
-}
-
-impl AddAssign<ScopeProximityStats> for Statistics {
-    fn add_assign(&mut self, rhs: ScopeProximityStats) {
-        self.counts.fast_rejects += rhs.fast_rejects;
-        self.counts.slow_rejects += rhs.slow_rejects;
-        self.counts.slow_accepts += rhs.slow_accepts;
-        #[cfg(feature = "detailed_statistics")]
-        {
-            self.times.slow_rejecting += rhs.time_slow_rejecting;
             self.times.slow_accepting += rhs.time_slow_accepting;
         }
     }
