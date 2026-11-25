@@ -742,41 +742,48 @@ impl SelectorMap<Rule> {
             ) {
                 return;
             }
-                ) {
-                    continue;
-                }
+            ScopeProximity::infinity()
+        } else {
+            let scope_proximity = cascade_data.find_scope_proximity_if_matching(
+                rule,
+                element,
+                matching_context,
+                stats,
+                per_match_stats,
+            );
+            if scope_proximity == ScopeProximity::infinity() {
+                return;
             }
+            scope_proximity
+        };
 
-            if rule.is_starting_style {
-                // Set this flag if there are any rules inside @starting-style. This flag is for
-                // optimization to avoid any redundant resolution of starting style if the author
-                // doesn't specify for this element.
-                matching_context.has_starting_style = true;
-
-                if !include_starting_style {
-                    continue;
-                }
-            }
-
-            matching_rules.push(rule.to_applicable_declaration_block(
-                cascade_level,
-                cascade_data,
-                scope_proximity,
-            ));
-
-            if let Some(matching_selectors) = matching_selectors.as_deref_mut() {
-                matching_selectors.push(&rule.selector); // TODO: Is cloning bad here?
-            }
-        }
-        #[cfg(feature = "detailed_statistics")]
+        if rule.container_condition_id != ContainerConditionId::none()
+            && !cascade_data.container_condition_matches(
+                rule.container_condition_id,
+                stylist,
+                element,
+                matching_context,
+            )
         {
-            acc_stats.times._time_inside_buckets =
-                acc_stats.times.slow_rejecting + acc_stats.times.slow_accepting;
+            return;
         }
-        if let Some(bloom_filter) = previous_bloom_filter {
-            matching_context.bloom_filter = bloom_filter;
+
+        if rule.is_starting_style {
+            matching_context.has_starting_style = true;
+            if !include_starting_style {
+                return;
+            }
         }
-        acc_stats
+
+        matching_rules.push(rule.to_applicable_declaration_block(
+            cascade_level,
+            cascade_data,
+            scope_proximity,
+        ));
+
+        if let Some(matching_selectors) = matching_selectors.as_deref_mut() {
+            matching_selectors.push(&rule.selector);
+        }
     }
 }
 
@@ -787,6 +794,7 @@ impl SelectorMap<UniversalTailRule> {
         &'selectormap self,
         element: E,
         matching_selectors: &mut SmallVec<[&'selectormap Selector<SelectorImpl>; 16]>,
+        mut per_match_stats: Option<&mut PerMatchStats<'selectormap, SelectorImpl>>,
         matching_context: &mut MatchingContext<E::Impl>,
         #[cfg(feature = "detailed_statistics")]
         candidates: &mut Vec<Option<&'selectormap UniversalTailRule>>,
@@ -811,14 +819,15 @@ impl SelectorMap<UniversalTailRule> {
         {
             self.lookup(element, matching_context.quirks_mode(), None, |entry| {
                 hits += 1;
-                let (matched, match_stats) = matches_selector_at_offset_as_subject(
+                let matched = matches_selector_at_offset_as_subject(
                     &entry.rule.selector,
                     entry.activation_offset,
                     Some(&entry.activation_hashes),
                     &element,
                     matching_context,
+                    &mut stats,
+                    per_match_stats.as_deref_mut(),
                 );
-                stats += ActivationMatchStats(match_stats);
                 if matched && !matching_selectors.contains(&&entry.rule.selector) {
                     matching_selectors.push(&entry.rule.selector);
                 }
@@ -832,16 +841,6 @@ impl SelectorMap<UniversalTailRule> {
 
         #[cfg(feature = "detailed_statistics")]
         {
-            let bloom_filter = matching_context.bloom_filter;
-            let bloom_start = Start::now();
-            for candidate in candidates.iter_mut() {
-                let entry = candidate.as_ref().copied().expect("candidate was just collected");
-                if bloom_filter
-                    .map(|filter| !selector_may_match(&entry.activation_hashes, filter))
-                    .unwrap_or(false)
-                {
-                    *candidate = None;
-                    stats += ActivationMatchStats(BloomQueryStats {
                         fast_rejects: 1,
                         ..BloomQueryStats::default()
                     });
