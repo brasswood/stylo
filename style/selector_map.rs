@@ -645,19 +645,46 @@ impl SelectorMap<Rule> {
     where
         E: SelectorMapElement,
     {
-            element,
-            rules.iter().map(|rule| (rule, false)),
-            matching_rules,
-            matching_selectors,
-            selector_stats,
-            matching_context,
-            cascade_level,
-            cascade_data,
-            stylist,
-            _skip_universal_tails,
-            debug_html_str,
-            false,
-        )
+        use selectors::matching::IncludeStartingStyle;
+        let include_starting_style = matches!(
+            matching_context.include_starting_style,
+            IncludeStartingStyle::Yes
+        );
+        let mut stats = Statistics::default();
+
+        #[cfg(feature = "detailed_statistics")]
+        {
+            filter_selector_candidates_by_bloom(
+                rules,
+                matching_context.bloom_filter,
+                &mut stats,
+                false,
+                |rule| Some(&rule.hashes),
+                slow_match_candidates,
+            );
+
+            let previous_bloom_filter = matching_context.bloom_filter;
+            matching_context.bloom_filter = None;
+            for rule in slow_match_candidates.iter().copied() {
+                Self::match_rule(
+                    rule,
+                    element,
+                    matching_rules,
+                    matching_selectors.as_deref_mut(),
+                    per_match_stats.as_deref_mut(),
+                    matching_context,
+                    cascade_level,
+                    cascade_data,
+                    stylist,
+                    include_starting_style,
+                    _debug_html_str,
+                    &mut stats,
+                );
+            }
+            matching_context.bloom_filter = previous_bloom_filter;
+        }
+        #[cfg(not(feature = "detailed_statistics"))]
+        for rule in rules {
     }
 
     fn get_matching_rules_with_bloom_results<'rule, E>(
