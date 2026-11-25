@@ -142,36 +142,6 @@ pub struct SelectorCaches {
     pub relative_selector_filter_map: RelativeSelectorFilterMap,
 }
 
-#[cfg(feature = "detailed_statistics")]
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct NotMatchedResultCounts {
-    pub classic_global_failures: usize,
-    pub classic_descendant_restarts: usize,
-    pub classic_sibling_restarts: usize,
-}
-
-#[cfg(feature = "detailed_statistics")]
-impl NotMatchedResultCounts {
-    #[inline]
-    fn record(&mut self, result: SelectorMatchingResult) {
-        match result {
-            SelectorMatchingResult::NotMatchedGlobally => self.classic_global_failures += 1,
-            SelectorMatchingResult::NotMatchedAndRestartFromClosestDescendant => self.classic_descendant_restarts += 1,
-            SelectorMatchingResult::NotMatchedAndRestartFromClosestLaterSibling => self.classic_sibling_restarts += 1,
-            _ => {},
-        }
-    }
-}
-
-#[cfg(feature = "detailed_statistics")]
-impl std::ops::AddAssign for NotMatchedResultCounts {
-    fn add_assign(&mut self, rhs: Self) {
-        self.classic_global_failures += rhs.classic_global_failures;
-        self.classic_descendant_restarts += rhs.classic_descendant_restarts;
-        self.classic_sibling_restarts += rhs.classic_sibling_restarts;
-    }
-}
-
 /// Data associated with the matching process for a element.  This context is
 /// used across many selectors for an element, so it's not appropriate for
 /// transient data that applies to only a single selector.
