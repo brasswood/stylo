@@ -841,24 +841,26 @@ impl SelectorMap<UniversalTailRule> {
 
         #[cfg(feature = "detailed_statistics")]
         {
-                        fast_rejects: 1,
-                        ..BloomQueryStats::default()
-                    });
-                }
-            }
-            stats.times.checking_bloom_filter += bloom_start.elapsed();
+            filter_optional_selector_candidates_by_bloom(
+                candidates,
+                matching_context.bloom_filter,
+                &mut stats,
+                true,
+                |entry| Some(&entry.activation_hashes),
+            );
 
             let bloom_filter = matching_context.bloom_filter;
             matching_context.bloom_filter = None;
             for entry in candidates.iter().flatten() {
-                let (matched, match_stats) = matches_selector_at_offset_as_subject(
+                let matched = matches_selector_at_offset_as_subject(
                     &entry.rule.selector,
                     entry.activation_offset,
                     Some(&entry.activation_hashes),
                     &element,
                     matching_context,
+                    &mut stats,
+                    per_match_stats.as_deref_mut(),
                 );
-                stats += ActivationMatchStats(match_stats);
                 if matched && !matching_selectors.contains(&&entry.rule.selector) {
                     matching_selectors.push(&entry.rule.selector);
                 }
@@ -879,22 +881,25 @@ fn match_bless_universal_bucket_rule<'a, E>(
     element_depth: usize,
     bless_list: &mut SmallVec<[(&'a UniversalBucketRule, usize); 16]>,
     matching_context: &mut MatchingContext<E::Impl>,
-) -> ActivationMatchStats
+    stats: &mut Statistics,
+    per_match_stats: Option<&mut PerMatchStats<'a, SelectorImpl>>,
+)
 where
     E: SelectorMapElement + StyleSharingElement,
 {
-    let (matched, stats) = matches_selector_at_offset_as_subject(
+    let matched = matches_selector_at_offset_as_subject(
         &entry.rule.selector,
         entry.activation_offset,
         Some(&entry.activation_hashes),
         &element,
         matching_context,
+        stats,
+        per_match_stats,
     );
     if matched {
         let last_depth = if entry.matches_descendants { usize::MAX } else { element_depth + 1 };
         bless_list.push((entry, last_depth));
     }
-    ActivationMatchStats(stats)
 }
 
 impl SelectorMap<UniversalBucketRule> {
@@ -904,6 +909,7 @@ impl SelectorMap<UniversalBucketRule> {
         element: E,
         element_depth: usize,
         bless_list: &mut SmallVec<[(&'selectormap UniversalBucketRule, usize); 16]>,
+        mut per_match_stats: Option<&mut PerMatchStats<'selectormap, SelectorImpl>>,
         matching_context: &mut MatchingContext<E::Impl>,
     ) -> Statistics
     where
@@ -932,12 +938,14 @@ impl SelectorMap<UniversalBucketRule> {
             seen.push(Some(entry));
             #[cfg(not(feature = "detailed_statistics"))]
             {
-                stats += match_bless_universal_bucket_rule(
+                match_bless_universal_bucket_rule(
                     entry,
                     element,
                     element_depth,
                     bless_list,
                     matching_context,
+                    &mut stats,
+                    per_match_stats.as_deref_mut(),
                 );
             }
             true
@@ -948,32 +956,25 @@ impl SelectorMap<UniversalBucketRule> {
         #[cfg(feature = "detailed_statistics")]
         {
             stats.times.querying_selector_map = start.elapsed();
-            let bloom_filter = matching_context.bloom_filter;
-            let bloom_start = Start::now();
-            for candidate in seen.iter_mut() {
-                let entry = candidate.expect("candidate was just collected");
-                if bloom_filter
-                    .map(|filter| !selector_may_match(&entry.activation_hashes, filter))
-                    .unwrap_or(false)
-                {
-                    *candidate = None;
-                    stats += ActivationMatchStats(BloomQueryStats {
-                        fast_rejects: 1,
-                        ..BloomQueryStats::default()
-                    });
-                }
-            }
-            stats.times.checking_bloom_filter += bloom_start.elapsed();
+            filter_optional_selector_candidates_by_bloom(
+                seen.as_mut_slice(),
+                matching_context.bloom_filter,
+                &mut stats,
+                true,
+                |entry| Some(&entry.activation_hashes),
+            );
 
             let bloom_filter = matching_context.bloom_filter;
             matching_context.bloom_filter = None;
             for entry in seen.iter().flatten() {
-                stats += match_bless_universal_bucket_rule(
+                match_bless_universal_bucket_rule(
                     entry,
                     element,
                     element_depth,
                     bless_list,
                     matching_context,
+                    &mut stats,
+                    per_match_stats.as_deref_mut(),
                 );
             }
             stats.times._time_inside_buckets =
