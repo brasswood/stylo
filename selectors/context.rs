@@ -4,8 +4,6 @@
 
 use crate::attr::CaseSensitivity;
 use crate::bloom::BloomFilter;
-#[cfg(feature = "detailed_statistics")]
-use crate::matching::SelectorMatchingResult;
 use crate::nth_index_cache::{NthIndexCache, NthIndexCacheInner};
 use crate::parser::{Selector, SelectorImpl};
 use crate::relative_selector::cache::RelativeSelectorCache;
@@ -206,8 +204,6 @@ where
 
     /// Caches to speed up expensive selector matches.
     pub selector_caches: &'a mut SelectorCaches,
-    #[cfg(feature = "detailed_statistics")]
-    not_matched_result_counts: NotMatchedResultCounts,
 
     classes_and_ids_case_sensitivity: CaseSensitivity,
     _impl: ::std::marker::PhantomData<Impl>,
@@ -268,8 +264,6 @@ where
             extra_data: Default::default(),
             current_relative_selector_anchor: None,
             selector_caches,
-            #[cfg(feature = "detailed_statistics")]
-            not_matched_result_counts: NotMatchedResultCounts::default(),
             _impl: ::std::marker::PhantomData,
         }
     }
@@ -315,18 +309,6 @@ where
     #[inline]
     pub fn needs_selector_flags(&self) -> bool {
         self.needs_selector_flags == NeedsSelectorFlags::Yes
-    }
-
-    #[cfg(feature = "detailed_statistics")]
-    #[inline]
-    pub fn note_not_matched_result(&mut self, result: SelectorMatchingResult) {
-        self.not_matched_result_counts.record(result);
-    }
-
-    #[cfg(feature = "detailed_statistics")]
-    #[inline]
-    pub fn take_not_matched_result_counts(&mut self) -> NotMatchedResultCounts {
-        ::std::mem::take(&mut self.not_matched_result_counts)
     }
 
     /// Whether or not we're matching to invalidate.
