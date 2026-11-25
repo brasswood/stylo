@@ -730,47 +730,18 @@ impl SelectorMap<Rule> {
             debug_element_selector(element, html_str, &rule.selector);
         }
 
-                        selector_stats.push((&rule.selector, SelectorStats::ScopeProximity(scope_stats)));
-                    }
-                }
-                continue;
+        let scope_proximity = if rule.scope_condition_id == ScopeConditionId::none() {
+            if !matches_selector(
+                &rule.selector,
+                0,
+                Some(&rule.hashes),
+                &element,
+                matching_context,
+                stats,
+                per_match_stats,
+            ) {
+                return;
             }
-            let scope_proximity = if rule.scope_condition_id == ScopeConditionId::none() {
-                let (res, bloom_stats) = matches_selector(
-                    &rule.selector,
-                    0,
-                    Some(&rule.hashes),
-                    &element,
-                    matching_context,
-                );
-                if let Some(selector_stats) = selector_stats.as_deref_mut() {
-                    selector_stats.push((&rule.selector, SelectorStats::Bloom(bloom_stats)));
-                }
-                acc_stats += bloom_stats;
-                if !res {
-                    continue;
-                }
-                ScopeProximity::infinity()
-            } else {
-                let (result, scope_proximity_stats) =
-                    cascade_data.find_scope_proximity_if_matching(rule, element, matching_context);
-                if let Some(selector_stats) = selector_stats.as_deref_mut() {
-                    selector_stats.push((&rule.selector, SelectorStats::ScopeProximity(scope_proximity_stats)));
-                }
-                acc_stats += scope_proximity_stats;
-                if result == ScopeProximity::infinity() {
-                    continue;
-                }
-                result
-            };
-
-            // TODO: figure out what stats to push for these if statements below the above one.
-            if rule.container_condition_id != ContainerConditionId::none() {
-                if !cascade_data.container_condition_matches(
-                    rule.container_condition_id,
-                    stylist,
-                    element,
-                    matching_context,
                 ) {
                     continue;
                 }
