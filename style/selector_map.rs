@@ -813,7 +813,7 @@ impl SelectorMap<UniversalTailRule> {
             candidates.clear();
             self.lookup(element, matching_context.quirks_mode(), None, |entry| {
                 hits += 1;
-                candidates.push(Some(entry));
+                candidates.push(Some((&entry.rule.selector, entry)));
                 true
             });
         }
@@ -821,7 +821,7 @@ impl SelectorMap<UniversalTailRule> {
         {
             self.lookup(element, matching_context.quirks_mode(), None, |entry| {
                 hits += 1;
-                let matched = matches_selector_at_offset_as_subject(
+                let matched = matches_selector_at_offset_as_subject_single(
                     &entry.rule.selector,
                     entry.activation_offset,
                     Some(&entry.activation_hashes),
@@ -843,18 +843,17 @@ impl SelectorMap<UniversalTailRule> {
 
         #[cfg(feature = "detailed_statistics")]
         {
-            filter_optional_selector_candidates_by_bloom(
-                candidates,
-                matching_context.bloom_filter,
+            matches_selector_at_offset_as_subject(
+                candidates.as_mut_slice(),
+                matching_context,
                 &mut stats,
-                true,
                 |entry| Some(&entry.activation_hashes),
             );
 
             let bloom_filter = matching_context.bloom_filter;
             matching_context.bloom_filter = None;
-            for entry in candidates.iter().flatten() {
-                let matched = matches_selector_at_offset_as_subject(
+            for (_, entry) in candidates.iter().flatten() {
+                let matched = matches_selector_at_offset_as_subject_single(
                     &entry.rule.selector,
                     entry.activation_offset,
                     Some(&entry.activation_hashes),
