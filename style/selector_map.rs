@@ -23,12 +23,10 @@ use dom::ElementState;
 use precomputed_hash::PrecomputedHash;
 use selectors::{Element, OpaqueElement};
 #[cfg(feature = "detailed_statistics")]
+use selectors::matching::{matches_selector_at_offset_as_subject, matches_selector_kleene};
 use selectors::matching::{
-    filter_optional_selector_candidates_by_bloom, filter_selector_candidates_by_bloom,
-};
-use selectors::matching::{
-    matches_selector, matches_selector_at_offset_as_subject, MatchingContext, PerMatchStats,
-    Statistics,
+    matches_selector_at_offset_as_subject_single, matches_selector_single, MatchingContext,
+    PerMatchStats, Statistics,
 };
 use selectors::parser::{Combinator, Component, Selector, SelectorIter};
 use smallvec::SmallVec;
@@ -631,7 +629,8 @@ impl SelectorMap<Rule> {
     pub(crate) fn get_matching_rules<'rule, E>(
         element: E,
         rules: impl IntoIterator<Item = &'rule Rule>,
-        #[cfg(feature = "detailed_statistics")] slow_match_candidates: &mut Vec<&'rule Rule>,
+        #[cfg(feature = "detailed_statistics")]
+        slow_match_candidates: &mut Vec<(&'rule Selector<SelectorImpl>, &'rule Rule)>,
         matching_rules: &mut ApplicableDeclarationList,
         mut matching_selectors: Option<&mut SmallVec<[&'rule Selector<SelectorImpl>; 16]>>,
         mut per_match_stats: Option<&mut PerMatchStats<'rule, SelectorImpl>>,
@@ -654,18 +653,19 @@ impl SelectorMap<Rule> {
 
         #[cfg(feature = "detailed_statistics")]
         {
-            filter_selector_candidates_by_bloom(
+            matches_selector_kleene(
                 rules,
-                matching_context.bloom_filter,
+                matching_context,
                 &mut stats,
                 false,
+                |rule| &rule.selector,
                 |rule| Some(&rule.hashes),
                 slow_match_candidates,
             );
 
             let previous_bloom_filter = matching_context.bloom_filter;
             matching_context.bloom_filter = None;
-            for rule in slow_match_candidates.iter().copied() {
+            for (_, rule) in slow_match_candidates.iter().copied() {
                 Self::match_rule(
                     rule,
                     element,
@@ -731,7 +731,7 @@ impl SelectorMap<Rule> {
         }
 
         let scope_proximity = if rule.scope_condition_id == ScopeConditionId::none() {
-            if !matches_selector(
+            if !matches_selector_single(
                 &rule.selector,
                 0,
                 Some(&rule.hashes),
