@@ -520,41 +520,26 @@ where
     #[cfg(not(feature = "detailed_statistics"))]
     let duration = Duration::default();
     let matched = result == KleeneValue::True;
-        #[cfg(feature = "detailed_statistics")]
-        time_slow_accepting: if matched { duration } else { Duration::default() },
-        ..BloomQueryStats::default()
-    };
-    (
-        result.to_bool(true),
-        stats,
-    )
+    record_slow_match(selector, matched, duration, statistics, per_match_stats, false);
+    result.to_bool(true)
 }
 
 /// Same as matches_selector, but returns the Kleene value as-is.
-/// Also returns whether we fast-rejected.
 #[cfg_attr(not(feature = "debug_element"), inline(always))]
-pub fn matches_selector_kleene<E>(
-    selector: &Selector<E::Impl>,
+pub fn matches_selector_kleene<'a, E>(
+    selector: &'a Selector<E::Impl>,
     offset: usize,
     hashes: Option<&AncestorHashes>,
     element: &E,
     context: &mut MatchingContext<E::Impl>,
-) -> (KleeneValue, BloomQueryStats)
+    statistics: &mut Statistics,
+    per_match_stats: Option<&mut PerMatchStats<'a, E::Impl>>,
+) -> KleeneValue
 where
     E: Element,
 {
-    // Use the bloom filter to fast-reject.
-    if let Some(hashes) = hashes {
-        if let Some(filter) = context.bloom_filter {
-            let may_match = selector_may_match(hashes, filter);
-            if !may_match {
-                let stats = BloomQueryStats {
-                    fast_rejects: 1,
-                    ..BloomQueryStats::default()
-                };
-                return (KleeneValue::False, stats);
-            }
-        }
+    if !check_selector_bloom_filter(hashes, context.bloom_filter, statistics, false) {
+        return KleeneValue::False;
     }
     #[cfg(feature = "detailed_statistics")]
     let start = Start::now();
@@ -569,24 +554,10 @@ where
         },
     );
     #[cfg(feature = "detailed_statistics")]
-    let not_matched_result_counts = context.take_not_matched_result_counts();
-    #[cfg(feature = "detailed_statistics")]
     let slow_match_duration = start.elapsed();
+    #[cfg(not(feature = "detailed_statistics"))]
+    let slow_match_duration = Duration::default();
     let is_slow_accept = does_match == KleeneValue::True;
-    let stats = BloomQueryStats {
-        slow_rejects: usize::from(!is_slow_accept),
-        slow_accepts: usize::from(is_slow_accept),
-        #[cfg(feature = "detailed_statistics")]
-        not_matched_result_counts,
-        #[cfg(feature = "detailed_statistics")]
-        time_slow_rejecting: if !is_slow_accept { slow_match_duration } else { Duration::default() },
-        #[cfg(feature = "detailed_statistics")]
-        time_slow_accepting: if is_slow_accept { slow_match_duration } else { Duration::default() },
-        ..BloomQueryStats::default()
-    };
-    (
-        does_match,
-        stats
     )
 }
 
