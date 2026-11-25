@@ -70,7 +70,8 @@ use rustc_hash::FxHashMap;
 use selectors::attr::{CaseSensitivity, NamespaceConstraint};
 use selectors::bloom::BloomFilter;
 use selectors::matching::{
-    MatchingContext, MatchingMode, NeedsSelectorFlags, ScopeProximityStats, SelectorCaches, matches_selector, selector_may_match
+    MatchingContext, MatchingMode, NeedsSelectorFlags, PerMatchStats, SelectorCaches, Statistics,
+    matches_selector, selector_may_match,
 };
 use selectors::matching::{MatchingForInvalidation, VisitedHandlingMode};
 use selectors::parser::{
@@ -1816,7 +1817,9 @@ impl Stylist {
                                 Some(&selector_and_hashes.hashes),
                                 &element,
                                 matching_context,
-                            ).0);
+                                &mut Statistics::default(),
+                                None,
+                            ));
                             true
                         },
                     );
@@ -1840,7 +1843,9 @@ impl Stylist {
                         Some(&selector_and_hashes.hashes),
                         &element,
                         &mut matching_context,
-                    ).0);
+                        &mut Statistics::default(),
+                        None,
+                    ));
                     true
                 },
             );
@@ -3504,12 +3509,14 @@ impl CascadeData {
         }
     }
 
-    pub(crate) fn find_scope_proximity_if_matching<E: SelectorMapElement>(
+    pub(crate) fn find_scope_proximity_if_matching<'rule, E: SelectorMapElement>(
         &self,
-        rule: &Rule,
+        rule: &'rule Rule,
         element: E,
         context: &mut MatchingContext<E::Impl>,
-    ) -> (ScopeProximity, ScopeProximityStats) {
+        statistics: &mut Statistics,
+        mut per_match_stats: Option<&mut PerMatchStats<'rule, SelectorImpl>>,
+    ) -> ScopeProximity {
         context
             .extra_data
             .cascade_input_flags
@@ -3526,23 +3533,23 @@ impl CascadeData {
             &self.scope_subject_map,
             context,
         );
-        #[cfg(feature = "detailed_statistics")]
-        let mut acc_stats = ScopeProximityStats::default();
-        #[cfg(not(feature = "detailed_statistics"))]
-        let acc_stats = ScopeProximityStats::default();
         for candidate in result.candidates {
-            let (res, _bloom_stats) = context.nest_for_scope(Some(candidate.root), |context| {
-                matches_selector(&rule.selector, 0, Some(&rule.hashes), &element, context)
+            let matched = context.nest_for_scope(Some(candidate.root), |context| {
+                matches_selector(
+                    &rule.selector,
+                    0,
+                    Some(&rule.hashes),
+                    &element,
+                    context,
+                    statistics,
+                    per_match_stats.as_deref_mut(),
+                )
             });
-            #[cfg(feature = "detailed_statistics")]
-            {
-                acc_stats += _bloom_stats;
-            }
-            if res {
-                return (candidate.proximity, acc_stats);
+            if matched {
+                return candidate.proximity;
             }
         }
-        (ScopeProximity::infinity(), acc_stats)
+        ScopeProximity::infinity()
     }
 
     fn did_finish_rebuild(&mut self) {
