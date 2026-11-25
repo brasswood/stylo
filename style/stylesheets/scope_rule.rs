@@ -22,7 +22,7 @@ use malloc_size_of::{
     MallocSizeOfOps, MallocUnconditionalShallowSizeOf, MallocUnconditionalSizeOf,
 };
 use selectors::context::{MatchingContext, QuirksMode};
-use selectors::matching::matches_selector;
+use selectors::matching::{matches_selector, Statistics};
 use selectors::parser::{Component, ParseRelative, Selector, SelectorList};
 use selectors::OpaqueElement;
 use servo_arc::Arc;
@@ -247,8 +247,17 @@ impl<'a> ScopeTarget<'a> {
                 if scope_subject_map.early_reject(element, context.quirks_mode()) {
                     return false;
                 }
+                let mut statistics = Statistics::default();
                 for selector in list.slice().iter() {
-                    if matches_selector(selector, 0, None, &element, context).0 {
+                    if matches_selector(
+                        selector,
+                        0,
+                        None,
+                        &element,
+                        context,
+                        &mut statistics,
+                        None,
+                    ) {
                         return true;
                     }
                 }
@@ -339,9 +348,18 @@ where
     E: SelectorMapElement,
 {
     let mut parent = Some(element);
+    let mut statistics = Statistics::default();
     context.nest_for_scope_condition(Some(root), |context| {
         while let Some(p) = parent {
-            if matches_selector(selector, 0, None, &p, context).0 {
+            if matches_selector(
+                selector,
+                0,
+                None,
+                &p,
+                context,
+                &mut statistics,
+                None,
+            ) {
                 return true;
             }
             if p.opaque() == root {
