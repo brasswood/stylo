@@ -488,13 +488,34 @@ where
     result.to_bool(true)
 }
 
-/// Matches a selector from an interior offset while treating that compound as
-/// the subject of the selector.
-///
-/// This is useful when an optimization has already established the semantics
-/// of the removed right-hand portion. Any ancestor hashes must be computed
-/// relative to `offset`, not reused from the original subject.
-pub fn matches_selector_at_offset_as_subject<'a, E>(
+/// Matches one selector with a bloom-filter check when batching is disabled.
+#[cfg(not(feature = "detailed_statistics"))]
+#[cfg_attr(not(feature = "debug_element"), inline(always))]
+pub fn matches_selector<'a, E>(
+    selector: &'a Selector<E::Impl>,
+    offset: usize,
+    hashes: Option<&AncestorHashes>,
+    element: &E,
+    context: &mut MatchingContext<E::Impl>,
+    statistics: &mut Statistics,
+    per_match_stats: Option<&mut PerMatchStats<'a, E::Impl>>,
+) -> bool
+where
+    E: Element,
+{
+    matches_selector_single(
+        selector,
+        offset,
+        hashes,
+        element,
+        context,
+        statistics,
+        per_match_stats,
+    )
+}
+
+/// Matches one selector from an interior offset while treating that compound as the subject.
+pub fn matches_selector_at_offset_as_subject_single<'a, E>(
     selector: &'a Selector<E::Impl>,
     offset: usize,
     hashes: Option<&AncestorHashes>,
