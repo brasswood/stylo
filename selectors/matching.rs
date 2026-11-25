@@ -431,7 +431,7 @@ pub fn matches_selector_single<'a, E>(
 where
     E: Element,
 {
-    let result = matches_selector_kleene(
+    let result = matches_selector_kleene_single(
         selector,
         offset,
         hashes,
@@ -542,7 +542,7 @@ where
 
 /// Same as matches_selector, but returns the Kleene value as-is.
 #[cfg_attr(not(feature = "debug_element"), inline(always))]
-pub fn matches_selector_kleene<'a, E>(
+pub fn matches_selector_kleene_single<'a, E>(
     selector: &'a Selector<E::Impl>,
     offset: usize,
     hashes: Option<&AncestorHashes>,
