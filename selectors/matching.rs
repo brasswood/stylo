@@ -558,7 +558,45 @@ where
     #[cfg(not(feature = "detailed_statistics"))]
     let slow_match_duration = Duration::default();
     let is_slow_accept = does_match == KleeneValue::True;
-    )
+    record_slow_match(
+        selector,
+        is_slow_accept,
+        slow_match_duration,
+        statistics,
+        per_match_stats,
+        false,
+    );
+    does_match
+}
+
+fn record_slow_match<'a, Impl: SelectorImpl>(
+    selector: &'a Selector<Impl>,
+    accepted: bool,
+    duration: Duration,
+    statistics: &mut Statistics,
+    per_match_stats: Option<&mut PerMatchStats<'a, Impl>>,
+    is_activation: bool,
+) {
+    if is_activation {
+        if accepted {
+            statistics.counts.activation_slow_accepts += 1;
+        } else {
+            statistics.counts.activation_slow_rejects += 1;
+        }
+    } else if accepted {
+        statistics.counts.slow_accepts += 1;
+    } else {
+        statistics.counts.slow_rejects += 1;
+    }
+    #[cfg(feature = "detailed_statistics")]
+    if accepted {
+        statistics.times.slow_accepting += duration;
+    } else {
+        statistics.times.slow_rejecting += duration;
+    }
+    if let Some(per_match_stats) = per_match_stats {
+        per_match_stats.push((selector, SlowMatchStats { accepted, duration }));
+    }
 }
 
 /// Whether a compound selector matched, and whether it was the rightmost
@@ -1092,8 +1130,6 @@ where
                 SelectorMatchingResult::NotMatchedAndRestartFromClosestLaterSibling
             },
         };
-        #[cfg(feature = "detailed_statistics")]
-        context.note_not_matched_result(result);
         return result;
     };
 
@@ -1101,8 +1137,6 @@ where
     if context.featureless() && !is_pseudo_combinator {
         // A featureless element shouldn't match any further combinator.
         // TODO(emilio): Maybe we could avoid the compound matching more eagerly.
-        #[cfg(feature = "detailed_statistics")]
-        context.note_not_matched_result(SelectorMatchingResult::NotMatchedGlobally);
         return SelectorMatchingResult::NotMatchedGlobally;
     }
 
@@ -1115,10 +1149,6 @@ where
     if matches_compound_selector == KleeneValue::False {
         // We don't short circuit unknown here, since the rest of the selector
         // to the left of this compound may still return false.
-        #[cfg(feature = "detailed_statistics")]
-        context.note_not_matched_result(
-            SelectorMatchingResult::NotMatchedAndRestartFromClosestLaterSibling,
-        );
         return SelectorMatchingResult::NotMatchedAndRestartFromClosestLaterSibling;
     }
 
@@ -1153,8 +1183,6 @@ where
         } = next_element_for_combinator(&element, combinator, &context);
         element = match next_element {
             None => {
-                #[cfg(feature = "detailed_statistics")]
-                context.note_not_matched_result(candidate_not_found);
                 return candidate_not_found;
             },
             Some(e) => e,
@@ -1200,12 +1228,6 @@ where
             },
             Combinator::Child => {
                 // Upgrade the failure status to NotMatchedAndRestartFromClosestDescendant.
-                #[cfg(feature = "detailed_statistics")]
-                if result != SelectorMatchingResult::NotMatchedAndRestartFromClosestDescendant {
-                    context.note_not_matched_result(
-                        SelectorMatchingResult::NotMatchedAndRestartFromClosestDescendant,
-                    );
-                }
                 return SelectorMatchingResult::NotMatchedAndRestartFromClosestDescendant;
             },
             Combinator::LaterSibling => {
@@ -1234,8 +1256,6 @@ where
         if featureless {
             // A featureless element didn't match the selector, we can stop matching now rather
             // than looking at following elements for our combinator.
-            #[cfg(feature = "detailed_statistics")]
-            context.note_not_matched_result(candidate_not_found);
             return candidate_not_found;
         }
     }
