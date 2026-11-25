@@ -684,16 +684,22 @@ where
             "Returned unknown in non invalidation context?"
         );
         if !result.to_bool(true) {
+            #[cfg(feature = "detailed_statistics")]
+            let _ = local_context.shared.take_not_matched_result_counts();
             return CompoundSelectorMatchingResult::NotMatched;
         }
     }
 
     if from_offset != selector.len() {
+        #[cfg(feature = "detailed_statistics")]
+        let _ = local_context.shared.take_not_matched_result_counts();
         return CompoundSelectorMatchingResult::Matched {
             next_combinator_offset: from_offset,
         };
     }
 
+    #[cfg(feature = "detailed_statistics")]
+    let _ = local_context.shared.take_not_matched_result_counts();
     CompoundSelectorMatchingResult::FullyMatched
 }
 
@@ -1130,6 +1136,8 @@ where
                 SelectorMatchingResult::NotMatchedAndRestartFromClosestLaterSibling
             },
         };
+        #[cfg(feature = "detailed_statistics")]
+        context.note_not_matched_result(result);
         return result;
     };
 
@@ -1137,6 +1145,8 @@ where
     if context.featureless() && !is_pseudo_combinator {
         // A featureless element shouldn't match any further combinator.
         // TODO(emilio): Maybe we could avoid the compound matching more eagerly.
+        #[cfg(feature = "detailed_statistics")]
+        context.note_not_matched_result(SelectorMatchingResult::NotMatchedGlobally);
         return SelectorMatchingResult::NotMatchedGlobally;
     }
 
@@ -1149,6 +1159,10 @@ where
     if matches_compound_selector == KleeneValue::False {
         // We don't short circuit unknown here, since the rest of the selector
         // to the left of this compound may still return false.
+        #[cfg(feature = "detailed_statistics")]
+        context.note_not_matched_result(
+            SelectorMatchingResult::NotMatchedAndRestartFromClosestLaterSibling,
+        );
         return SelectorMatchingResult::NotMatchedAndRestartFromClosestLaterSibling;
     }
 
@@ -1183,6 +1197,8 @@ where
         } = next_element_for_combinator(&element, combinator, &context);
         element = match next_element {
             None => {
+                #[cfg(feature = "detailed_statistics")]
+                context.note_not_matched_result(candidate_not_found);
                 return candidate_not_found;
             },
             Some(e) => e,
@@ -1228,6 +1244,12 @@ where
             },
             Combinator::Child => {
                 // Upgrade the failure status to NotMatchedAndRestartFromClosestDescendant.
+                #[cfg(feature = "detailed_statistics")]
+                if result != SelectorMatchingResult::NotMatchedAndRestartFromClosestDescendant {
+                    context.note_not_matched_result(
+                        SelectorMatchingResult::NotMatchedAndRestartFromClosestDescendant,
+                    );
+                }
                 return SelectorMatchingResult::NotMatchedAndRestartFromClosestDescendant;
             },
             Combinator::LaterSibling => {
@@ -1256,6 +1278,8 @@ where
         if featureless {
             // A featureless element didn't match the selector, we can stop matching now rather
             // than looking at following elements for our combinator.
+            #[cfg(feature = "detailed_statistics")]
+            context.note_not_matched_result(candidate_not_found);
             return candidate_not_found;
         }
     }
