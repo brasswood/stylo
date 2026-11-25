@@ -672,6 +672,32 @@ where
     does_match
 }
 
+/// Matches one selector when batching is disabled.
+#[cfg(not(feature = "detailed_statistics"))]
+#[cfg_attr(not(feature = "debug_element"), inline(always))]
+pub fn matches_selector_kleene<'a, E>(
+    selector: &'a Selector<E::Impl>,
+    offset: usize,
+    hashes: Option<&AncestorHashes>,
+    element: &E,
+    context: &mut MatchingContext<E::Impl>,
+    statistics: &mut Statistics,
+    per_match_stats: Option<&mut PerMatchStats<'a, E::Impl>>,
+) -> KleeneValue
+where
+    E: Element,
+{
+    matches_selector_kleene_single(
+        selector,
+        offset,
+        hashes,
+        element,
+        context,
+        statistics,
+        per_match_stats,
+    )
+}
+
 fn record_slow_match<'a, Impl: SelectorImpl>(
     selector: &'a Selector<Impl>,
     accepted: bool,
