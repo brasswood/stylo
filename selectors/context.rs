@@ -4,6 +4,8 @@
 
 use crate::attr::CaseSensitivity;
 use crate::bloom::BloomFilter;
+#[cfg(feature = "detailed_statistics")]
+use crate::matching::SelectorMatchingResult;
 use crate::nth_index_cache::{NthIndexCache, NthIndexCacheInner};
 use crate::parser::{Selector, SelectorImpl};
 use crate::relative_selector::cache::RelativeSelectorCache;
@@ -138,6 +140,31 @@ pub struct SelectorCaches {
     pub relative_selector: RelativeSelectorCache,
     /// A map of bloom filters to fast-reject relative selector matches.
     pub relative_selector_filter_map: RelativeSelectorFilterMap,
+}
+
+#[cfg(feature = "detailed_statistics")]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct NotMatchedResultCounts {
+    pub classic_global_failures: usize,
+    pub classic_descendant_restarts: usize,
+    pub classic_sibling_restarts: usize,
+}
+
+#[cfg(feature = "detailed_statistics")]
+impl NotMatchedResultCounts {
+    #[inline]
+    fn record(&mut self, result: SelectorMatchingResult) {
+        match result {
+            SelectorMatchingResult::NotMatchedGlobally => self.classic_global_failures += 1,
+            SelectorMatchingResult::NotMatchedAndRestartFromClosestDescendant => {
+                self.classic_descendant_restarts += 1
+            },
+            SelectorMatchingResult::NotMatchedAndRestartFromClosestLaterSibling => {
+                self.classic_sibling_restarts += 1
+            },
+            _ => {},
+        }
+    }
 }
 
 /// Data associated with the matching process for a element.  This context is
