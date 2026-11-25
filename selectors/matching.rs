@@ -23,7 +23,6 @@ use derive_more::{Add, AddAssign, Div};
 use log::debug;
 use smallvec::SmallVec;
 use std::borrow::Borrow;
-use std::ops::AddAssign;
 use tsc_timer::Duration;
 #[cfg(feature = "detailed_statistics")]
 use tsc_timer::Start;
@@ -92,48 +91,13 @@ bitflags! {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SelectorStats {
-    Bloom(BloomQueryStats),
-    ScopeProximity(ScopeProximityStats),
-}
-
-impl Default for SelectorStats {
-    fn default() -> SelectorStats {
-        SelectorStats::Bloom(BloomQueryStats::default())
-    }
-}
-
-/// A sub-struct for when `find_scope_proximity_if_matching` iteratively calls `matches_selector`.
-/// Like `BloomQueryStats` but with fields for counting number of queries.
+/// Statistics for one selector that made it through the bloom filter.
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ScopeProximityStats {
-    pub fast_rejects: usize,
-    pub slow_rejects: usize,
-    pub slow_accepts: usize,
-    #[cfg(feature = "detailed_statistics")]
-    pub slow_reject_not_matched_result_counts: NotMatchedResultCounts,
-    #[cfg(feature = "detailed_statistics")]
-    pub time_slow_rejecting: Duration,
-    #[cfg(feature = "detailed_statistics")]
-    pub time_slow_accepting: Duration,
+pub struct SlowMatchStats {
+    pub accepted: bool,
+    pub duration: Duration,
 }
 
-impl AddAssign<BloomQueryStats> for ScopeProximityStats {
-    fn add_assign(&mut self, rhs: BloomQueryStats) {
-        self.fast_rejects += rhs.fast_rejects;
-        self.slow_rejects += rhs.slow_rejects;
-        self.slow_accepts += rhs.slow_accepts;
-        #[cfg(feature = "detailed_statistics")]
-        if rhs.slow_rejects > 0 {
-            self.slow_reject_not_matched_result_counts += rhs.not_matched_result_counts;
-        }
-        #[cfg(feature = "detailed_statistics")]
-        {
-            self.time_slow_rejecting += rhs.time_slow_rejecting;
-            self.time_slow_accepting += rhs.time_slow_accepting;
-        }
-    }
 }
 
 /// A struct for bloom filter querying stats
