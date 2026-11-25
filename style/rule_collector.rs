@@ -222,9 +222,13 @@ where
         cascade_data: &CascadeData,
     ) {
         debug_assert!(self.in_sort_scope, "Rules gotta be sorted");
+        #[cfg(feature = "detailed_statistics")]
+        let mut slow_match_candidates = Vec::with_capacity(part_rules.len());
         SelectorMap::get_matching_rules(
             self.element,
             part_rules,
+            #[cfg(feature = "detailed_statistics")]
+            &mut slow_match_candidates,
             &mut self.rules,
             None,
             None,
