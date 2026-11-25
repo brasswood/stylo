@@ -96,6 +96,8 @@ bitflags! {
 pub struct SlowMatchStats {
     pub accepted: bool,
     pub duration: Duration,
+    #[cfg(feature = "detailed_statistics")]
+    pub not_matched_result_counts: NotMatchedResultCounts,
 }
 
 pub type PerMatchStats<'a, Impl> = Vec<(&'a Selector<Impl>, SlowMatchStats)>;
@@ -488,10 +490,21 @@ where
     );
     #[cfg(feature = "detailed_statistics")]
     let duration = start.elapsed();
+    #[cfg(feature = "detailed_statistics")]
+    let not_matched_result_counts = context.take_not_matched_result_counts();
     #[cfg(not(feature = "detailed_statistics"))]
     let duration = Duration::default();
     let matched = does_match == KleeneValue::True;
-    record_slow_match(selector, matched, duration, statistics, per_match_stats, true);
+    record_slow_match(
+        selector,
+        matched,
+        duration,
+        statistics,
+        per_match_stats,
+        true,
+        #[cfg(feature = "detailed_statistics")]
+        not_matched_result_counts,
+    );
     does_match.to_bool(true)
 }
 
@@ -517,10 +530,21 @@ where
     );
     #[cfg(feature = "detailed_statistics")]
     let duration = start.elapsed();
+    #[cfg(feature = "detailed_statistics")]
+    let not_matched_result_counts = context.take_not_matched_result_counts();
     #[cfg(not(feature = "detailed_statistics"))]
     let duration = Duration::default();
     let matched = result == KleeneValue::True;
-    record_slow_match(selector, matched, duration, statistics, per_match_stats, false);
+    record_slow_match(
+        selector,
+        matched,
+        duration,
+        statistics,
+        per_match_stats,
+        false,
+        #[cfg(feature = "detailed_statistics")]
+        not_matched_result_counts,
+    );
     result.to_bool(true)
 }
 
@@ -555,6 +579,8 @@ where
     );
     #[cfg(feature = "detailed_statistics")]
     let slow_match_duration = start.elapsed();
+    #[cfg(feature = "detailed_statistics")]
+    let not_matched_result_counts = context.take_not_matched_result_counts();
     #[cfg(not(feature = "detailed_statistics"))]
     let slow_match_duration = Duration::default();
     let is_slow_accept = does_match == KleeneValue::True;
@@ -565,6 +591,8 @@ where
         statistics,
         per_match_stats,
         false,
+        #[cfg(feature = "detailed_statistics")]
+        not_matched_result_counts,
     );
     does_match
 }
@@ -576,6 +604,7 @@ fn record_slow_match<'a, Impl: SelectorImpl>(
     statistics: &mut Statistics,
     per_match_stats: Option<&mut PerMatchStats<'a, Impl>>,
     is_activation: bool,
+    #[cfg(feature = "detailed_statistics")] not_matched_result_counts: NotMatchedResultCounts,
 ) {
     if is_activation {
         if accepted {
@@ -595,7 +624,15 @@ fn record_slow_match<'a, Impl: SelectorImpl>(
         statistics.times.slow_rejecting += duration;
     }
     if let Some(per_match_stats) = per_match_stats {
-        per_match_stats.push((selector, SlowMatchStats { accepted, duration }));
+        per_match_stats.push((
+            selector,
+            SlowMatchStats {
+                accepted,
+                duration,
+                #[cfg(feature = "detailed_statistics")]
+                not_matched_result_counts,
+            },
+        ));
     }
 }
 
