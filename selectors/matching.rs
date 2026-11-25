@@ -223,7 +223,7 @@ where
     // refuses to do so from querySelector / querySelectorAll.
     let mut statistics = Statistics::default();
     for selector in selector_list.slice() {
-        let matches = matches_selector(
+        let matches = matches_selector_single(
             selector,
             0,
             None,
@@ -417,17 +417,9 @@ impl From<SelectorMatchingResult> for KleeneValue {
     }
 }
 
-/// Matches a selector, fast-rejecting against a bloom filter.
-///
-/// We accept an offset to allow consumers to represent and match against
-/// partial selectors (indexed from the right). We use this API design, rather
-/// than having the callers pass a SelectorIter, because creating a SelectorIter
-/// requires dereferencing the selector to get the length, which adds an
-/// unnecessary cache miss for cases when we can fast-reject with AncestorHashes
-/// (which the caller can store inline with the selector pointer).
+/// Matches one selector after its batch bloom-filter check.
 #[cfg_attr(not(feature = "debug_element"), inline(always))]
-
-pub fn matches_selector<'a, E>(
+pub fn matches_selector_single<'a, E>(
     selector: &'a Selector<E::Impl>,
     offset: usize,
     hashes: Option<&AncestorHashes>,

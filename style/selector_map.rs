@@ -286,7 +286,7 @@ impl<T> SelectorMap<T> {
 #[cfg(feature = "detailed_statistics")]
 pub struct StagedRuleBuffers<'a> {
     candidates: Vec<&'a Rule>,
-    slow_match_candidates: Vec<&'a Rule>,
+    slow_match_candidates: Vec<(&'a Selector<SelectorImpl>, &'a Rule)>,
 }
 
 #[cfg(feature = "detailed_statistics")]
@@ -797,7 +797,9 @@ impl SelectorMap<UniversalTailRule> {
         mut per_match_stats: Option<&mut PerMatchStats<'selectormap, SelectorImpl>>,
         matching_context: &mut MatchingContext<E::Impl>,
         #[cfg(feature = "detailed_statistics")]
-        candidates: &mut Vec<Option<&'selectormap UniversalTailRule>>,
+        candidates: &mut Vec<
+            Option<(&'selectormap Selector<SelectorImpl>, &'selectormap UniversalTailRule)>,
+        >,
     ) -> Statistics
     where
         E: SelectorMapElement + StyleSharingElement,

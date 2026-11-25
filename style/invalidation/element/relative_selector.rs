@@ -30,7 +30,7 @@ use crate::stylist::{CascadeData, Stylist};
 use dom::ElementState;
 use rustc_hash::FxHashMap;
 use selectors::matching::{
-    matches_selector, ElementSelectorFlags, IncludeStartingStyle, MatchingContext,
+    matches_selector_single, ElementSelectorFlags, IncludeStartingStyle, MatchingContext,
     MatchingForInvalidation, MatchingMode, NeedsSelectorFlags, QuirksMode, SelectorCaches,
     VisitedHandlingMode,
 };
@@ -178,7 +178,7 @@ impl<'a, E: TElement> OptimizationContext<'a, E> {
             MatchingForInvalidation::Yes,
         );
         matching_context.current_host = host;
-        let sibling_matches = matches_selector(
+        let sibling_matches = matches_selector_single(
             &dependency.selector,
             dependency.selector_offset,
             None,
@@ -201,7 +201,7 @@ impl<'a, E: TElement> OptimizationContext<'a, E> {
                 // ... However, if the standin sibling can be the anchor, we can't skip it, since
                 // that sibling should be invlidated to become the anchor.
                 let next = &deps.as_ref().slice()[0];
-                !matches_selector(
+                !matches_selector_single(
                     &next.selector,
                     next.selector_offset,
                     None,
@@ -235,7 +235,7 @@ impl<'a, E: TElement> OptimizationContext<'a, E> {
             // see if there's going to be a downstream match.
             return false;
         }
-        !matches_selector(
+        !matches_selector_single(
             &dependency.selector,
             dependency.selector_offset,
             None,
@@ -1116,7 +1116,7 @@ where
                 if !dependency_may_be_relevant(d, &element, false) {
                     continue;
                 }
-                if !matches_selector(
+                if !matches_selector_single(
                     &d.selector,
                     d.selector_offset,
                     None,
