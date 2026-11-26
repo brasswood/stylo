@@ -294,25 +294,33 @@ pub fn check_selector_bloom_filter(
     !rejected
 }
 
-/// Stages selector candidates through the bloom filter as one timed batch.
+/// Matches selector candidates after checking their bloom filters as a batch.
 ///
-/// The candidates that pass are retained in `slow_match_candidates` for their
-/// individual slow matches.
+/// `slow_match` handles candidate-specific matching details (such as `@scope`)
+/// and is called once for each selector that passes the bloom filter.
 #[cfg(feature = "detailed_statistics")]
-pub fn matches_selector_kleene<'a, Impl, Candidate>(
+pub fn matches_selector_kleene_batched<'a, Impl, Candidate>(
     candidates: impl IntoIterator<Item = &'a Candidate>,
-    context: &MatchingContext<Impl>,
+    context: &mut MatchingContext<Impl>,
     statistics: &mut Statistics,
     is_activation: bool,
     mut selector_for: impl FnMut(&'a Candidate) -> &'a Selector<Impl>,
     mut hashes_for: impl FnMut(&'a Candidate) -> Option<&'a AncestorHashes>,
     slow_match_candidates: &mut Vec<(&'a Selector<Impl>, &'a Candidate)>,
+    matching_or_maybe_candidates: &mut Vec<&'a Candidate>,
+    mut slow_match: impl FnMut(
+        &'a Selector<Impl>,
+        &'a Candidate,
+        &mut MatchingContext<Impl>,
+        &mut Statistics,
+    ) -> KleeneValue,
 )
 where
     Impl: SelectorImpl,
 {
     let start = Start::now();
     slow_match_candidates.clear();
+    matching_or_maybe_candidates.clear();
     for candidate in candidates {
         if check_selector_bloom_filter(
             hashes_for(candidate),
@@ -323,7 +331,16 @@ where
             slow_match_candidates.push((selector_for(candidate), candidate));
         }
     }
-    statistics.times.fast_rejecting += start.elapsed();
+    statistics.times.checking_bloom_filter += start.elapsed();
+
+    let bloom_filter = context.bloom_filter;
+    context.bloom_filter = None;
+    for (selector, candidate) in slow_match_candidates.iter().copied() {
+        if slow_match(selector, candidate, context, statistics) != KleeneValue::False {
+            matching_or_maybe_candidates.push(candidate);
+        }
+    }
+    context.bloom_filter = bloom_filter;
 }
 
 /// Stages selector candidates through the bloom filter as one timed batch.
