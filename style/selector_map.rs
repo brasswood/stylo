@@ -23,11 +23,14 @@ use dom::ElementState;
 use precomputed_hash::PrecomputedHash;
 use selectors::{Element, OpaqueElement};
 #[cfg(feature = "detailed_statistics")]
-use selectors::matching::{matches_selector_at_offset_as_subject, matches_selector_batched};
 use selectors::matching::{
-    matches_selector_at_offset_as_subject_single, matches_selector, MatchingContext,
-    PerMatchStats, Statistics,
+    matches_selector_at_offset_as_subject_batched, matches_selector_batched,
 };
+use selectors::matching::{
+    matches_selector, MatchingContext, PerMatchStats, Statistics,
+};
+#[cfg(not(feature = "detailed_statistics"))]
+use selectors::matching::matches_selector_at_offset_as_subject;
 use selectors::parser::{Combinator, Component, Selector, SelectorIter};
 use smallvec::SmallVec;
 use std::collections::hash_map;
@@ -918,7 +921,7 @@ impl SelectorMap<UniversalTailRule> {
         {
             self.lookup(element, matching_context.quirks_mode(), None, |entry| {
                 hits += 1;
-                let matched = matches_selector_at_offset_as_subject_single(
+                let matched = matches_selector_at_offset_as_subject(
                     &entry.rule.selector,
                     entry.activation_offset,
                     Some(&entry.activation_hashes),
@@ -935,37 +938,28 @@ impl SelectorMap<UniversalTailRule> {
         }
         #[cfg(feature = "detailed_statistics")]
         {
-            stats.times.querying_selector_map = start.elapsed();
+            stats.times.querying_activation_selector_map = start.elapsed();
         }
 
         #[cfg(feature = "detailed_statistics")]
         {
-            matches_selector_at_offset_as_subject(
+            matches_selector_at_offset_as_subject_batched(
                 candidates.as_mut_slice(),
+                &element,
                 matching_context,
                 &mut stats,
                 |entry| Some(&entry.activation_hashes),
+                |entry| entry.activation_offset,
+                per_match_stats.as_deref_mut(),
             );
 
-            let bloom_filter = matching_context.bloom_filter;
-            matching_context.bloom_filter = None;
             for (_, entry) in candidates.iter().flatten() {
-                let matched = matches_selector_at_offset_as_subject_single(
-                    &entry.rule.selector,
-                    entry.activation_offset,
-                    Some(&entry.activation_hashes),
-                    &element,
-                    matching_context,
-                    &mut stats,
-                    per_match_stats.as_deref_mut(),
-                );
-                if matched && !matching_selectors.contains(&&entry.rule.selector) {
+                if !matching_selectors.contains(&&entry.rule.selector) {
                     matching_selectors.push(&entry.rule.selector);
                 }
             }
             stats.times._time_inside_buckets =
                 stats.times.slow_rejecting + stats.times.slow_accepting;
-            matching_context.bloom_filter = bloom_filter;
         }
 
         stats.counts.tail_selector_map_hits = hits;
@@ -973,6 +967,7 @@ impl SelectorMap<UniversalTailRule> {
     }
 }
 
+#[cfg(not(feature = "detailed_statistics"))]
 fn match_bless_universal_bucket_rule<'a, E>(
     entry: &'a UniversalBucketRule,
     element: E,
@@ -985,7 +980,7 @@ fn match_bless_universal_bucket_rule<'a, E>(
 where
     E: SelectorMapElement + StyleSharingElement,
 {
-    let matched = matches_selector_at_offset_as_subject_single(
+    let matched = matches_selector_at_offset_as_subject(
         &entry.rule.selector,
         entry.activation_offset,
         Some(&entry.activation_hashes),
@@ -1054,30 +1049,27 @@ impl SelectorMap<UniversalBucketRule> {
 
         #[cfg(feature = "detailed_statistics")]
         {
-            stats.times.querying_selector_map = start.elapsed();
-            matches_selector_at_offset_as_subject(
+            stats.times.querying_activation_selector_map = start.elapsed();
+            matches_selector_at_offset_as_subject_batched(
                 seen.as_mut_slice(),
+                &element,
                 matching_context,
                 &mut stats,
                 |entry| Some(&entry.activation_hashes),
+                |entry| entry.activation_offset,
+                per_match_stats.as_deref_mut(),
             );
 
-            let bloom_filter = matching_context.bloom_filter;
-            matching_context.bloom_filter = None;
             for (_, entry) in seen.iter().flatten() {
-                match_bless_universal_bucket_rule(
-                    entry,
-                    element,
-                    element_depth,
-                    bless_list,
-                    matching_context,
-                    &mut stats,
-                    per_match_stats.as_deref_mut(),
-                );
+                let last_depth = if entry.matches_descendants {
+                    usize::MAX
+                } else {
+                    element_depth + 1
+                };
+                bless_list.push((entry, last_depth));
             }
             stats.times._time_inside_buckets =
                 stats.times.slow_rejecting + stats.times.slow_accepting;
-            matching_context.bloom_filter = bloom_filter;
         }
 
         stats
