@@ -405,7 +405,27 @@ where
             *candidate = None;
         }
     }
-    statistics.times.fast_rejecting += start.elapsed();
+    statistics.times.checking_bloom_filter += start.elapsed();
+
+    let bloom_filter = context.bloom_filter;
+    context.bloom_filter = None;
+    for candidate in candidates.iter_mut() {
+        let Some((selector, candidate_data)) = *candidate else {
+            continue;
+        };
+        if !matches_selector_at_offset_as_subject(
+            selector,
+            offset_for(candidate_data),
+            hashes_for(candidate_data),
+            element,
+            context,
+            statistics,
+            selector_stats.as_deref_mut(),
+        ) {
+            *candidate = None;
+        }
+    }
+    context.bloom_filter = bloom_filter;
 }
 
 /// A result of selector matching, includes 3 failure types,
