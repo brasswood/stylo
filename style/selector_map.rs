@@ -823,6 +823,41 @@ impl SelectorMap<Rule> {
             matching_selectors.push(&rule.selector);
         }
     }
+
+    #[cfg(feature = "detailed_statistics")]
+    fn match_rule_selector<'rule, E>(
+        selector: &'rule Selector<SelectorImpl>,
+        rule: &'rule Rule,
+        element: E,
+        matching_context: &mut MatchingContext<E::Impl>,
+        cascade_data: &CascadeData, stats: &mut Statistics,
+        mut per_match_stats: Option<&mut PerMatchStats<'rule, SelectorImpl>>,
+    ) -> Option<ScopeProximity>
+    where
+        E: SelectorMapElement,
+    {
+        if rule.scope_condition_id == ScopeConditionId::none() {
+            matches_selector(
+                selector,
+                0,
+                Some(&rule.hashes),
+                &element,
+                matching_context,
+                stats,
+                per_match_stats.as_deref_mut(),
+            )
+            .then(ScopeProximity::infinity)
+        } else {
+            let proximity = cascade_data.find_scope_proximity_if_matching(
+                rule,
+                element,
+                matching_context,
+                stats,
+                per_match_stats.as_deref_mut(),
+            );
+            (proximity != ScopeProximity::infinity()).then_some(proximity)
+        }
+    }
 }
 
 impl SelectorMap<UniversalTailRule> {
