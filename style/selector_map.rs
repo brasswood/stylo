@@ -767,6 +767,34 @@ impl SelectorMap<Rule> {
             scope_proximity
         };
 
+        Self::match_rule_after_selector(
+            rule,
+            element,
+            matching_rules,
+            matching_selectors,
+            matching_context,
+            cascade_level,
+            cascade_data,
+            stylist,
+            include_starting_style,
+            scope_proximity,
+        );
+    }
+
+    fn match_rule_after_selector<'rule, E>(
+        rule: &'rule Rule,
+        element: E,
+        matching_rules: &mut ApplicableDeclarationList,
+        mut matching_selectors: Option<&mut SmallVec<[&'rule Selector<SelectorImpl>; 16]>>,
+        matching_context: &mut MatchingContext<E::Impl>,
+        cascade_level: CascadeLevel,
+        cascade_data: &CascadeData,
+        stylist: &Stylist,
+        include_starting_style: bool,
+        scope_proximity: ScopeProximity,
+    ) where
+        E: SelectorMapElement,
+    {
         if rule.container_condition_id != ContainerConditionId::none()
             && !cascade_data.container_condition_matches(
                 rule.container_condition_id,
