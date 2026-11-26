@@ -541,7 +541,7 @@ where
 }
 
 /// Matches one selector from an interior offset while treating that compound as the subject.
-pub fn matches_selector_at_offset_as_subject_single<'a, E>(
+pub fn matches_selector_at_offset_as_subject<'a, E>(
     selector: &'a Selector<E::Impl>,
     offset: usize,
     hashes: Option<&AncestorHashes>,
@@ -622,31 +622,6 @@ where
         not_matched_result_counts,
     );
     result.to_bool(true)
-}
-
-/// Matches one selector from an interior offset when batching is disabled.
-#[cfg(not(feature = "detailed_statistics"))]
-pub fn matches_selector_at_offset_as_subject<'a, E>(
-    selector: &'a Selector<E::Impl>,
-    offset: usize,
-    hashes: Option<&AncestorHashes>,
-    element: &E,
-    context: &mut MatchingContext<E::Impl>,
-    statistics: &mut Statistics,
-    per_match_stats: Option<&mut PerMatchStats<'a, E::Impl>>,
-) -> bool
-where
-    E: Element,
-{
-    matches_selector_at_offset_as_subject_single(
-        selector,
-        offset,
-        hashes,
-        element,
-        context,
-        statistics,
-        per_match_stats,
-    )
 }
 
 /// Same as `matches_selector`, but returns the Kleene value as-is.
