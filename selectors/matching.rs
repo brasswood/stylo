@@ -159,8 +159,11 @@ pub struct TimingStats {
     /// Time spent querying the selector map
     pub querying_selector_map: Duration,
     #[cfg(feature = "detailed_statistics")]
+    /// Time spent querying the selector map for universal activators
+    pub querying_activation_selector_map: Duration,
+    #[cfg(feature = "detailed_statistics")]
     /// Time spent checking the bloom filter for a batch of selectors
-    pub fast_rejecting: Duration,
+    pub checking_bloom_filter: Duration,
     #[cfg(feature = "detailed_statistics")]
     /// Time spent slow rejecting a selector after all of the following happen:
     /// - Style sharing fails
