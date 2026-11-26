@@ -23,9 +23,9 @@ use dom::ElementState;
 use precomputed_hash::PrecomputedHash;
 use selectors::{Element, OpaqueElement};
 #[cfg(feature = "detailed_statistics")]
-use selectors::matching::{matches_selector_at_offset_as_subject, matches_selector_kleene};
+use selectors::matching::{matches_selector_at_offset_as_subject, matches_selector_batched};
 use selectors::matching::{
-    matches_selector_at_offset_as_subject_single, matches_selector_single, MatchingContext,
+    matches_selector_at_offset_as_subject_single, matches_selector, MatchingContext,
     PerMatchStats, Statistics,
 };
 use selectors::parser::{Combinator, Component, Selector, SelectorIter};
@@ -663,7 +663,8 @@ impl SelectorMap<Rule> {
 
         #[cfg(feature = "detailed_statistics")]
         {
-            matches_selector_kleene(
+            scope_proximities.clear();
+            matches_selector_batched(
                 rules,
                 matching_context,
                 &mut stats,
@@ -671,27 +672,49 @@ impl SelectorMap<Rule> {
                 |rule| &rule.selector,
                 |rule| Some(&rule.hashes),
                 slow_match_candidates,
+                matching_candidates,
+                |selector, rule, context, statistics| {
+                    #[cfg(feature = "debug_element")]
+                    if let Some(html_str) = _debug_html_str {
+                        debug_element_selector(element, html_str, &rule.selector);
+                    }
+
+                    let scope_proximity = Self::match_rule_selector(
+                        selector,
+                        rule,
+                        element,
+                        context,
+                        cascade_data,
+                        statistics,
+                        per_match_stats.as_deref_mut(),
+                    );
+                    if let Some(scope_proximity) = scope_proximity {
+                        scope_proximities.push(scope_proximity);
+                        selectors::kleene_value::KleeneValue::True
+                    } else {
+                        selectors::kleene_value::KleeneValue::False
+                    }
+                },
             );
 
-            let previous_bloom_filter = matching_context.bloom_filter;
-            matching_context.bloom_filter = None;
-            for (_, rule) in slow_match_candidates.iter().copied() {
-                Self::match_rule(
+            for (rule, scope_proximity) in matching_candidates
+                .iter()
+                .copied()
+                .zip(scope_proximities.iter().copied())
+            {
+                Self::match_rule_after_selector(
                     rule,
                     element,
                     matching_rules,
                     matching_selectors.as_deref_mut(),
-                    per_match_stats.as_deref_mut(),
                     matching_context,
                     cascade_level,
                     cascade_data,
                     stylist,
                     include_starting_style,
-                    _debug_html_str,
-                    &mut stats,
+                    scope_proximity,
                 );
             }
-            matching_context.bloom_filter = previous_bloom_filter;
         }
         #[cfg(not(feature = "detailed_statistics"))]
         for rule in rules {
@@ -719,11 +742,12 @@ impl SelectorMap<Rule> {
         stats
     }
 
+    #[cfg(not(feature = "detailed_statistics"))]
     fn match_rule<'rule, E>(
         rule: &'rule Rule,
         element: E,
         matching_rules: &mut ApplicableDeclarationList,
-        mut matching_selectors: Option<&mut SmallVec<[&'rule Selector<SelectorImpl>; 16]>>,
+        matching_selectors: Option<&mut SmallVec<[&'rule Selector<SelectorImpl>; 16]>>,
         per_match_stats: Option<&mut PerMatchStats<'rule, SelectorImpl>>,
         matching_context: &mut MatchingContext<E::Impl>,
         cascade_level: CascadeLevel,
@@ -741,7 +765,7 @@ impl SelectorMap<Rule> {
         }
 
         let scope_proximity = if rule.scope_condition_id == ScopeConditionId::none() {
-            if !matches_selector_single(
+            if !matches_selector(
                 &rule.selector,
                 0,
                 Some(&rule.hashes),
