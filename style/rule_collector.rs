@@ -223,12 +223,17 @@ where
     ) {
         debug_assert!(self.in_sort_scope, "Rules gotta be sorted");
         #[cfg(feature = "detailed_statistics")]
-        let mut slow_match_candidates = Vec::with_capacity(part_rules.len());
+        let mut staged_rule_buffers =
+            crate::selector_map::StagedRuleBuffers::with_capacity(part_rules.len());
         SelectorMap::get_matching_rules(
             self.element,
             part_rules,
             #[cfg(feature = "detailed_statistics")]
-            &mut slow_match_candidates,
+            &mut staged_rule_buffers.slow_match_candidates,
+            #[cfg(feature = "detailed_statistics")]
+            &mut staged_rule_buffers.matching_candidates,
+            #[cfg(feature = "detailed_statistics")]
+            &mut staged_rule_buffers.scope_proximities,
             &mut self.rules,
             None,
             None,

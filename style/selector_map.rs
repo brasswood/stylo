@@ -280,11 +280,13 @@ impl<T> SelectorMap<T> {
     }
 }
 
-/// Reusable buffers for collecting selector-map rule hits and bloom results.
+/// Reusable buffers for collecting selector-map rule hits and their matches.
 #[cfg(feature = "detailed_statistics")]
 pub struct StagedRuleBuffers<'a> {
     candidates: Vec<&'a Rule>,
-    slow_match_candidates: Vec<(&'a Selector<SelectorImpl>, &'a Rule)>,
+    pub(crate) slow_match_candidates: Vec<(&'a Selector<SelectorImpl>, &'a Rule)>,
+    pub(crate) matching_candidates: Vec<&'a Rule>,
+    pub(crate) scope_proximities: Vec<ScopeProximity>,
 }
 
 #[cfg(feature = "detailed_statistics")]
@@ -294,6 +296,8 @@ impl<'a> StagedRuleBuffers<'a> {
         Self {
             candidates: Vec::with_capacity(capacity),
             slow_match_candidates: Vec::with_capacity(capacity),
+            matching_candidates: Vec::with_capacity(capacity),
+            scope_proximities: Vec::with_capacity(capacity),
         }
     }
 }
@@ -611,6 +615,8 @@ impl SelectorMap<Rule> {
                 element,
                 candidate_rules.iter().copied(),
                 &mut staged_rule_buffers.slow_match_candidates,
+                &mut staged_rule_buffers.matching_candidates,
+                &mut staged_rule_buffers.scope_proximities,
                 matching_rules_list,
                 matching_selectors.as_deref_mut(),
                 per_match_stats.as_deref_mut(),
@@ -631,6 +637,10 @@ impl SelectorMap<Rule> {
         rules: impl IntoIterator<Item = &'rule Rule>,
         #[cfg(feature = "detailed_statistics")]
         slow_match_candidates: &mut Vec<(&'rule Selector<SelectorImpl>, &'rule Rule)>,
+        #[cfg(feature = "detailed_statistics")]
+        matching_candidates: &mut Vec<&'rule Rule>,
+        #[cfg(feature = "detailed_statistics")]
+        scope_proximities: &mut Vec<ScopeProximity>,
         matching_rules: &mut ApplicableDeclarationList,
         mut matching_selectors: Option<&mut SmallVec<[&'rule Selector<SelectorImpl>; 16]>>,
         mut per_match_stats: Option<&mut PerMatchStats<'rule, SelectorImpl>>,
