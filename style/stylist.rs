@@ -71,7 +71,7 @@ use selectors::attr::{CaseSensitivity, NamespaceConstraint};
 use selectors::bloom::BloomFilter;
 use selectors::matching::{
     MatchingContext, MatchingMode, NeedsSelectorFlags, PerMatchStats, SelectorCaches, Statistics,
-    matches_selector_single, selector_may_match,
+    matches_selector, selector_may_match,
 };
 use selectors::matching::{MatchingForInvalidation, VisitedHandlingMode};
 use selectors::parser::{
@@ -1811,7 +1811,7 @@ impl Stylist {
                         self.quirks_mode,
                         Some(&mut relevant_attributes),
                         |selector_and_hashes| {
-                            selectors_matched.push(matches_selector_single(
+                            selectors_matched.push(matches_selector(
                                 &selector_and_hashes.selector,
                                 selector_and_hashes.selector_offset,
                                 Some(&selector_and_hashes.hashes),
@@ -1837,7 +1837,7 @@ impl Stylist {
                 self.quirks_mode,
                 Some(&mut relevant_attributes),
                 |selector_and_hashes| {
-                    selectors_matched.push(matches_selector_single(
+                    selectors_matched.push(matches_selector(
                         &selector_and_hashes.selector,
                         selector_and_hashes.selector_offset,
                         Some(&selector_and_hashes.hashes),
@@ -3535,7 +3535,7 @@ impl CascadeData {
         );
         for candidate in result.candidates {
             let matched = context.nest_for_scope(Some(candidate.root), |context| {
-                matches_selector_single(
+                matches_selector(
                     &rule.selector,
                     0,
                     Some(&rule.hashes),
