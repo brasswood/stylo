@@ -343,21 +343,28 @@ where
     context.bloom_filter = bloom_filter;
 }
 
-/// Stages selector candidates through the bloom filter as one timed batch.
+/// Matches selector candidates, treating unknown Kleene results as matches.
 #[cfg(feature = "detailed_statistics")]
-pub fn matches_selector<'a, Impl, Candidate>(
+pub fn matches_selector_batched<'a, Impl, Candidate>(
     candidates: impl IntoIterator<Item = &'a Candidate>,
-    context: &MatchingContext<Impl>,
+    context: &mut MatchingContext<Impl>,
     statistics: &mut Statistics,
     is_activation: bool,
     selector_for: impl FnMut(&'a Candidate) -> &'a Selector<Impl>,
     hashes_for: impl FnMut(&'a Candidate) -> Option<&'a AncestorHashes>,
     slow_match_candidates: &mut Vec<(&'a Selector<Impl>, &'a Candidate)>,
+    matching_candidates: &mut Vec<&'a Candidate>,
+    slow_match: impl FnMut(
+        &'a Selector<Impl>,
+        &'a Candidate,
+        &mut MatchingContext<Impl>,
+        &mut Statistics,
+    ) -> KleeneValue,
 )
 where
     Impl: SelectorImpl,
 {
-    matches_selector_kleene(
+    matches_selector_kleene_batched(
         candidates,
         context,
         statistics,
@@ -365,22 +372,27 @@ where
         selector_for,
         hashes_for,
         slow_match_candidates,
+        matching_candidates,
+        slow_match,
     );
 }
 
-/// Stages offset-selector candidates through the bloom filter in place.
+/// Matches offset-selector candidates after checking their bloom filters as a batch.
 #[cfg(feature = "detailed_statistics")]
-pub fn matches_selector_at_offset_as_subject<'a, Impl, Candidate>(
-    candidates: &mut [Option<(&'a Selector<Impl>, &'a Candidate)>],
-    context: &MatchingContext<Impl>,
+pub fn matches_selector_at_offset_as_subject_batched<'a, E, Candidate>(
+    candidates: &mut [Option<(&'a Selector<E::Impl>, &'a Candidate)>],
+    element: &E,
+    context: &mut MatchingContext<E::Impl>,
     statistics: &mut Statistics,
     mut hashes_for: impl FnMut(&'a Candidate) -> Option<&'a AncestorHashes>,
+    mut offset_for: impl FnMut(&'a Candidate) -> usize,
+    mut selector_stats: Option<&mut PerMatchStats<'a, E::Impl>>,
 )
 where
-    Impl: SelectorImpl,
+    E: Element,
 {
     let start = Start::now();
-    for candidate in candidates {
+    for candidate in candidates.iter_mut() {
         let rejected = candidate.as_ref().is_some_and(|(_, candidate)| {
             !check_selector_bloom_filter(
                 hashes_for(candidate),
