@@ -25,7 +25,7 @@ use dom::ElementState;
 use selectors::attr::CaseSensitivity;
 use selectors::kleene_value::KleeneValue;
 use selectors::matching::{
-    matches_selector_kleene_single, IncludeStartingStyle, MatchingContext,
+    matches_selector_kleene, IncludeStartingStyle, MatchingContext,
     MatchingForInvalidation, MatchingMode, NeedsSelectorFlags, SelectorCaches,
     VisitedHandlingMode,
 };
@@ -108,7 +108,7 @@ where
 {
     context.for_invalidation_comparison(|context| {
         context.nest_for_scope_condition(scope, |context| {
-            let matches_now = matches_selector_kleene_single(
+            let matches_now = matches_selector_kleene(
                 &dependency.selector,
                 dependency.selector_offset,
                 None,
@@ -126,7 +126,7 @@ where
                 return true;
             }
 
-            let matched_then = matches_selector_kleene_single(
+            let matched_then = matches_selector_kleene(
                 &dependency.selector,
                 dependency.selector_offset,
                 None,

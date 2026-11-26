@@ -520,7 +520,7 @@ pub fn matches_selector<'a, E>(
 where
     E: Element,
 {
-    let result = matches_selector_kleene_single(
+    let result = matches_selector_kleene(
         selector,
         offset,
         hashes,
@@ -649,9 +649,9 @@ where
     )
 }
 
-/// Same as `matches_selector_single`, but returns the Kleene value as-is.
+/// Same as `matches_selector`, but returns the Kleene value as-is.
 #[cfg_attr(not(feature = "debug_element"), inline(always))]
-pub fn matches_selector_kleene_single<'a, E>(
+pub fn matches_selector_kleene<'a, E>(
     selector: &'a Selector<E::Impl>,
     offset: usize,
     hashes: Option<&AncestorHashes>,
@@ -696,32 +696,6 @@ where
         not_matched_result_counts,
     );
     does_match
-}
-
-/// Matches one selector when batching is disabled.
-#[cfg(not(feature = "detailed_statistics"))]
-#[cfg_attr(not(feature = "debug_element"), inline(always))]
-pub fn matches_selector_kleene<'a, E>(
-    selector: &'a Selector<E::Impl>,
-    offset: usize,
-    hashes: Option<&AncestorHashes>,
-    element: &E,
-    context: &mut MatchingContext<E::Impl>,
-    statistics: &mut Statistics,
-    per_match_stats: Option<&mut PerMatchStats<'a, E::Impl>>,
-) -> KleeneValue
-where
-    E: Element,
-{
-    matches_selector_kleene_single(
-        selector,
-        offset,
-        hashes,
-        element,
-        context,
-        statistics,
-        per_match_stats,
-    )
 }
 
 fn record_slow_match<'a, Impl: SelectorImpl>(
