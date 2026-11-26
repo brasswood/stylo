@@ -857,7 +857,8 @@ impl SelectorMap<Rule> {
         rule: &'rule Rule,
         element: E,
         matching_context: &mut MatchingContext<E::Impl>,
-        cascade_data: &CascadeData, stats: &mut Statistics,
+        cascade_data: &CascadeData,
+        stats: &mut Statistics,
         mut per_match_stats: Option<&mut PerMatchStats<'rule, SelectorImpl>>,
     ) -> Option<ScopeProximity>
     where
