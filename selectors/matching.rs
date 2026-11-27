@@ -380,10 +380,12 @@ where
 /// Matches offset-selector candidates after checking their bloom filters as a batch.
 #[cfg(feature = "detailed_statistics")]
 pub fn matches_selector_at_offset_as_subject_batched<'a, E, Candidate>(
-    candidates: &mut [Option<(&'a Selector<E::Impl>, &'a Candidate)>],
+    candidates: &[&'a Candidate],
+    matching_rules: &mut SmallVec<[&'a Candidate; 16]>,
     element: &E,
     context: &mut MatchingContext<E::Impl>,
     statistics: &mut Statistics,
+    mut selector_for: impl FnMut(&'a Candidate) -> &'a Selector<E::Impl>,
     mut hashes_for: impl FnMut(&'a Candidate) -> Option<&'a AncestorHashes>,
     mut offset_for: impl FnMut(&'a Candidate) -> usize,
     mut selector_stats: Option<&mut PerMatchStats<'a, E::Impl>>,
@@ -392,39 +394,33 @@ where
     E: Element,
 {
     let start = Start::now();
-    for candidate in candidates.iter_mut() {
-        let rejected = candidate.as_ref().is_some_and(|(_, candidate)| {
-            !check_selector_bloom_filter(
-                hashes_for(candidate),
-                context.bloom_filter,
-                statistics,
-                true,
-            )
-        });
-        if rejected {
-            *candidate = None;
+    matching_rules.clear();
+    for candidate in candidates.iter().copied() {
+        if check_selector_bloom_filter(
+            hashes_for(candidate),
+            context.bloom_filter,
+            statistics,
+            true,
+        ) {
+            matching_rules.push(candidate);
         }
     }
     statistics.times.checking_bloom_filter += start.elapsed();
 
     let bloom_filter = context.bloom_filter;
     context.bloom_filter = None;
-    for candidate in candidates.iter_mut() {
-        let Some((selector, candidate_data)) = *candidate else {
-            continue;
-        };
-        if !matches_selector_at_offset_as_subject(
-            selector,
-            offset_for(candidate_data),
-            hashes_for(candidate_data),
+    matching_rules.retain(|candidate| {
+        let candidate = *candidate;
+        matches_selector_at_offset_as_subject(
+            selector_for(candidate),
+            offset_for(candidate),
+            hashes_for(candidate),
             element,
             context,
             statistics,
             selector_stats.as_deref_mut(),
-        ) {
-            *candidate = None;
-        }
-    }
+        )
+    });
     context.bloom_filter = bloom_filter;
 }
 

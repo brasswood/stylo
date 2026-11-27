@@ -898,9 +898,7 @@ impl SelectorMap<UniversalTailRule> {
         mut per_match_stats: Option<&mut PerMatchStats<'selectormap, SelectorImpl>>,
         matching_context: &mut MatchingContext<E::Impl>,
         #[cfg(feature = "detailed_statistics")]
-        candidates: &mut Vec<
-            Option<(&'selectormap Selector<SelectorImpl>, &'selectormap UniversalTailRule)>,
-        >,
+        candidates: &mut Vec<&'selectormap UniversalTailRule>,
     ) -> Statistics
     where
         E: SelectorMapElement + StyleSharingElement,
@@ -914,7 +912,7 @@ impl SelectorMap<UniversalTailRule> {
             candidates.clear();
             self.lookup(element, matching_context.quirks_mode(), None, |entry| {
                 hits += 1;
-                candidates.push(Some((&entry.rule.selector, entry)));
+                candidates.push(entry);
                 true
             });
         }
@@ -944,17 +942,21 @@ impl SelectorMap<UniversalTailRule> {
 
         #[cfg(feature = "detailed_statistics")]
         {
+            let mut matching_rules: SmallVec<[&'selectormap UniversalTailRule; 16]> =
+                SmallVec::new();
             matches_selector_at_offset_as_subject_batched(
-                candidates.as_mut_slice(),
+                candidates.as_slice(),
+                &mut matching_rules,
                 &element,
                 matching_context,
                 &mut stats,
+                |entry| &entry.rule.selector,
                 |entry| Some(&entry.activation_hashes),
                 |entry| entry.activation_offset,
                 per_match_stats.as_deref_mut(),
             );
 
-            for (_, entry) in candidates.iter().flatten() {
+            for entry in matching_rules {
                 if !matching_selectors.contains(&&entry.rule.selector) {
                     matching_selectors.push(&entry.rule.selector);
                 }
@@ -1027,7 +1029,7 @@ impl SelectorMap<UniversalBucketRule> {
             }
             hits += 1;
             #[cfg(feature = "detailed_statistics")]
-            candidates.push(Some((&entry.rule.selector, entry)));
+            candidates.push(entry);
             #[cfg(not(feature = "detailed_statistics"))]
             {
                 match_bless_universal_bucket_rule(
@@ -1048,17 +1050,21 @@ impl SelectorMap<UniversalBucketRule> {
         #[cfg(feature = "detailed_statistics")]
         {
             stats.times.querying_activation_selector_map = start.elapsed();
+            let mut matching_rules: SmallVec<[&'selectormap UniversalBucketRule; 16]> =
+                SmallVec::new();
             matches_selector_at_offset_as_subject_batched(
-                candidates.as_mut_slice(),
+                candidates.as_slice(),
+                &mut matching_rules,
                 &element,
                 matching_context,
                 &mut stats,
+                |entry| &entry.rule.selector,
                 |entry| Some(&entry.activation_hashes),
                 |entry| entry.activation_offset,
                 per_match_stats.as_deref_mut(),
             );
 
-            for (_, entry) in candidates.iter().flatten() {
+            for entry in matching_rules {
                 let last_depth = if entry.matches_descendants {
                     usize::MAX
                 } else {
