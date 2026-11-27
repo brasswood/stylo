@@ -1013,8 +1013,8 @@ impl SelectorMap<UniversalBucketRule> {
         let start = Start::now();
         let mut hits = 0;
         let mut stats = Statistics::default();
-        let mut seen: SmallVec<[Option<(&Selector<SelectorImpl>, &UniversalBucketRule)>; 4]> =
-            SmallVec::new();
+        #[cfg(feature = "detailed_statistics")]
+        let mut candidates = Vec::with_capacity(self.max_candidate_count());
         self.lookup(element, matching_context.quirks_mode(), None, |entry| {
             let is_active = bless_list.iter().any(|(active, last_depth)| {
                 active.matches_descendants
@@ -1022,15 +1022,12 @@ impl SelectorMap<UniversalBucketRule> {
                     && active.rule.source_order == entry.rule.source_order
                     && active.rule.selector == entry.rule.selector
             });
-            let already_seen = seen.iter().flatten().any(|candidate| {
-                candidate.1.rule.source_order == entry.rule.source_order
-                    && candidate.1.rule.selector == entry.rule.selector
-            });
-            if is_active || already_seen {
+            if is_active {
                 return true;
             }
             hits += 1;
-            seen.push(Some((&entry.rule.selector, entry)));
+            #[cfg(feature = "detailed_statistics")]
+            candidates.push(Some((&entry.rule.selector, entry)));
             #[cfg(not(feature = "detailed_statistics"))]
             {
                 match_bless_universal_bucket_rule(
@@ -1052,7 +1049,7 @@ impl SelectorMap<UniversalBucketRule> {
         {
             stats.times.querying_activation_selector_map = start.elapsed();
             matches_selector_at_offset_as_subject_batched(
-                seen.as_mut_slice(),
+                candidates.as_mut_slice(),
                 &element,
                 matching_context,
                 &mut stats,
@@ -1061,7 +1058,7 @@ impl SelectorMap<UniversalBucketRule> {
                 per_match_stats.as_deref_mut(),
             );
 
-            for (_, entry) in seen.iter().flatten() {
+            for (_, entry) in candidates.iter().flatten() {
                 let last_depth = if entry.matches_descendants {
                     usize::MAX
                 } else {
